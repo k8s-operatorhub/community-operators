@@ -1,0 +1,77 @@
+
+name: Prepare Test Index
+
+on:
+  repository_dispatch:
+    types:
+      - manual-test-index
+      - index-for-openshift-test
+
+env:
+  OPP_PRODUCTION_TYPE: "k8s"
+  OPP_IMAGE: "quay.io/operator_testing/operator-test-playbooks:latest"
+
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+#    container: quay.io/operator_testing/operator-test-playbooks:latest
+
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+
+      - name: "prepare"
+        id: variables
+        env:
+          OP_PR: ${{ github.event.client_payload.source_pr }}
+        run: |
+          tmpfile=$(mktemp /tmp/XXXXXX.json)
+          curl -s https://api.github.com/repos/k8s-operatorhub/community-operators/pulls/$OP_PR -o $tmpfile
+          REPO_FULL=$(cat $tmpfile | jq -r '.head.repo.clone_url')
+          BRANCH=$(cat $tmpfile | jq -r '.head.ref')
+          COMMIT=$(cat $tmpfile | jq -r '.head.sha')
+          REPO=$(echo "$REPO_FULL"| awk -F'https://github.com/' '{print $2}')
+          echo "::set-output name=opp_repo::$REPO"
+          echo "::set-output name=opp_branch::$BRANCH"
+          echo "::set-output name=opp_commit::$COMMIT"
+          echo "Pull request #$1 : $REPO $BRANCH $COMMIT"
+          rm -f $tmpfile > /dev/null 2>&1
+
+
+      - name: Build temp index and push
+        env:
+          # CONTAINER_TOOL: podman
+          OP_DEBUG: 0
+          OP_TOKEN: ${{ secrets.PREPARE_INDEX_API_TOKEN }}
+#          OP_PR: ${{ github.event.client_payload.source_pr }}
+          BASE: "https://github.com"
+          REPO: ${{ steps.variables.outputs.opp_repo }}
+          BRANCH: ${{ steps.variables.outputs.opp_branch }}
+          COMMIT: ${{ steps.variables.outputs.opp_commit }}
+          OPP_OPRT_REPO: ${{ steps.variables.outputs.opp_repo }}
+          OPP_OPRT_SHA: ${{ steps.variables.outputs.opp_commit }}
+          OPP_OPRT_SCRIPT: "https://raw.githubusercontent.com/operator-framework/community-operators/support/ci_01/ci/scripts/opp-osr-run.sh"
+          OPP_SCRIPT_ENV_URL: "https://raw.githubusercontent.com/operator-framework/community-operators/support/ci_01/ci/scripts/opp-env.sh"
+          OPP_OPRT_SRC_BASE:  "https://github.com"
+          OPP_OPRT_SRC_REPO:  "k8s-operatorhub/community-operators"
+          OPP_OPRT_SRC_BRANCH: "main"
+#          REPO: "k8s-operatorhub/community-operators.git"
+#          BRANCH: "main"
+
+        run: |
+          echo ${{ github.event.client_payload.source_pr }} >> file
+          echo
+          echo
+          echo -n "Preparing temp index for PR: "
+          cat file
+          echo
+          echo
+          bash <(curl -sL https://raw.githubusercontent.com/operator-framework/community-operators/support/ci_01/ci/scripts/opp-oprt.sh)
+

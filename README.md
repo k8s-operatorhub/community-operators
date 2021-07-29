@@ -7,7 +7,7 @@ This repo is the canonical source for Kubernetes Operators that appear on [Opera
 
 ## Documentation
 
-Full documentation is generated via [mkdoc](https://www.mkdocs.org/) and is located at [https://operator-framework.github.io/community-operators/](https://operator-framework.github.io/community-operators/)
+Full documentation is generated via [mkdoc](https://www.mkdocs.org/) and is located at [https://redhat-openshift-ecosystem.github.io/community-operators-pipeline/](https://redhat-openshift-ecosystem.github.io/community-operators-pipeline/)
 
 ## IMPORTANT NOTICE
 

@@ -104,6 +104,39 @@ jobs:
         run: |
           echo "kiwi operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
           bash <(curl -sL $OPP_SCRIPT_URL) kiwi "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
+      - name: Search operator test error olm.maxOpenShiftVersion error 
+        id: op-kiwi-test-err-maxOpenShiftVersion
+        if: always()
+        run: |
+          ERR_LINES=$(cat /tmp/op-test/log.out | grep 'not specified olm.maxOpenShiftVersion' | wc -l)
+          echo "opp_check_err_maxOpenShiftVersion=$ERR_LINES"
+          echo "::set-output name=opp_check_err_maxOpenShiftVersion::$ERR_LINES"
+
+      - name: "Comment operator test error olm.maxOpenShiftVersion"
+        if: always() && steps.op-kiwi-test-err-maxOpenShiftVersion.outputs.opp_check_err_maxOpenShiftVersion != '0'
+        uses: mshick/add-pr-comment@v1
+        with:
+          message: |
+            Dear @${{ github.event.pull_request.user.login }},
+            :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) might **not** run on k8s 1.22 or  in the Openshift version 4.9. **For more info see details bellow.**
+            :---: | :---
+
+            **IMPORTANT** : Kubernetes has been deprecating API(s) which will be removed and no longer available in 1.22 and in the Openshift version 4.9. Note that your project will be unable to use them on OCP 4.9/K8s 1.22 and then, it is strongly recommended to check [Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22) and ensure that your projects have them migrated and are not using any deprecated API.
+            To prevent workflow issues, its users will need to have installed in their OCP cluster a version of your operator compatible with 4.9 before they try to upgrade their cluster from any previous version to 4.9 or higher. However, If you still need to publish the operator bundles with any of these API(s) for use on earlier k8s/OCP versions, ensure that the operator bundle is configured accordingly:
+            Use the olm.openShiftMaxVersion property in the CSV to prevent the user from upgrading their OCP cluster before upgrading the installed operator version to any distribution which is compatible with:
+            ```yaml
+            apiVersion: operators.coreos.com/v1alpha1
+            kind: ClusterServiceVersion
+              metadata:
+                annotations:
+                  # Prevent cluster upgrades to OpenShift Version 4.9 when this
+                  # bundle is installed on the cluster
+                  "olm.properties": '[{"type": "olm.maxOpenShiftVersion", "value": "4.8"}]'
+            ```
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
+          allow-repeats: true
+
 
   test-lemon:
     name: "lemon / Deploy from scratch"

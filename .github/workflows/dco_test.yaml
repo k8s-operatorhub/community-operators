@@ -1,0 +1,100 @@
+name: DCO test
+
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, unlabeled]
+    branches:
+      - master
+      - main
+
+env:
+  OPP_DEBUG: 1
+  OPP_CONTAINER_OPT: "-t"
+  OPP_SCRIPT_ENV_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-env.sh"
+  OPP_IMAGE: "quay.io/operator_testing/operator-test-playbooks:latest"
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks/"
+  OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
+  OPP_THIS_REPO_BASE: "https://github.com"
+  OPP_THIS_REPO: "k8s-operatorhub/community-operators"
+  OPP_THIS_BRANCH: "main"
+  OPP_PROD: 0
+  OPP_DRY_RUN: 0
+  KIND_KUBE_VERSION: "v1.21.1"
+  OPP_PRODUCTION_TYPE: "k8s"
+  OPP_REVIEWERS_ENABLED: 1
+
+
+jobs:
+  pr-check:
+    if: (!contains(github.event.pull_request.labels.*.name, 'do-not-merge/hold'))
+    name: "PR-traffic-light"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - id: files
+        uses: jitterbit/get-changed-files@v1
+        continue-on-error: true
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+      - name: Operator traffic light
+        id: op-traffic-light
+        env:
+          OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_MODIFIED_FILES: "${{ steps.files.outputs.modified }}"
+          OPP_ADDED_MODIFIED_FILES: "${{ steps.files.outputs.added_modified }}"
+          OPP_RENAMED_FILES: "${{ steps.files.outputs.renamed }}"
+          OPP_REMOVED_FILES: "${{ steps.files.outputs.removed }}"
+        run: |
+          echo "Using script '$OPP_SCRIPT_ENV_URL' ..."
+          echo "global labels $OPP_LABELS"
+          bash <(curl -sL $OPP_SCRIPT_ENV_URL)
+    outputs:
+      opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
+      opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
+      opp_stream: "${{ steps.op-traffic-light.outputs.opp_stream }}"
+      opp_name: "${{ steps.op-traffic-light.outputs.opp_name }}"
+      opp_version: "${{ steps.op-traffic-light.outputs.opp_version }}"
+      opp_ci_yaml_only: "${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
+      opp_op_delete: "${{ steps.op-traffic-light.outputs.opp_op_delete }}"
+
+  test-dco:
+    name: "DCO test (commits signoff)"
+    needs: pr-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR Commits
+        id: 'get-pr-commits'
+        uses: tim-actions/get-pr-commits@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: DCO Check
+        uses: tim-actions/dco@v1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commits: ${{ steps.get-pr-commits.outputs.commits }}
+
+  test-summary:
+    name: "Summary"
+    needs: [ pr-check, test-dco]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR
+        if: needs.pr-check.outputs.opp_test_ready == '1'
+        continue-on-error: true
+        run: |
+          echo "OP_PR=${{ github.event.pull_request.number }}"
+      - name: Save PR number
+        run: |
+          mkdir -p ./pr
+          echo ${{ github.event.number }} > ./pr/NR
+      - uses: actions/upload-artifact@v2
+        with:
+          name: pr
+          path: pr/

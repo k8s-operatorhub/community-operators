@@ -1,0 +1,302 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "monitor.signoz.io/v1",
+          "kind": "Signoz",
+          "metadata": {
+            "name": "signoz-sample"
+          },
+          "spec": {
+            "druid": {
+              "configVars": {
+                "druid_extensions_loadList": "[\"druid-histogram\", \"druid-datasketches\", \"druid-lookups-cached-global\", \"postgresql-metadata-storage\", \"druid-kafka-indexing-service\"]",
+                "druid_storage_type": "local"
+              },
+              "enabled": true,
+              "historical": {
+                "persistence": {
+                  "size": "20Gi"
+                }
+              },
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "apache/druid"
+              },
+              "name": "druid",
+              "zkHosts": "signoz-sample-zookeeper:2181",
+              "zookeeper": {
+                "enabled": false
+              }
+            },
+            "flattener-processor": {
+              "configVars": {
+                "KAFKA_BROKER": "signoz-sample-kafka:9092",
+                "KAFKA_INPUT_TOPIC": "otlp_spans",
+                "KAFKA_OUTPUT_TOPIC": "flattened_spans"
+              },
+              "enabled": true,
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "signoz/flattener-processor"
+              },
+              "name": "flattener-processor"
+            },
+            "frontend": {
+              "config": {
+                "name": "signoz-nginx-config",
+                "queryServiceUrl": "signoz-sample-query-service:8080"
+              },
+              "enabled": true,
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "signoz/frontend"
+              },
+              "named": "frontend"
+            },
+            "kafka": {
+              "enabled": true,
+              "externalZookeeper": {
+                "servers": [
+                  "signoz-sample-zookeeper:2181"
+                ]
+              },
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "bitnami/kafka"
+              },
+              "name": "kafka",
+              "zookeeper": {
+                "enabled": false
+              },
+              "zookeeperConnectionTimeoutMs": 6000
+            },
+            "query-service": {
+              "configVars": {
+                "DruidClientUrl": "http://signoz-sample-druid-router:8888",
+                "DruidDatasource": "flattened_spans"
+              },
+              "enabled": true,
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "signoz/query-service"
+              },
+              "name": "query-service"
+            },
+            "zookeeper": {
+              "autopurge": {
+                "purgeInterval": 1
+              },
+              "enabled": true,
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "bitnami/zookeeper"
+              },
+              "name": "zookeeper"
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    operators.operatorframework.io/builder: operator-sdk-v1.9.0
+    operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
+  name: signoz-k8s-helm-operator.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - kind: Signoz
+      name: signozs.monitor.signoz.io
+      version: v1
+  description: open-source observability platform
+  displayName: signoz
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+        - apiGroups:
+          - monitor.signoz.io
+          resources:
+          - signozs
+          - signozs/status
+          - signozs/finalizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          - services
+          verbs:
+          - '*'
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - '*'
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: signoz-k8s-helm-operator-controller-manager
+      deployments:
+      - name: signoz-k8s-helm-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources: {}
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --leader-election-id=signoz-k8s-helm-operator
+                image: signoz/signoz-k8s-helm-operator:v0.0.1
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 90Mi
+                  requests:
+                    cpu: 100m
+                    memory: 60Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: signoz-k8s-helm-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: signoz-k8s-helm-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - observability
+  - monitoring
+  - tracing
+  - stream-processing
+  - open-telemetry
+  - opentelemetry
+  - druid
+  - distributed-tracing
+  links:
+  - name: Signoz K8s Helm Operator
+    url: https://signoz-k8s-helm-operator.domain
+  maintainers:
+  - email: dtherhtun.cw@gmail.com
+    name: dtherhtun
+  maturity: alpha
+  provider:
+    name: signoz
+    url: signoz
+  version: 0.0.1

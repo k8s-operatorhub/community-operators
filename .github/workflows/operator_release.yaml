@@ -12,6 +12,10 @@ on:
         description: 'Force to run release'
         required: true
         default: '0'
+      delete:
+        description: 'Delete operator (cockroachdb or cockroachdb/5.0.4) for debuging only'
+        required: false
+        default: ''
 
 env:
   OPP_DEBUG: 1
@@ -34,7 +38,8 @@ env:
   OPP_MIRROR_INDEX_ORGANIZATION: "operatorhubio"
   OPP_MIRROR_INDEX_NAME: "catalog_prod"
   # OPP_MIRROR_INDEX_ENABLED: "0"
-  OPP_MIRROR_INDEX_MULTIARCH: "registry.redhat.io/openshift4/ose-operator-registry:v4.5"
+  OPP_MIRROR_INDEX_MULTIARCH_BASE: "registry.redhat.io/openshift4/ose-operator-registry:v4.5"
+  OPP_MULTIARCH_SUPPORTED_VERSIONS: "v4.5 v4.6 v4.7"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
   IIB_INPUT_REGISTRY_USER: "jbreza"
   OPP_REGISTRY_MIRROR_USER: "framework_automation"
@@ -45,15 +50,12 @@ env:
 
 
   OPP_ALLOW_FORCE_RELEASE: ${{ github.event.inputs.release }}
+  OPP_REMOVE_OPERATOR_AFTER_CLONE_PATH: "${{ github.event.inputs.delete }}"
   REGISTRY_RELEASE_API_TOKEN: ${{ secrets.REGISTRY_RELEASE_API_TOKEN }}
   REGISTRY_MIRROR_PW: ${{ secrets.REGISTRY_MIRROR_PW }}
-  
   GODEBUG: x509ignoreCN=0
   CI_OHIO_TRIGGER_TOKEN: ${{ secrets.CI_OHIO_TRIGGER_TOKEN }}
   OHIO_REGISTRY_TOKEN: ${{ secrets.OHIO_REGISTRY_TOKEN }}
-
-  #QUAY_API_TOKEN_OPENSHIFT_COMMUNITY_OP: ${{ secrets.QUAY_API_TOKEN_OPENSHIFT_COMMUNITY_OP }}
-  #QUAY_API_TOKEN_OPERATORHUBIO: ${{ secrets.QUAY_API_TOKEN_OPERATORHUBIO }}
   QUAY_APPREG_TOKEN: ${{ secrets.QUAY_APPREG_TOKEN }}
   QUAY_COURIER_TOKEN: ${{ secrets.QUAY_COURIER_TOKEN }}
   REPO_GHA_PAT: ${{ secrets.REPO_GHA_PAT }}
@@ -62,7 +64,6 @@ jobs:
   pr-check:
     name: "PR-traffic-light"
     runs-on: ubuntu-latest
-
     steps:
       - name: Block until there is no running workflow
         uses: softprops/turnstyle@v1
@@ -83,7 +84,7 @@ jobs:
           python-version: '3.x'
       - name: Install dependencies
         run: python -m pip install --upgrade pip yq
-      - name: Operator test
+      - name: Operator traffic light
         id: op-traffic-light
         env:
           OPP_ADDED_MODIFIED_FILES: "${{ steps.files.outputs.added_modified }}"
@@ -110,78 +111,117 @@ jobs:
       opp_release_delete_appreg: "${{ steps.op-traffic-light.outputs.opp_release_delete_appreg }}"
       opp_pr_title: "${{ steps.op-traffic-light.outputs.opp_pr_title }}"
 
-  release-k8s_latest:
-    name: "Release / k8s latest"
+  remove-k8s:
+    name: "Remove / k8s"
+
     needs: pr-check
     if: needs.pr-check.outputs.opp_release_ready == '1'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
       - name: Remove operator from index
-        if: needs.pr-check.outputs.opp_op_delete == '1'
+        if: needs.pr-check.outputs.opp_op_delete == '1' && needs.pr-check.outputs.opp_name != ''
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
           echo "op_delete operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) op_delete operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH
-      - name: Index recreate only (Only ci.yaml was changed)
-        if: needs.pr-check.outputs.opp_ci_yaml_only == '1'
+      - name: Operator release (operator version overwrite)
+        if: needs.pr-check.outputs.opp_ci_yaml_only == '0' && needs.pr-check.outputs.opp_ver_overwrite == '1' && needs.pr-check.outputs.opp_name != '' && needs.pr-check.outputs.opp_version != ''
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
-          OPP_CI_YAML_ONLY: 1
+          OPP_IIB_INSTALL: 0
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "orange operators/${{ needs.pr-check.outputs.opp_name }}/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/${{ needs.pr-check.outputs.opp_name }}/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
-      - name: Operator release (sync)
-        if: needs.pr-check.outputs.opp_ci_yaml_only == '0' && needs.pr-check.outputs.opp_ver_overwrite == '0'
+          echo "op_delete operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) op_delete operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH
+
+  operators-k8s:
+    name: "Index check / k8s"
+    needs: [pr-check, remove-k8s ]
+
+    if: needs.pr-check.outputs.opp_release_ready == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Index check
+        id: operators
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
+          OPP_INDEX_CHECK_ONLY: 1
+        run: |
+          echo "OPP_LABELS=$OPP_LABELS"
+          echo "'orange' operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+      - name: Operators for sync
+        run: |
+          echo "Operators : ${{ steps.operators.outputs.opp_uncomplete_operators }}"
+    outputs:
+      opp_uncomplete_operators: "${{ steps.operators.outputs.opp_uncomplete_operators }}"
+
+  bundles-k8s:
+    name: "Bundles / k8s"
+    needs: [ pr-check, remove-k8s, operators-k8s ]
+    if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build bundles
+        env:
+          OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
+          OPP_SKIP_INDEX: 1
+          OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
+
+        run: |
+          echo "OPP_LABELS=$OPP_LABELS"
+          echo "OPP_FORCE_OPERATORS=$OPP_FORCE_OPERATORS"
+          echo "orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+
+  release-k8s:
+    name: "Index / k8s"
+    needs: [ pr-check, operators-k8s, bundles-k8s ]
+    if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Index sync
+        env:
+          OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
+          OPP_FORCE_INDEX_UPDATE: 1
+          OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
+
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
           echo "orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
-      - name: Operator release (operator version overwrite)
-        if: needs.pr-check.outputs.opp_ci_yaml_only == '0' && needs.pr-check.outputs.opp_ver_overwrite == '1'
-        env:
-          OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
-        run: |
-          echo "OPP_LABELS=$OPP_LABELS"
-          echo "orange operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH
 
 
   ohio-image-k8s:
-    name: "Release / k8s ohio image"
-    needs: [ pr-check, release-k8s_latest ]
-    # if: needs.pr-check.outputs.opp_release_ready == '1'
+    name: "OHIO image / k8s"
+    needs: [ pr-check, release-k8s ]
+
+    if: needs.pr-check.outputs.opp_release_ready == '1'
     runs-on: ubuntu-latest
     env:
       OHIO_INPUT_CATALOG_IMAGE: "quay.io/operatorhubio/catalog:latest"
       OHIO_REGISTRY_IMAGE: "quay.io/operator-framework/upstream-community-operators:latest"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
       - name: Ohio image
         run: |
           echo "ohio_image operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_CLEANUP_URL)
           bash <(curl -sL $OPP_SCRIPT_URL) ohio_image operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
-
   ohio-page-k8s:
     name: "Release / operatorhub.io"
     needs: ohio-image-k8s
-    # if: needs.pr-check.outputs.opp_release_ready == '1'
+
+    if: needs.pr-check.outputs.opp_release_ready == '1'
     runs-on: ubuntu-latest
     env:
       CI_OHIO_BRANCH: "latest"
       REPO_GHA_PAT: ${{ secrets.REPO_GHA_PAT }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
       - name: Ohio image
         run: |
           echo "$OPP_SCRIPT_TRIGGER_OHIO_URL ${CI_OHIO_BRANCH}"
@@ -189,9 +229,8 @@ jobs:
 
   slack-notification:
     name: "Slack notification"
+    needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, ohio-image-k8s, ohio-page-k8s ]
 
-
-    needs: [ pr-check, release-k8s_latest, ohio-image-k8s, ohio-page-k8s ]
 
     if: failure()
     runs-on: ubuntu-latest

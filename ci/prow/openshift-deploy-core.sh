@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-#./openshift-deploy.sh test-only https://github.com/J0zi/community-operators.git bundle2 https://github.com/J0zi/operator-test-playbooks.git CVP-1793-exit-non-relevant-ocp-test
+#./openshift-deploy.sh test-only https://github.com/J0zi/community-operators-pipeline.git do-not-delete-rehearsals https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git upstream-community 77 rehearsal
 
 set -e #fail in case of non zero return
+PLAYBOOK_REPO='https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git'
+PLAYBOOK_REPO_BRANCH='upstream-community'
 echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
 
 JQ_VERSION='1.6'
@@ -13,17 +15,15 @@ OC_DIR_CORE=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 20 | head -n 1)
 SUBDIR_ARG="-e work_subdir_name=oc-$OC_DIR_CORE"
 echo "SUBDIR_ARG = $SUBDIR_ARG"
 
-if [[ $TEST_MODE -ne 1  ]]; then
-    #CURRENT_PATH=/go/src/github.com/redhat-openshift-ecosystem/community-operators-pipeline/scripts/ci
-    CURRENT_PATH=$(pwd)
-    if [ $(echo $CURRENT_PATH|grep operator-framework)  ]; then
-         	TARGET_PATH=$(echo $CURRENT_PATH|sed -e 's/scripts\/ci/community-operators/g')
-    else
-                TARGET_PATH=$(echo $CURRENT_PATH|sed -e 's/scripts\/ci/operators/g')
-    fi
-fi
-echo "TARGET_PATH=$TARGET_PATH"
+# prod or test in rehearsal mode
+TARGET_PATH="$(dirname $(dirname $(dirname $(readlink -m $0))))/operators"
 export PR_TARGET_REPO=$(echo $TARGET_PATH|cut -d"/" -f 5-6)
+
+#local test only
+[[ $TEST_MODE -eq 1 ]] && TARGET_PATH='/tmp/oper-for-me-test/community-operators/operators'
+[[ $TEST_MODE -eq 1  ]] && [[ $REHEARSAL -ne 1 ]] && export PR_TARGET_REPO='redhat-openshift-ecosystem/community-operators-pipeline'
+
+echo "TARGET_PATH=$TARGET_PATH"
 echo "PR_TARGET_REPO=$PR_TARGET_REPO"
 
 #label start
@@ -32,15 +32,9 @@ echo "PR_TARGET_REPO=$PR_TARGET_REPO"
 -H "Accept: application/vnd.github.v3+json" \
 "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\", \"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
 
-echo "OS"
-cat /etc/os-release
-
 pwd
 
 #[[ $TEST_MODE -ne 1 ]] && TARGET_PATH='/go/src/github.com/operator-framework/community-operators/community-operators'
-
-
-[[ $TEST_MODE -eq 1 ]] && TARGET_PATH='/tmp/oper-for-me-test/community-operators/community-operators'
 
 #temp test for development to test on a stable commit
 if [[ $TEST_MODE -eq 1 ]]; then
@@ -48,7 +42,7 @@ if [[ $TEST_MODE -eq 1 ]]; then
   if [ -d /tmp/oper-for-me-test ]; then rm -Rf /tmp/oper-for-me-test; fi
   mkdir -p /tmp/oper-for-me-test
   cd /tmp/oper-for-me-test
-  git clone $TEST_COMMUNITY_REPO
+  git clone $TEST_COMMUNITY_REPO community-operators
   cd community-operators
   git checkout $TEST_COMMUNITY_BRANCH
   ls
@@ -74,7 +68,9 @@ chmod +x "/tmp/jq-$OC_DIR_CORE/bin/jq" && echo "Rights adjusted"
 -H "Accept: application/vnd.github.v3+json" \
 "https://api.github.com/repos/$PR_TARGET_REPO/issues/$PULL_NUMBER"|"/tmp/jq-$OC_DIR_CORE/bin/jq" '.labels[].name'|grep 'allow/longer-deployment' \
 && echo "Longer deployment detected" && EXTRA_ARGS='-e pod_start_retries=300'
+
 cd "$TARGET_PATH"
+echo "Checking PR $PULL_NUMBER on $PR_TARGET_REPO"
 tmpfile=$(mktemp /tmp/pr-details-XXXXXXX.json)
 curl -s https://api.github.com/repos/$PR_TARGET_REPO/pulls/$PULL_NUMBER -o $tmpfile
 cat $tmpfile
@@ -98,7 +94,7 @@ export OPRT=1
 echo "OPRT values set [OK]"
 [ -n "$OPRT_REPO" ] || { echo "Error: '\$OPRT_REPO' is empty !!!"; exit 1; }
 [ -n "$OPRT_SHA" ] || { echo "Error: '\$OPRT_SHA' is empty !!!"; exit 1; }
-echo "Going to clone"
+echo "Going to clone $REPO_FULL"
 git clone $REPO_FULL community-operators #> /dev/null 2>&1
 echo "Cloned  [OK]"
 cd community-operators
@@ -203,10 +199,12 @@ if [ -d /tmp/playbooks2 ]; then rm -Rf /tmp/playbooks2; fi
 mkdir -p /tmp/playbooks2
 cd /tmp/playbooks2
 echo "We are in dir"
-[[ $TEST_MODE -ne 1 ]] && git clone https://github.com/operator-framework/operator-test-playbooks.git
-[[ $TEST_MODE -eq 1 ]] && git clone $TEST_PB_REPO
+
+[[ $TEST_MODE -ne 1 ]] && git clone $PLAYBOOK_REPO operator-test-playbooks
+[[ $TEST_MODE -eq 1 ]] && git clone $TEST_PB_REPO operator-test-playbooks
 cd operator-test-playbooks
 [[ $TEST_MODE -eq 1 ]] && git checkout $TEST_PB_BRANCH
+[[ $TEST_MODE -ne 1 ]] && git checkout $PLAYBOOK_REPO_BRANCH
 cd upstream
 echo "Config ..."
 export ANSIBLE_CONFIG=/tmp/playbooks2/operator-test-playbooks/upstream/ansible.cfg

@@ -79,6 +79,51 @@ jobs:
           echo "global labels $OPP_LABELS"
           bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
 
+      - name: Operator info
+        id: op-info
+        env:
+          OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_PR_AUTHOR: "${{ github.event.pull_request.user.login }}"
+          OPP_OPRT_REPO: "${{ github.event.pull_request.head.repo.full_name }}"
+          OPP_OPRT_SHA: "${{ github.event.pull_request.head.sha }}"
+          OPP_OPRT_SRC_REPO: "${{ github.event.pull_request.base.repo.full_name }}"
+          OPP_OPRT_SRC_BRANCH: "${{ github.event.pull_request.base.ref }}"
+          OPP_AUTO_LABEL: "${{ steps.op-traffic-light.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          ANSIBLE_FORCE_COLOR: 1
+          DISPLAY_SKIPPED_HOSTS: 0
+          ANSIBLE_STDOUT_CALLBACK: "yaml"
+        run: |
+          OPP_ANSIBLE_PULL_BRANCH="upstream-community-dev"
+          [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
+          ls -al operators/
+          ls -al operators/operators/${{ steps.op-traffic-light.outputs.opp_name }}
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false upstream/local.yml --tags reset_tools,operator_info -e operator_dir=$PWD/operators/operators/${{ steps.op-traffic-light.outputs.opp_name }} -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true $ANSIBLE_ARGS
+      - name: Operator info (result)
+        id: op-info-result
+        if: always()
+        run: |
+          echo "::set-output name=opp_check_err_cluster_version_autolabel::0"
+          [ -f /tmp/operator-test/op_auto_labels.yaml ] && echo "::set-output name=opp_check_err_cluster_version_autolabel::1" || true
+      - name: Operator info (comment)
+        id: op-info-comment
+        if: always() && steps.op-info-result.outputs.opp_check_err_cluster_version_autolabel == '1'
+        uses: mshick/add-pr-comment@v1
+        with:
+          message: |
+            ## Automatic Cluster Version Label (OCP) - packagemanifest only
+
+            Starting OCP v4.9 (based on k8s 1.22) some old API were deprecated([Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22), [OKD/OpenShift Catalogs criteria and options](./packaging-required-criteria-ocp.md)). User can set `com.redhat.openshift.versions: <versions>`in its bundle `annotations.yaml` file to limit specific operator version to be visible on certain cluster.
+            Users can set label only when the operator is in bundle format. For packagemanifest format it is not possible to set this lablel, but community-operators pipeline can automatically set such label to the bundle. User have to allow it by putting packagemanifestClusterVersionLabel: auto in ci.yaml file
+
+            ```
+            $ cat <path-to-operator>/ci.yaml
+            packagemanifestClusterVersionLabel: auto
+            ```
+            More info [here](https://redhat-openshift-ecosystem.github.io/community-operators-pipeline/operator-ci-yaml/#automatic-cluster-version-label-ocp-packagemanifest-only).
+
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
+
     outputs:
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
       opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
@@ -87,6 +132,7 @@ jobs:
       opp_version: "${{ steps.op-traffic-light.outputs.opp_version }}"
       opp_ci_yaml_only: "${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
       opp_op_delete: "${{ steps.op-traffic-light.outputs.opp_op_delete }}"
+      opp_auto_packagemanifest_cluster_version_label: "${{ steps.op-traffic-light.outputs.opp_auto_packagemanifest_cluster_version_label }}"
 
   test-kiwi:
     name: "kiwi / Full operator test"
@@ -101,6 +147,7 @@ jobs:
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
         run: |
           echo "kiwi operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
           bash <(curl -sL $OPP_SCRIPT_URL) kiwi "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
@@ -119,7 +166,7 @@ jobs:
           message: |
             Dear @${{ github.event.pull_request.user.login }},
             :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) might **not** run on k8s 1.22 or  in the Openshift version 4.9. **For more info see details bellow.**
-            :---: | :---
+            :---: | :--- |
 
             **IMPORTANT** : Kubernetes has been deprecating API(s) which will be removed and no longer available in 1.22 and in the Openshift version 4.9. Note that your project will be unable to use them on OCP 4.9/K8s 1.22 and then, it is strongly recommended to check [Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22) and ensure that your projects have them migrated and are not using any deprecated API.
             To prevent workflow issues, its users will need to have installed in their OCP cluster a version of your operator compatible with 4.9 before they try to upgrade their cluster from any previous version to 4.9 or higher. However, If you still need to publish the operator bundles with any of these API(s) for use on earlier k8s/OCP versions, ensure that the operator bundle is configured accordingly:
@@ -151,6 +198,7 @@ jobs:
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
         run: |
           echo "lemon operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
           bash <(curl -sL $OPP_SCRIPT_URL) lemon "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
@@ -170,6 +218,7 @@ jobs:
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
         run: |
           echo "orange operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
           bash <(curl -sL $OPP_SCRIPT_URL) orange "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"

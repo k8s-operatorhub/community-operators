@@ -26,6 +26,8 @@ env:
   OPP_SCRIPT_CLEANUP_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-disk-cleanup-on-startup.sh"
   OPP_SCRIPT_TRIGGER_OHIO_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-trigger-operatorhubio-ci.sh"
   OPP_IMAGE: "quay.io/operator_testing/operator-test-playbooks:latest"
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks/"
+  OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_PROD: 1
   OPP_MIRROR_LATEST_TAG: "latest"
   OPP_PRODUCTION_TYPE: "k8s"
@@ -98,6 +100,7 @@ jobs:
           echo "OPP_LABELS=$OPP_LABELS"
           echo "Using script '$OPP_SCRIPT_ENV_URL' ..."
           bash <(curl -sL $OPP_SCRIPT_ENV_URL)
+
     outputs:
       opp_labels: "${{ steps.prinfo.outputs.labels }}"
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
@@ -159,6 +162,34 @@ jobs:
       - name: Operators for sync
         run: |
           echo "Operators : ${{ steps.operators.outputs.opp_uncomplete_operators }}"
+      - name: Operator info
+        id: op-info
+        env:
+          OPP_FORCE_OPERATORS: ${{ steps.operators.outputs.opp_uncomplete_operators }}
+          OPP_AUTO_LABEL: 1
+          ANSIBLE_FORCE_COLOR: 1
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: 0
+          ANSIBLE_STDOUT_CALLBACK: "yaml"
+        run: |
+          OPP_ANSIBLE_PULL_BRANCH="upstream-community-dev"
+          OPP_FORCE_OPERATORS=${OPP_FORCE_OPERATORS// /,}
+          echo $OPP_FORCE_OPERATORS
+          [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
+      - name: Upload operator_info
+        uses: actions/upload-artifact@v2
+        with:
+          name: operator_info
+          path: "/tmp/operator-test/op_info.yaml"
+      - name: Upload converted operators
+        uses: actions/upload-artifact@v2
+        with:
+          name: operators_converted
+          path: "/tmp/operator-test/operators"
+      - shell: bash
+        run: |
+          ls /tmp/operator-test/
+          cat /tmp/operator-test/op_info.yaml
     outputs:
       opp_uncomplete_operators: "${{ steps.operators.outputs.opp_uncomplete_operators }}"
 
@@ -169,6 +200,16 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      - name: Download operator_info
+        uses: actions/download-artifact@v2
+        with:
+          name: operator_info
+          path: /tmp/operator-test/
+      - name: Download converted operators
+        uses: actions/download-artifact@v2
+        with:
+          name: operators_converted
+          path: /tmp/operator-test/operators
       - name: Build bundles
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
@@ -189,6 +230,16 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      - name: Download operator_info
+        uses: actions/download-artifact@v2
+        with:
+          name: operator_info
+          path: /tmp/operator-test/
+      - name: Download converted operators
+        uses: actions/download-artifact@v2
+        with:
+          name: operators_converted
+          path: /tmp/operator-test/operators
       - name: Index sync
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"

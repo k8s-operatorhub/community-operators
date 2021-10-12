@@ -4,66 +4,58 @@ metadata:
   annotations:
     alm-examples: |-
       [
-        {
-          "apiVersion": "topolvm.cybozu.com/v1",
-          "kind": "TopolvmCluster",
-          "metadata": {
-            "name": "topolvmcluster-sample"
-          },
-          "spec": {
-            "topolvmVersion": "docker.io/alaudapublic/topolvm:1.0.0",
-            "deviceClasses": [
-              {
-                "nodeName": "192.168.16.98",
-                "classes": [
+          {
+            "apiVersion": "topolvm.cybozu.com/v2",
+            "kind": "TopolvmCluster",
+            "metadata": {
+              "name": "topolvm",
+              "namespace": "operators"
+            },
+            "spec": {
+              "topolvmVersion": "docker.io/alaudapublic/topolvm:2.0.0",
+              "storage": {
+                "useAllNodes": false,
+                "useAllDevices": false,
+                "useLoop": false,
+                "deviceClasses": [
                   {
-                    "className": "hdd",
-                    "volumeGroup": "test",
-                    "default": true,
-                    "devices": [
+                    "nodeName": "192.168.16.98",
+                    "classes": [
                       {
-                        "name": "/dev/loop4"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "nodeName": "192.168.16.99",
-                "classes": [
-                  {
-                    "className": "hdd",
-                    "volumeGroup": "test",
-                    "default": true,
-                    "devices": [
-                      {
-                        "name": "/dev/loop1"
+                        "className": "hdd",
+                        "volumeGroup": "hdd",
+                        "default": true,
+                        "devices": [
+                          {
+                            "name": "/dev/sdb",
+                            "type": "disk"
+                          }
+                        ]
                       }
                     ]
                   }
                 ]
               }
-            ]
+            }
+          },
+          {
+            "apiVersion": "topolvm.cybozu.com/v1",
+            "kind": "LogicalVolume",
+            "metadata": {
+              "name": "example-logicalvolume"
+            },
+            "spec": {}
           }
-        },
-        {
-          "apiVersion": "topolvm.cybozu.com/v1",
-          "kind": "LogicalVolume",
-          "metadata": {
-             "name": "example-logicalvolume"
-           },
-          "spec": {}
-        }
       ]
     capabilities: Basic Install
     categories: Storage
     certified: 'false'
-    containerImage: docker.io/alaudapublic/topolvm-operator:1.0.0
+    containerImage: docker.io/alaudapublic/topolvm-operator:2.0.0
     createdAt: 2021-05-12T10-00-00Z
     repository: https://github.com/alauda/topolvm-operator
     support: alauda
     description: "TopoLVM is a CSI plugin using LVM for Kubernetes. The Topolvm operator manages full lifecycle of using topolvm in Kubernetes-enabled cloud environment."
-  name: topolvm-operator.v1.0.0
+  name: topolvm-operator.v2.0.0
 spec:
   customresourcedefinitions:
     owned:
@@ -73,7 +65,7 @@ spec:
         name: topolvmclusters.topolvm.cybozu.com
         specDescriptors: []
         statusDescriptors: []
-        version: v1
+        version: v2
       - description: LogicalVolume
         displayName: LogicalVolume
         kind: LogicalVolume
@@ -84,7 +76,7 @@ spec:
     required: []
   description: >+
 
-    [TopoLVM](https://github.com/topolvm/topolvm)provide kubernetes local storage which is light weight and high performance.
+    [TopoLVM](https://github.com/topolvm/topolvm) provide kubernetes local storage which is light weight and high performance.
 
     [Topolvm Operator](https://github.com/alauda/topolvm-operator) manages full lifecycle of using topolvm in Kubernetes-enabled cloud environment.
 
@@ -103,6 +95,12 @@ spec:
     * **Topology Perception** - Pod and PVC can be scheduled to node which has free storage.
 
     * **Volume capacity limit** - The volume capacity can be limited.
+
+    * **Auto device discover** - auto discover available devices on each node.
+
+    * **Stripe** - Use stripe to improve performance.
+
+    * **Metric and Alarm** - prometheus metric and alarm.
 
   displayName: Topolvm Operator
   icon:
@@ -134,7 +132,7 @@ spec:
                             fieldPath: metadata.namespace
                       - name: IS_OPERATOR_HUB
                         value: "1"
-                    image: docker.io/alaudapublic/topolvm-operator:1.0.0
+                    image: docker.io/alaudapublic/topolvm-operator:2.0.0
                     command:
                       - /topolvm
                     args:
@@ -185,6 +183,15 @@ spec:
                 - cronjobs
               verbs:
                 - delete
+            - apiGroups:
+                - monitoring.coreos.com
+              resources:
+                - '*'
+              verbs:
+                - '*'
+            - apiGroups: [ "coordination.k8s.io" ]
+              resources: [ "leases" ]
+              verbs: [ "get", "watch", "list", "delete", "update", "create" ]
           serviceAccountName: topolvm-operator
         - rules:
             - apiGroups: [ "" ]
@@ -216,6 +223,20 @@ spec:
                 - update
                 - delete
           serviceAccountName: topolvm-preparevg
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - patch
+                - create
+                - update
+                - delete
+          serviceAccountName: topolvm-discover
       clusterPermissions:
         - rules:
             - apiGroups: [ "" ]
@@ -247,6 +268,9 @@ spec:
               verbs: [ "get", "list", "watch", "update", "delete" ]
             - apiGroups: [ "storage.k8s.io" ]
               resources: [ "storageclasses","csidrivers" ]
+              verbs: [ "get", "list", "watch" ]
+            - apiGroups: [ "snapshot.storage.k8s.io" ]
+              resources: [ "volumesnapshots" ]
               verbs: [ "get", "list", "watch" ]
             - apiGroups: [ "topolvm.cybozu.com" ]
               resources: [ "logicalvolumes", "logicalvolumes/status" ]
@@ -310,6 +334,23 @@ spec:
               verbs: [ "list", "watch", "create", "update", "patch" ]
           serviceAccountName: topolvm-controller
         - rules:
+            - apiGroups: [ "" ]
+              resources: [ "events" ]
+              verbs: [ "list", "watch", "create", "update", "patch" ]
+            - apiGroups: [ "snapshot.storage.k8s.io" ]
+              resources: [ "volumesnapshotclasses" ]
+              verbs: [ "get", "list", "watch" ]
+            - apiGroups: [ "snapshot.storage.k8s.io" ]
+              resources: [ "volumesnapshotcontents" ]
+              verbs: [ "create", "get", "list", "watch", "update", "delete" ]
+            - apiGroups: [ "snapshot.storage.k8s.io" ]
+              resources: [ "volumesnapshotcontents/status" ]
+              verbs: [ "update" ]
+          serviceAccountName: topolvm-controller
+        - rules:
+            - apiGroups: [ "" ]
+              resources: [ "configmaps" ]
+              verbs: [ "get", "list", "watch"]
             - apiGroups: [ "" ]
               resources: [ "nodes" ]
               verbs: [ "get", "list", "watch", "update", "patch" ]
@@ -449,12 +490,24 @@ spec:
               verbs:
                 - "*"
           serviceAccountName: topolvm-preparevg
+        - rules:
+            - apiGroups: [ "policy" ]
+              resources: [ "podsecuritypolicies" ]
+              verbs: [ "use" ]
+              resourceNames: [ "topolvm-preparevg" ]
+            - apiGroups:
+                - topolvm.cybozu.com
+              resources:
+                - "*"
+              verbs:
+                - "*"
+          serviceAccountName: topolvm-discover
     strategy: deployment
   installModes:
-    - {supported: true, type: OwnNamespace}
-    - {supported: true, type: SingleNamespace}
+    - {supported: false, type: OwnNamespace}
+    - {supported: false, type: SingleNamespace}
     - {supported: false, type: MultiNamespace}
-    - {supported: false, type: AllNamespaces}
+    - {supported: true, type: AllNamespaces}
   keywords: [LocalStorage, Kubernetes, Topolvm, Storage]
   labels: {}
   links:
@@ -463,10 +516,10 @@ spec:
   maintainers:
     - {email: xrluo@alauda.io, name: xiaorenluo}
   maturity: alpha
-  minKubeVersion: 1.19.1
+  minKubeVersion: 1.19.0
   provider: {name: "alauda"}
   selector:
     matchLabels: {}
   skips: []
-  version: 1.0.0
+  version: 2.0.0
 

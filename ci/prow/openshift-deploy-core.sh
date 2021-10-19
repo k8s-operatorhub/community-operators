@@ -3,8 +3,8 @@
 
 set -e #fail in case of non zero return
 declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 )
-PLAYBOOK_REPO=
-PLAYBOOK_REPO_BRANCH=
+PLAYBOOK_REPO='https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git'
+PLAYBOOK_REPO_BRANCH=upstream-community
 echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
 EXIT_NEEDED=0
 

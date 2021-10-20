@@ -171,45 +171,46 @@ echo "OP_VER=$OP_VER"
 #echo "Forced specific operator - $OP_NAME $OP_VER $COMMIT"
 
 # Deprecated API validation
-curl --connect-timeout 20 \
-    --retry 10 \
-    --retry-delay 15 \
-    --retry-max-time 240 \
-    -L -o /tmp/opm -s https://github.com/operator-framework/operator-registry/releases/download/$OPM_VERSION/linux-amd64-opm
-chmod +x /tmp/opm
+if [ ! -d "operators/$OP_NAME/$OP_VER/manifests" ]; then
+  curl --connect-timeout 20 \
+      --retry 10 \
+      --retry-delay 15 \
+      --retry-max-time 240 \
+      -L -o /tmp/opm -s https://github.com/operator-framework/operator-registry/releases/download/$OPM_VERSION/linux-amd64-opm
+  chmod +x /tmp/opm
 
-curl --connect-timeout 20 \
-    --retry 10 \
-    --retry-delay 15 \
-    --retry-max-time 240 \
-    -L -o /tmp/opertor-sdk -s  https://github.com/operator-framework/operator-sdk/releases/download/$OPERATOR_SDK_VERSION/operator-sdk_linux_amd64
-chmod +x /tmp/opertor-sdk
+  curl --connect-timeout 20 \
+      --retry 10 \
+      --retry-delay 15 \
+      --retry-max-time 240 \
+      -L -o /tmp/opertor-sdk -s  https://github.com/operator-framework/operator-sdk/releases/download/$OPERATOR_SDK_VERSION/operator-sdk_linux_amd64
+  chmod +x /tmp/opertor-sdk
 
-K8S_VERSION=${OCP2K8S[${OCP_CLUSTER_VERSION}]}
-echo "OCP_CLUSTER_VERSION=$OCP_CLUSTER_VERSION"
-echo "K8S_VERSION=$K8S_VERSION"
-echo "CURRENT_OPENSHIFT_RUN=$CURRENT_OPENSHIFT_RUN"
-echo "Current directory"
-pwd
+  K8S_VERSION=${OCP2K8S[${OCP_CLUSTER_VERSION}]}
+  echo "OCP_CLUSTER_VERSION=$OCP_CLUSTER_VERSION"
+  echo "K8S_VERSION=$K8S_VERSION"
+  echo "CURRENT_OPENSHIFT_RUN=$CURRENT_OPENSHIFT_RUN"
+  echo "Current directory"
+  pwd
 
-/tmp/opm  alpha bundle generate --directory operators/$OP_NAME/$OP_VER/ -u operators/$OP_NAME --package $OP_NAME
-mkdir -p /tmp/$OP_NAME/$OP_VER
-cp -a operators/$OP_NAME/metadata operators/$OP_NAME/manifests/ /tmp/$OP_NAME/$OP_VER
+  /tmp/opm  alpha bundle generate --directory operators/$OP_NAME/$OP_VER/ -u operators/$OP_NAME --package $OP_NAME
+  mkdir -p /tmp/$OP_NAME/$OP_VER
+  cp -a operators/$OP_NAME/metadata operators/$OP_NAME/manifests/ /tmp/$OP_NAME/$OP_VER
 
-echo "Checking API validity ..."
-/tmp/opertor-sdk bundle validate /tmp/$OP_NAME/$OP_VER --select-optional name=alpha-deprecated-apis  --optional-values=k8s-version=$K8S_VERSION || EXIT_NEEDED=1
+  echo "Checking API validity ..."
+  /tmp/opertor-sdk bundle validate /tmp/$OP_NAME/$OP_VER --select-optional name=alpha-deprecated-apis  --optional-values=k8s-version=$K8S_VERSION || EXIT_NEEDED=1
 
-if [[ "$EXIT_NEEDED" == "1" ]]; then
-  echo "This operator is not valid for testing due to deprecated API. Test is green then, operator will not be included in the current index, exit."
-  curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
-  -X POST \
-  -H "Accept: application/vnd.github.v3+json" \
-  "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
-  exit 0
-else
-  echo "API valid [OK]"
+  if [[ "$EXIT_NEEDED" == "1" ]]; then
+    echo "This operator is not valid for testing due to deprecated API. Test is green then, operator will not be included in the current index, exit."
+    curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
+    -X POST \
+    -H "Accept: application/vnd.github.v3+json" \
+    "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
+    exit 0
+  else
+    echo "API valid [OK]"
+  fi
 fi
-
 #Prepare temp index
 echo "Preparing temp index ..."
 [[ $TEST_MODE -ne 1 ]] && OP_TOKEN=$(cat /var/run/cred/op_token_quay_test)

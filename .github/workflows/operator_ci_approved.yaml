@@ -1,0 +1,112 @@
+
+name: Operator CI APPROVED
+
+on:
+  pull_request_target:
+    types: [ready_for_review]
+    branches:
+      - master
+      - main
+
+env:
+  OPP_DEBUG: 1
+  OPP_CONTAINER_OPT: "-t"
+  OPP_SCRIPT_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp.sh"
+  OPP_SCRIPT_ENV_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-env.sh"
+  OPP_SCRIPT_ENV_OPRT_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-oprt.sh"
+  OPP_IMAGE: "quay.io/operator_testing/operator-test-playbooks:latest"
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
+  OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
+  OPP_THIS_REPO_BASE: "https://github.com"
+  OPP_THIS_REPO: "k8s-operatorhub/community-operators"
+  OPP_THIS_BRANCH: "main"
+  OPP_PROD: 0
+  OPP_DRY_RUN: 0
+  KIND_KUBE_VERSION: "v1.21.1"
+  OPP_PRODUCTION_TYPE: "k8s"
+  OPP_REVIEWERS_ENABLED: 1
+
+jobs:
+  approved-list-handler:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.state == 'open' && github.event.action == 'ready_for_review'
+    steps:
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+      # - name: Check approved list
+      #   id: op-approved-list
+      #   continue-on-error: true
+      #   env:
+      #     OPP_THIS_PR: ${{ github.event.pull_request.number }}
+      #   run: |
+      #     echo "OPP_THIS_PR=$OPP_THIS_PR"
+      #     curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$OPP_THIS_REPO/pulls/$OPP_THIS_PR/reviews | jq '[.[] | {user: .user.login, state: .state}] | map(select(.state == "APPROVED")) | .[].user'
+      - name: Operator traffic light
+        id: op-traffic-light
+        env:
+          OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_PR_AUTHOR: "${{ github.event.pull_request.user.login }}"
+          OPP_OPRT_REPO: "${{ github.event.pull_request.head.repo.full_name }}"
+          OPP_OPRT_SHA: "${{ github.event.pull_request.head.sha }}"
+          OPP_OPRT_SRC_REPO: "${{ github.event.pull_request.base.repo.full_name }}"
+          OPP_OPRT_SRC_BRANCH: "${{ github.event.pull_request.base.ref }}"
+          OPP_THIS_PR: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Using script '$OPP_SCRIPT_ENV_OPRT_URL' ..."
+          echo "global labels $OPP_LABELS"
+          bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
+
+      - name: "Setting authorized-changes label"
+        uses: actions/github-script@v3
+        continue-on-error: true
+        if: steps.op-traffic-light.outputs.opp_authorized_changes == '1'
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: [ 'authorized-changes' ]
+            })
+
+      # - name: "Mention reviewers if exist"
+      #   uses: mshick/add-pr-comment@v1
+      #   with:
+      #     message: |
+      #       PR approved
+      #     repo-token: ${{ secrets.GITHUB_TOKEN }}
+      #     repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
+      #     allow-repeats: false
+
+      # - name: "Setting authorized-changes label"
+      #   uses: actions/github-script@v3
+      #   if: steps.op-traffic-light.outputs.opp_authorized_changes == '1'
+      #   with:
+      #     github-token: ${{secrets.GITHUB_TOKEN}}
+      #     script: |
+      #       github.issues.addLabels({
+      #         issue_number: context.issue.number,
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         labels: [ 'authorized-changes' ]
+      #       })
+
+      # - name: Try to automerge
+      #   uses: actions/github-script@v3
+      #   continue-on-error: true
+      #   with:
+      #     github-token: ${{ secrets.FRAMEWORK_MERGE }}
+      #     script: |
+      #       github.issues.createComment({
+      #         issue_number: context.issue.number,
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         body: '/merge possible'
+      #       })
+

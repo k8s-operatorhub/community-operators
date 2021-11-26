@@ -246,3 +246,4 @@ const fragment = `
     # Following the findings for this distribution:
     # %s
     operatorhub.io/ui-metadata-max-k8s-version: 1.21`
+

@@ -103,7 +103,7 @@ git clone $REPO_FULL community-operators #> /dev/null 2>&1
 echo "Cloned  [OK]"
 cd community-operators
 echo "Dir entered  [OK]"
-BRANCH_NAME=$(git branch -a --contains $OPRT_SHA | grep remotes/ | grep -v HEAD | cut -d '/' -f 2-)
+BRANCH_NAME=$(git branch -a --contains $OPRT_SHA | grep remotes/ | grep -v HEAD |tail -n 1 | cut -d '/' -f 2-)
 echo "BRANCH_NAME=$BRANCH_NAME"
 git checkout $BRANCH_NAME > /dev/null #2>&1
 echo "Checkout  [OK]"

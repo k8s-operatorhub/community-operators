@@ -44,6 +44,8 @@ spec:
         version: v1
       - kind: Deployment
         version: apps/v1
+      - kind: PersistentVolumeClaim
+        version: v1
       specDescriptors:
       - description: Schedule scans of namespaces.
         displayName: Crontab
@@ -70,21 +72,6 @@ spec:
 
     ### Schefuled Image scans
     Default every 5 minutes execute a scan script. It will get image list from all namespaces with the label `trivy-scan=true`, and then scan this images with trivy, finally we will get metrics on `http://[pod-ip]:9115/metrics`
-
-    ### Persist Trivy cache
-    To Persist Trivy cache you need to create a pvc and mount to the Deployment
-
-    ```yaml
-    ...
-              volumeMounts:
-              - name: cache
-                mountPath: "/home/trivy-operator/trivy-cache"
-            volumes:
-            - name: cache
-              persistentVolumeClaim:
-                  claimName: trivy-cache
-    ```
-
 
     ### Trivy Image Validator
     The admission controller function can be configured as a ValidatingWebhook in a k8s cluster. Kubernetes will send requests to the admission server when a Pod creation is initiated. The admission controller checks the image using trivy if it is in a namespace with the lable `trivy-operator-validation=true`.
@@ -151,8 +138,6 @@ spec:
     url: https://github.com/devopstales/trivy-operator
   - name: Blog
     url: https://devopstales.github.io
-  - name: HelmChart
-     url: https://devopstales.github.io/helm-charts/
   maintainers:
   - email: devopstales@protonmail.com
     name: devopstales
@@ -228,6 +213,14 @@ spec:
               targetPort: 8443
               protocol: TCP
               port: 443
+      persistentvolumeclaims:
+      - name: trivy-cache
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
       deployments:
       - name: trivy-operator
         spec:
@@ -257,6 +250,9 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
+                volumeMounts:
+                - name: cache
+                  mountPath: "/home/trivy-operator/trivy-cache"
                 ports:
                   - name: metric
                     containerPort: 9115
@@ -264,4 +260,7 @@ spec:
                   - name: https
                     containerPort: 8443
                     protocol: TCP
-
+              volumes:
+              - name: cache
+                persistentVolumeClaim:
+                    claimName: trivy-cache

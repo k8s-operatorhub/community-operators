@@ -59,8 +59,72 @@ spec:
       version: v1
   description: |
     Trivy Operator for scheduled imagescans and an Admission Control.
+
+    ### Add Github token to extend your Github API Rate Limit
     The Operator use Github to download Trivy database. If your Github API Rate Limit Exceeded add your Github token to the operator deployment as GITHUB_TOKEN variable.
-    If you want to scan images from a private reposytori edit the operator deployment andd add pull secrets.
+
+    ```yaml
+    ...
+    env:
+    - name: GITHUB_TOKEN
+      value: "githubToken"
+    ```
+
+    ### Schefuled Image scans
+    Default every 5 minutes execute a scan script. It will get image list from all namespaces with the label `trivy-scan=true`, and then scan this images with trivy, finally we will get metrics on `http://[pod-ip]:9115/metrics`
+
+    ### Trivy Image Validator
+    The admission controller function can be configured as a ValidatingWebhook in a k8s cluster. Kubernetes will send requests to the admission server when a Pod creation is initiated. The admission controller checks the image using trivy if it is in a namespace with the lable `trivy-operator-validation=true`.
+
+    ### Usage
+    ```bash
+    kubectl label namespaces test-apps trivy-scan=true
+    # or
+    kubectl label namespaces test-apps trivy-operator-validation=true
+    ```
+
+    You can define policy to the Admission Controller, by adding annotation to the pod trough the deployment:
+
+    ```bash
+    spec:
+      ...
+      template:
+        metadata:
+          annotations:
+            trivy.security.devopstales.io/medium: "5"
+            trivy.security.devopstales.io/low: "10"
+            trivy.security.devopstales.io/critical: "2"
+    ...
+    ```
+
+    ```bash
+    curl -s http://10.43.179.39:9115/metrics | grep so_vulnerabilities
+
+    # HELP so_vulnerabilities Container vulnerabilities
+    # TYPE so_vulnerabilities gauge
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="UNKNOWN"} 0
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="LOW"} 23
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="MEDIUM"} 93
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="HIGH"} 76
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="CRITICAL"} 25
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="UNKNOWN"} 0
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="LOW"} 23
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="MEDIUM"} 88
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="HIGH"} 60
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="CRITICAL"} 8
+    ```
+
+    ```bash
+    curl -s http://10.43.179.39:9115/metrics | grep ac_vulnerabilities
+
+    # HELP ac_vulnerabilities Admission Controller vulnerabilities
+    # TYPE ac_vulnerabilities gauge
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="UNKNOWN"} 0.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="LOW"} 83.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="MEDIUM"} 6.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="HIGH"} 6.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="CRITICAL"} 4.0
+    ```
   displayName: Trivy Operator
   minKubeVersion: "1.19"
   icon:
@@ -70,7 +134,7 @@ spec:
   - trivy
   - security
   links:
-  - name: Source
+  - name: Documentation
     url: https://github.com/devopstales/trivy-operator
   - name: Blog
     url: https://devopstales.github.io

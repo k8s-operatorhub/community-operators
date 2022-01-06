@@ -5,7 +5,7 @@
 
 This repo is the canonical source for Kubernetes Operators that appear on [OperatorHub.io](https://operatorhub.io).
 The solutions merged on this repository are distributed via the [OLM][olm] index catalog [quay.io/operatorhubio/catalog][quay.io].
-Users can install [OLM][olm] in any Kubernetes or vendor such as Openshift to consume this content. [(more info)][catalog]
+Users can install [OLM][olm] in any Kubernetes or vendor such as Openshift to consume this content by adding a new CatalogSource for the index image `quay.io/operatorhubio/catalog`. [(more info)][catalog]
 
 ## Documentation
 

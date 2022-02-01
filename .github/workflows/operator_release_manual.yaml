@@ -1,9 +1,5 @@
-name: Operator release 
+name: Operator release manual
 on:
-  push:
-    branches:
-      - master
-      - main
 
   workflow_dispatch:
     inputs:
@@ -15,6 +11,23 @@ on:
         description: 'Remove operator virtually from git (cockroachdb or cockroachdb/5.0.4) for debuging only'
         required: false
         default: ''
+
+      delete_for_renew:
+        description: 'Remove operator from index (allow/operator-recreate)'
+        required: true
+        default: '0'
+
+
+      index:
+        description: 'Target index (e.g. latest or latest-db)'
+        required: true
+        default: 'latest'
+
+      list_of_operators:
+        description: 'List of operators to be synced in the index, list has to be devided by spaces (e.g. aqua ripsaw)'
+        required: true
+        default: ''
+
 
 env:
   OPP_DEBUG: 1
@@ -121,12 +134,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        index-tag: ['latest']
+
+        index-tag: ['${{ github.event.inputs.index }}']
 
       fail-fast: false
     steps:
       - name: Remove operator from index
-        if: needs.pr-check.outputs.opp_op_delete == '1' && needs.pr-check.outputs.opp_name != ''
+
+        if: github.event.inputs.list_of_operators !='' && github.event.inputs.delete_for_renew == '1'
 
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
@@ -134,9 +149,11 @@ jobs:
           OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
         run: |
 
+          for operator_to_delete in ${{ github.event.inputs.list_of_operators }}; do
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH
+          echo "op_delete_${OPERATOR_INDEX_TAG} operators/$operator_to_delete/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) op_delete_${OPERATOR_INDEX_TAG} operators/$operator_to_delete/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH
+          done
 
       - name: Operator release (operator version overwrite)
         if: needs.pr-check.outputs.opp_ci_yaml_only == '0' && needs.pr-check.outputs.opp_ver_overwrite == '1' && needs.pr-check.outputs.opp_name != '' && needs.pr-check.outputs.opp_version != ''
@@ -172,10 +189,12 @@ jobs:
 
           OPP_INDEX_CHECK_ONLY: 1
         run: |
-
-          echo "OPP_LABELS=$OPP_LABELS"
-          echo "'$OPERATOR_INDEX_TAG' operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) "$OPERATOR_INDEX_TAG" operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+ 
+          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
+          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
+          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
+          echo "::set-output name=opp_uncomplete_operators::${{ github.event.inputs.list_of_operators }}"
+          echo "::set-output name=opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE::${{ github.event.inputs.list_of_operators }}"
 
       - name: Index check
         run: |
@@ -186,7 +205,7 @@ jobs:
         id: op-info
         env:
 
-          OPP_FORCE_OPERATORS: ${{ steps.operators.outputs.opp_uncomplete_operators }}
+          OPP_FORCE_OPERATORS: "${{ github.event.inputs.list_of_operators }}"
 
           OPP_AUTO_LABEL: 1
           ANSIBLE_FORCE_COLOR: 1
@@ -256,7 +275,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        index-tag: ['latest']
+
+        index-tag: ['${{ github.event.inputs.index }}']
 
       fail-fast: false
     steps:
@@ -281,13 +301,17 @@ jobs:
           OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
           # OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
           OPP_FORCE_OPERATORS: ""
-          OPP_FORCE_OPERATORS_latest: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators_latest }}"
 
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
           FAKE_RC=false
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
           [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
+
+          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
+          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
+          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
+          export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
 
           echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC

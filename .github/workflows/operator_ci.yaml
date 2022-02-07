@@ -110,16 +110,6 @@ jobs:
         run: |
           bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
 
-      # - name: "Comment operator test error code [10]"
-      #   if: steps.op-traffic-light.outputs.opp_error_code == '10'
-      #   uses: mshick/add-pr-comment@v1
-      #   with:
-      #     message: |
-      #       If you want to accelerate publishing your changes, consider adding yourself and others you trust to the reviewers list see how that works [here](https://operator-framework.github.io/community-operators/operator-ci-yaml).
-      #     repo-token: ${{ secrets.GITHUB_TOKEN }}
-      #     repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-      #     allow-repeats: false
-
       - name: "Remove installation-validated"
         uses: actions/github-script@v4
         if: (github.event.action != 'unlabeled')
@@ -268,8 +258,6 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: true
-
-
 
       - name: Update title
         uses: actions/github-script@v3
@@ -453,6 +441,7 @@ jobs:
       #     repo-token: ${{ secrets.GITHUB_TOKEN }}
       #     repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
       #     allow-repeats: true
+
       - name: Info
         run: |
           echo "steps.op-traffic-light.outputs.opp_test_ready: ${{ steps.op-traffic-light.outputs.opp_test_ready }}"
@@ -461,6 +450,7 @@ jobs:
           echo "steps.op-traffic-light.outputs.opp_name: ${{ steps.op-traffic-light.outputs.opp_name }}"
           echo "steps.op-traffic-light.outputs.opp_version: ${{ steps.op-traffic-light.outputs.opp_version }}"
           echo "steps.op-traffic-light.outputs.opp_ci_yaml_only: ${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
+          echo "steps.op-traffic-light.outputs.opp_installation_skipped: ${{ steps.op-traffic-light.outputs.opp_installation_skipped }}"
     outputs:
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
       opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
@@ -468,6 +458,7 @@ jobs:
       opp_name: "${{ steps.op-traffic-light.outputs.opp_name }}"
       opp_version: "${{ steps.op-traffic-light.outputs.opp_version }}"
       opp_ci_yaml_only: "${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
+      opp_installation_skipped: "${{ steps.op-traffic-light.outputs.opp_installation_skipped }}"
 
   operator-ci-ok-to-test:
     needs: operator-ci
@@ -491,10 +482,11 @@ jobs:
         run: |
           echo "needs.operator-ci.outputs.opp_production_type: ${{ needs.operator-ci.outputs.opp_production_type }}"
           echo "needs.operator-ci.outputs.opp_ci_yaml_only: ${{ needs.operator-ci.outputs.opp_ci_yaml_only }}"
+          echo "needs.operator-ci.outputs.opp_installation_skipped: ${{ needs.operator-ci.outputs.opp_installation_skipped }}"
 
       - name: "Setting ok-to-test label"
         uses: actions/github-script@v3
-        if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only != '1' && (!contains(github.event.pull_request.labels.*.name, 'allow/ci-changes'))
+        if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only != '1' && (!contains(github.event.pull_request.labels.*.name, 'allow/ci-changes')) && needs.operator-ci.outputs.opp_installation_skipped == '0'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
@@ -517,6 +509,21 @@ jobs:
               repo: context.repo.repo,
               labels: [ 'installation-validated' ]
             })
+
+      - name: "Setting installation-validated label (when installation_skipped)"
+        uses: actions/github-script@v3
+        if: needs.operator-ci.outputs.opp_installation_skipped == '1'
+        continue-on-error: true
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: [ 'installation-validated', 'installation-skipped' ]
+            })
+
       - name: Try to automerge
         uses: actions/github-script@v3
         if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only == '1'

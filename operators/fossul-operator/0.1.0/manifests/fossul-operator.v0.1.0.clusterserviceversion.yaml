@@ -1,0 +1,495 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "fossul.io/v1",
+          "kind": "Backup",
+          "metadata": {
+            "name": "mariadb-sample"
+          },
+          "spec": {
+            "deployment_name": "mariadb",
+            "policy": "daily"
+          }
+        },
+        {
+          "apiVersion": "fossul.io/v1",
+          "kind": "Restore",
+          "metadata": {
+            "name": "mariadb-sample"
+          },
+          "spec": {
+            "deployment_name": "mariadb",
+            "policy": "daily",
+            "workflow_id": "xxxx"
+          }
+        },        
+        {
+          "apiVersion": "fossul.io/v1",
+          "kind": "BackupConfig",
+          "metadata": {
+            "name": "mariadb-sample"
+          },
+          "spec": {
+            "auto_discovery": false,
+            "deployment_name": "mariadb",
+            "deployment_type": "DeploymentConfig",
+            "job_retention": 50,
+            "overwrite_pcv_on_restore": true,
+            "policies": [
+              {
+                "policy": "hourly",
+                "retentionNumber": 3
+              },
+              {
+                "policy": "daily",
+                "retentionNumber": 10
+              }
+            ],
+            "pvc_deletion_timeout": 300,
+            "restore_to_new_pvc": false,
+            "snapshot_timeout": 180,
+            "storage_plugin": "csi.so",
+            "app_plugin": "mariadb.so"
+          }
+        },
+        {
+          "apiVersion": "fossul.io/v1",
+          "kind": "BackupSchedule",
+          "metadata": {
+            "name": "mariadb-sample"
+          },
+          "spec": {
+            "cron_schedule": "23 59 * * *",
+            "deployment_name": "mariadb",
+            "policy": "daily"
+
+          }
+        },
+        {
+          "apiVersion": "fossul.io/v1",
+          "kind": "Fossul",
+          "metadata": {
+            "name": "fossul-sample"
+          },
+          "spec": {
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: Storage
+    certified: "false"
+    containerImage: quay.io/fossul/fossul-operator:v0.1.0
+    support: Community
+    repository: https://github.com/fossul/fossul
+    description: "Fossul is a application centric container native backup and restore framework for databases or applications"
+    createdAt: 2022-01-25T20:09:00Z 
+    operators.operatorframework.io/builder: operator-sdk-v1.10.1-ocp
+    operators.operatorframework.io/project_layout: ansible.sdk.operatorframework.io/v1
+  name: fossul-operator.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - kind: BackupConfig
+      name: backupconfigs.fossul.io
+      version: v1
+    - kind: Backup
+      name: backups.fossul.io
+      version: v1
+    - kind: Restore
+      name: restores.fossul.io
+      version: v1      
+    - kind: BackupSchedule
+      name: backupschedules.fossul.io
+      version: v1
+    - kind: Fossul
+      name: fossuls.fossul.io
+      version: v1
+  description: |
+    ## Fossul Framework
+    Application backup and restore framework for container native applications on Kubernetes and OpenShift. Fossul provides application centric backup and recovery enabling integration with the application creating an application consistent backup. Since there are many applications and providers for storage or archive Fossul enables plugins that allow proper integration. Fossul provides plugins for postgresql, mariadb, mysql and mongo as well as plugin to integrate with CSI snapshots. Plugins can be written in any language. The Fossul operator deploys Fossul via the Fossul custom resource and additionally provides BackupConfig, Backup, BackupSchedule and Restore custom resources. Each user can configure and manage their own backups with simple custom resources that can be part of CI/CD or source control. Users can also opt to manage backups through Fossul CLI/API instead of the custom resources.
+
+    The first step is to deploy Fossul by creating a Fossul CR. It is recommended to be deployed into the fossul-operator namespace. You can choose another namespace but then also need to provide the optional 'fossul_namespace' parameter with the spec for all the additional custom resources. This is required so the Fossul operator can communicate with Fossul.
+
+    Once Fossul is deployed you can create a BackupConfig custom resource for every application you want to backup. Once that is done you can optionally create a backup by simply creating a Backup custom resource. You can also create a BackupSchedule custom resource using cron syntax to schedule your backup to occur on a regular interval. Finally if a backup has been created you can perform a restore through a custom resource as well. In order to do this you need to provide the workflow_id from the backup. If you are creating backups through the custom resource the workflow_id will be appended to the spec once the backup completes. If you are using the Fossul CLI/API or the BackupSchedule custom resource to create backups you will need to get the workflow_id through the Fossul CLI/API directly as the scheduler won't create Fossul Backup custom resources.
+
+    As mentioned you can use Fossul from CLI or API that is provided once the Fossul custom resource has created a deployment. A cli pod is deployed with credentials and if desired you can create or manage backups from there. To use the API you need the credentials stored in the fossul secret.
+
+    ## Quick Setup
+    When creating Fossul custom resources generally you will only need to update the deployment_name, deployment_type (DeploymentConfig, Deployment or VirtualMachine) and namespace. All custom resources must be created in the namespace where the database or application exists. 
+
+    ### Deploy Fossul in fossul-operator namespace
+    ```$ oc new-project fossul-operator```
+    <pre>
+    $ vi fossul.yaml
+    kind: Fossul
+    apiVersion: fossul.io/v1
+    metadata:
+      name: fossul-sample
+      namespace: fossul-operator
+    spec: {}
+    </pre>
+    ```$ oc create -f fossul.yaml```
+
+    ### Deploy Mariadb Database
+    Make sure you create all Fossul custom resources in the same namespace as the database, application or virtual machine
+
+    ### Create MariaDB Fossul BackupConfig
+    Creates a backup configuration for MariaDB or MySQL databases
+
+    ```$ vi backupconfig.yaml```
+    <pre>
+    kind: BackupConfig
+    apiVersion: fossul.io/v1
+    metadata:
+      name: mariadb-sample
+      namespace: databases
+    spec:
+      auto_discovery: false
+      deployment_name: mariadb
+      deployment_type: DeploymentConfig
+      job_retention: 50
+      overwrite_pcv_on_restore: true
+      policies:
+        - policy: hourly
+          retentionNumber: 3
+        - policy: daily
+          retentionNumber: 10
+      pvc_deletion_timeout: 300
+      restore_to_new_pvc: false
+      snapshot_timeout: 180
+      storage_plugin: csi.so
+      app_plugin: mariadb.so 
+    </pre>
+    ```$ oc create -f backupconfig.yaml```
+
+    ### Create PostgreSQL Fossul BackupConfig
+    Creates a backup config for PostgreSQL databases, you need to ensure the user defined in secret has backup permissions
+
+    ```$ vi backupconfig.yaml```
+    <pre>
+    kind: BackupConfig
+    apiVersion: fossul.io/v1
+    metadata:
+      name: postgresql-sample
+      namespace: databases
+    spec:
+      auto_discovery: false
+      deployment_name: postgresql 
+      deployment_type: DeploymentConfig
+      job_retention: 50
+      overwrite_pcv_on_restore: true
+      policies:
+        - policy: hourly
+          retentionNumber: 3
+        - policy: daily
+          retentionNumber: 10
+      pvc_deletion_timeout: 300
+      restore_to_new_pvc: false
+      snapshot_timeout: 180
+      storage_plugin: csi.so
+      app_plugin: postgres.so 
+    </pre>
+    ```$ oc create -f backupconfig.yaml```
+
+    ### Create Kubevirt Fossul BackupConfig
+    Creates a backup configuration for virtual machines
+
+    ```$ vi backupconfig.yaml```
+    <pre>
+    kind: BackupConfig
+    apiVersion: fossul.io/v1
+    metadata:
+      name: rhel8-vm-sample
+      namespace: virtualmachines
+    spec:
+      auto_discovery: false
+      deployment_name: rhel8-vm
+      deployment_type: VirtualMachine
+      job_retention: 50
+      overwrite_pcv_on_restore: true
+      policies:
+        - policy: hourly
+          retentionNumber: 3
+        - policy: daily
+          retentionNumber: 10
+      pvc_deletion_timeout: 300
+      restore_to_new_pvc: false
+      snapshot_timeout: 180
+      storage_plugin: csi.so
+      app_plugin: kubevirt.so 
+    </pre>
+    ```$ oc create -f backupconfig.yaml```
+
+    ### Create BackupSchedule
+    A backup can be scheduled per policy, defined by backup configuration using cron syntax
+
+    ```$ vi backupschedule.yaml```
+    <pre>
+    kind: BackupSchedule
+    apiVersion: fossul.io/v1
+    metadata:
+      name: mariadb-sample
+      namespace: databases
+    spec:
+      cron_schedule: 23 59 * * *
+      deployment_name: mariadb
+      policy: daily
+    </pre>
+    ```$ oc create -f backupschedule.yaml```
+
+    ### Create Backup
+    A backup will be created according to policy and deleted either manually or as defined in retention policy
+
+    ```$ vi backup.yaml```
+    <pre>
+    kind: Backup
+    apiVersion: fossul.io/v1
+    metadata:
+      name: mariadb-sample
+      namespace: databases
+    spec:
+      deployment_name: mariadb
+      policy: daily
+    </pre>
+    ```$ oc create -f backup.yaml```
+
+    ### Perform Restore
+    A restore requires a workflow_id located in the backup spec, upon a successful restore the custom resource will deleted automatically
+
+    ```$ vi restore.yaml```
+    <pre>
+    kind: Restore
+    apiVersion: fossul.io/v1
+    metadata:
+      name: mariadb-sample
+      namespace: databases
+    spec:
+      deployment_name: mariadb
+      policy: daily
+      workflow_id: xxxx
+    </pre>
+    ```$ oc create -f restore.yaml```
+
+  displayName: Fossul Operator
+  icon:
+  - base64data: "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"
+    mediatype: "image/png"
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - "fossul.io"
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - "snapshot.storage.k8s.io"
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          - persistentvolumeclaims
+          - persistentvolumes
+          verbs:
+          - '*'
+        - apiGroups:
+          - "apps"
+          resources:
+          - deployments
+          verbs:
+          - '*'
+        - apiGroups:
+          - "apps.openshift.io"
+          resources:
+          - deploymentconfigs
+          verbs:
+          - '*'
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: default
+      deployments:
+        - name: fossul-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                name: fossul-operator
+            template:
+              metadata:
+                labels:
+                  name: fossul-operator
+              spec:
+                serviceAccountName: default
+                containers:
+                  - name: fossul-operator
+                    image: quay.io/fossul/fossul-operator:v0.1.0
+                    imagePullPolicy: Always
+                    env:
+                      - name: WATCH_NAMESPACE
+                        value: ''
+                      - name: POD_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.name
+                      - name: OPERATOR_NAME
+                        value: fossul-operator
+      permissions:
+      - rules:
+        - apiGroups:
+          - "fossul.io"
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          - services
+          - services/finalizers
+          - endpoints
+          - persistentvolumeclaims
+          - events
+          - configmaps
+          - secrets
+          - serviceaccounts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          - daemonsets
+          - replicasets
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          - route.openshift.io
+          resources:
+          - routes
+          - routes/custom-host
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          - config.openshift.io
+          resources:
+          - ingresses
+          verbs:
+          - get
+          - list
+          - watch
+        serviceAccountName: default
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - backup
+  - restore
+  - application
+  - consistent
+  links:
+  - name: Fossul Framework Community
+    url: https://github.com/fossul/fossul
+  maturity: alpha
+  maintainers:
+  - email: ktenzer@redhat.com
+    name: Keith Tenzer
+  provider:
+    name: Fossul Framework
+    url: https://github.com/fossul/fossul
+  version: 0.1.0

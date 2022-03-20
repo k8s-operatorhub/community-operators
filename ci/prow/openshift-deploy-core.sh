@@ -3,13 +3,13 @@
 
 set -e #fail in case of non zero return
 declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 )
-PLAYBOOK_REPO='https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git'
+PLAYBOOK_REPO=https://github.com/redhat-openshift-ecosystem/operator-test-playbooks
 PLAYBOOK_REPO_BRANCH=upstream-community
 echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
 EXIT_NEEDED=0
 
-OPM_VERSION='v1.17.5'
-OPERATOR_SDK_VERSION='v1.13.1'
+OPM_VERSION='v1.21.0'
+OPERATOR_SDK_VERSION='v1.18.1'
 JQ_VERSION='1.6'
 MAX_LIMIT_FOR_INDEX_WAIT=20
 EXTRA_ARGS=''
@@ -254,9 +254,13 @@ cd upstream
 echo "Config ..."
 export ANSIBLE_CONFIG=/tmp/playbooks2/operator-test-playbooks/upstream/ansible.cfg
 set +e
+# echo "Op_info started: operator_dir=$TARGET_PATH/$OP_NAME"
+# ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, local.yml -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false --tags operator_info -e operator_dir=$TARGET_PATH/$OP_NAME -e cluster_type=ocp -e strict_cluster_version_labels=true -e strict_k8s_bundles=true -e production_registry_namespace="" -e automatic_cluster_version_label=false\
+#  -e stream_kind=openshift_upstream -e operator_bundle_src_dir=/tmp/operators_bundle_dir -e operator_info_output_file=/tmp/op_info.yaml -e oi_failed_labels_output_file=/tmp/op_failed_labels.yaml -e oi_auto_labels_output_file=/tmp/op_auto_labels.yaml -e automatic_cluster_version_label-true
+ANSIBLE_STATUS=$?
 echo "Ansible initiated"
 ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS -vv
-ANSIBLE_STATUS=$?
+ANSIBLE_STATUS=$(($ANSIBLE_STATUS+$?))
 echo "Reporting ..."
 [[ $TEST_MODE -ne 1 ]] && if [ $ANSIBLE_STATUS -eq 0 ]; then
   curl -fs -u framework-automation:$(cat /var/run/cred/framautom) \

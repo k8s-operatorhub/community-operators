@@ -1,11 +1,10 @@
-
-name: Operator release
-
+name: Operator release 
 on:
   push:
     branches:
       - master
       - main
+
   workflow_dispatch:
     inputs:
       release:
@@ -13,7 +12,7 @@ on:
         required: true
         default: '0'   
       delete:
-        description: 'Delete operator (cockroachdb or cockroachdb/5.0.4) for debuging only'
+        description: 'Remove operator virtually from git (cockroachdb or cockroachdb/5.0.4) for debuging only'
         required: false
         default: ''
 
@@ -29,7 +28,7 @@ env:
   OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
   OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_PROD: 1
-  OPP_MIRROR_LATEST_TAG: "latest"
+  OPP_MIRROR_LATEST_TAG: ""
   OPP_PRODUCTION_TYPE: "k8s"
   OPP_RELEASE_BUNDLE_REGISTRY: "quay.io"
   OPP_RELEASE_BUNDLE_ORGANIZATION: "operatorhubio"
@@ -67,10 +66,6 @@ jobs:
     name: "PR-traffic-light"
     runs-on: ubuntu-latest
     steps:
-      - name: Block until there is no running workflow
-        uses: softprops/turnstyle@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout code
         uses: actions/checkout@v2
       - id: files
@@ -100,7 +95,11 @@ jobs:
           echo "OPP_LABELS=$OPP_LABELS"
           echo "Using script '$OPP_SCRIPT_ENV_URL' ..."
           bash <(curl -sL $OPP_SCRIPT_ENV_URL)
-
+      - name: Block until there is no running workflow
+        if: steps.op-traffic-light.outputs.opp_release_ready == '1'
+        uses: softprops/turnstyle@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       opp_labels: "${{ steps.prinfo.outputs.labels }}"
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
@@ -114,33 +113,46 @@ jobs:
       opp_release_delete_appreg: "${{ steps.op-traffic-light.outputs.opp_release_delete_appreg }}"
       opp_pr_title: "${{ steps.op-traffic-light.outputs.opp_pr_title }}"
       opp_auto_packagemanifest_cluster_version_label: "${{ steps.op-traffic-light.outputs.opp_auto_packagemanifest_cluster_version_label }}"
-
   remove-k8s:
     name: "Remove / k8s"
 
     needs: pr-check
     if: needs.pr-check.outputs.opp_release_ready == '1'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        index-tag: ['latest']
+
+      fail-fast: false
     steps:
       - name: Remove operator from index
         if: needs.pr-check.outputs.opp_op_delete == '1' && needs.pr-check.outputs.opp_name != ''
+
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
         run: |
+
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "op_delete operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) op_delete operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH
+          echo "op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/dummy $OPP_THIS_REPO $OPP_THIS_BRANCH
+
       - name: Operator release (operator version overwrite)
         if: needs.pr-check.outputs.opp_ci_yaml_only == '0' && needs.pr-check.outputs.opp_ver_overwrite == '1' && needs.pr-check.outputs.opp_name != '' && needs.pr-check.outputs.opp_version != ''
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
           OPP_IIB_INSTALL: 0
+          OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "op_delete operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) op_delete operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH
+          FAKE_RC=false
+          FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
+          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
+
+          echo "op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
 
   operators-k8s:
     name: "Index check / k8s"
@@ -149,29 +161,38 @@ jobs:
     if: needs.pr-check.outputs.opp_release_ready == '1'
     runs-on: ubuntu-latest
     steps:
-      - name: Index check
+      - name: List of missing operators
         id: operators
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPP_IIB_INSTALL: 0
+          IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
+          OPERATOR_INDEX_TAG: "orange_latest"
+
           OPP_INDEX_CHECK_ONLY: 1
         run: |
+
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "'orange' operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
-      - name: Operators for sync
+          echo "'$OPERATOR_INDEX_TAG' operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) "$OPERATOR_INDEX_TAG" operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+
+      - name: Index check
         run: |
           echo "Operators : ${{ steps.operators.outputs.opp_uncomplete_operators }}"
+          echo "Operators (latest) : ${{ steps.operators.outputs.opp_uncomplete_operators_latest }}"
+
       - name: Operator info
         id: op-info
         env:
+
           OPP_FORCE_OPERATORS: ${{ steps.operators.outputs.opp_uncomplete_operators }}
+
           OPP_AUTO_LABEL: 1
           ANSIBLE_FORCE_COLOR: 1
           ANSIBLE_DISPLAY_SKIPPED_HOSTS: 0
           ANSIBLE_STDOUT_CALLBACK: "yaml"
         run: |
-          # OPP_ANSIBLE_PULL_BRANCH="upstream-community-dev"
           OPP_FORCE_OPERATORS=${OPP_FORCE_OPERATORS// /,}
           echo $OPP_FORCE_OPERATORS
           [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
@@ -191,7 +212,7 @@ jobs:
           [ -f /tmp/operator-test/op_info.yaml ] && cat /tmp/operator-test/op_info.yaml || echo "::set-output name=opp_uncomplete_operators::"          
     outputs:
       opp_uncomplete_operators: "${{ steps.operators.outputs.opp_uncomplete_operators }}"
-
+      opp_uncomplete_operators_latest: "${{ steps.operators.outputs.opp_uncomplete_operators_latest }}"
   bundles-k8s:
     name: "Bundles / k8s"
     needs: [ pr-check, remove-k8s, operators-k8s ]
@@ -213,14 +234,19 @@ jobs:
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPP_IIB_INSTALL: 0
+          OPERATOR_INDEX_TAG: latest
           OPP_SKIP_INDEX: 1
           OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
 
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
           echo "OPP_FORCE_OPERATORS=$OPP_FORCE_OPERATORS"
-          echo "orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+          FAKE_RC=false
+          FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
+          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
+          echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
 
   release-k8s:
     name: "Index / k8s"
@@ -228,6 +254,11 @@ jobs:
     if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
 
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        index-tag: ['latest']
+
+      fail-fast: false
     steps:
       - name: Download operator_info
         uses: actions/download-artifact@v2
@@ -243,17 +274,23 @@ jobs:
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
-          OPP_FORCE_INDEX_UPDATE: 1
           OPP_IIB_INSTALL: 1
+          #OPP_MIRROR_INDEX_ENABLED: 0
+          OPP_FORCE_INDEX_UPDATE: 1
           IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
-          IIB_OUTPUT_REGISTRY_TOKEN: ${{ secrets.IIB_OUTPUT_REGISTRY_TOKEN }}
-          OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
+          OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
+          # OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
+          OPP_FORCE_OPERATORS: ""
+          OPP_FORCE_OPERATORS_latest: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators_latest }}"
 
         run: |
           echo "OPP_LABELS=$OPP_LABELS"
-          echo "orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH
+          FAKE_RC=false
+          FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
+          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
 
+          echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
+          bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
 
 
   ohio-image-k8s:

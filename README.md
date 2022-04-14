@@ -4,6 +4,8 @@
 ## About this repository
 
 This repo is the canonical source for Kubernetes Operators that appear on [OperatorHub.io](https://operatorhub.io).
+The solutions merged on this repository are distributed via the [OLM][olm] index catalog [quay.io/operatorhubio/catalog][quay.io].
+Users can install [OLM][olm] in any Kubernetes or vendor such as Openshift to consume this content by adding a new CatalogSource for the index image `quay.io/operatorhubio/catalog`. [(more info)][catalog]
 
 ## Documentation
 
@@ -18,3 +20,6 @@ Full documentation is generated via [mkdoc](https://www.mkdocs.org/) and is loca
 Use the issue tracker in this repository to report bugs.
 
 [k8s-deprecated-guide]: https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22
+[olm]: https://github.com/operator-framework/operator-lifecycle-manager
+[quay.io]: https://quay.io/repository/operatorhubio/catalog?tag=latest&tab=tags
+[catalog]: https://k8s-operatorhub.github.io/community-operators/testing-operators/#1-create-the-catalogsource

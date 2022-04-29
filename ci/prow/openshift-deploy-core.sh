@@ -2,10 +2,37 @@
 #./openshift-deploy.sh test-only https://github.com/J0zi/community-operators-pipeline.git do-not-delete-rehearsals https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git upstream-community 77 rehearsal
 
 set -e #fail in case of non zero return
-PLAYBOOK_REPO='https://github.com/redhat-openshift-ecosystem/operator-test-playbooks.git'
-PLAYBOOK_REPO_BRANCH='upstream-community'
-echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
 
+case $PIPELINE_BRAND in
+
+  ocp)
+    EXTERNAL_PROD_REG_NAMESPACE="quay.io/openshift-community-operators"
+    ;;
+
+  okd)
+    EXTERNAL_PROD_REG_NAMESPACE="quay.io/okd-operators"
+    ;;
+
+  pipeline)
+    EXTERNAL_PROD_REG_NAMESPACE="quay.io/community-operators-pipeline"
+    ;;
+
+  *)
+    # EXTERNAL_PROD_REG_NAMESPACE="Please_define_in_openshift-deploy-core.sh"
+    EXTERNAL_PROD_REG_NAMESPACE="quay.io/community-operators-pipeline"
+    ;;
+esac
+
+
+declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 [4.10]=v1.23 [4.11]=v1.24 [4.12]=v1.25 )
+PLAYBOOK_REPO=https://github.com/redhat-openshift-ecosystem/operator-test-playbooks
+PLAYBOOK_REPO_BRANCH=upstream-community
+echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
+EXIT_NEEDED=0
+SDK_BIN_PATH='/tmp/operator-sdk'
+
+OPM_VERSION='v1.21.0'
+OPERATOR_SDK_VERSION='v1.19.1'
 JQ_VERSION='1.6'
 MAX_LIMIT_FOR_INDEX_WAIT=20
 EXTRA_ARGS=''
@@ -99,7 +126,7 @@ git clone $REPO_FULL community-operators #> /dev/null 2>&1
 echo "Cloned  [OK]"
 cd community-operators
 echo "Dir entered  [OK]"
-BRANCH_NAME=$(git branch -a --contains $OPRT_SHA | grep remotes/ | grep -v HEAD | cut -d '/' -f 2-)
+BRANCH_NAME=$(git branch -a --contains $OPRT_SHA | grep remotes/ | grep -v HEAD |tail -n 1 | cut -d '/' -f 2-)
 echo "BRANCH_NAME=$BRANCH_NAME"
 git checkout $BRANCH_NAME > /dev/null #2>&1
 echo "Checkout  [OK]"
@@ -139,7 +166,7 @@ for sf in ${OP_TEST_RENAMED_ADDED_MODIFIED_FILES[@]}; do
     curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \
-    "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
+    "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
     echo "Running operator deployment on an Openshift is not relevant for the affected commit. Found changes outside Openshift operators, exiting."
     exit 0;
   fi
@@ -166,7 +193,48 @@ echo "OP_VER=$OP_VER"
 #COMMIT=1234
 #echo "Forced specific operator - $OP_NAME $OP_VER $COMMIT"
 
-#prepare temp index
+  curl --connect-timeout 20 \
+      --retry 10 \
+      --retry-delay 15 \
+      --retry-max-time 240 \
+      -L -o /tmp/opm -s https://github.com/operator-framework/operator-registry/releases/download/$OPM_VERSION/linux-amd64-opm
+  chmod +x /tmp/opm
+
+  curl --connect-timeout 20 \
+      --retry 10 \
+      --retry-delay 15 \
+      --retry-max-time 240 \
+      -L -o $SDK_BIN_PATH -s  https://github.com/operator-framework/operator-sdk/releases/download/$OPERATOR_SDK_VERSION/operator-sdk_linux_amd64
+  chmod +x $SDK_BIN_PATH
+
+# Deprecated API validation
+if [ ! -d "operators/$OP_NAME/$OP_VER/manifests" ]; then
+  K8S_VERSION=${OCP2K8S[${OCP_CLUSTER_VERSION}]}
+  echo "OCP_CLUSTER_VERSION=$OCP_CLUSTER_VERSION"
+  echo "K8S_VERSION=$K8S_VERSION"
+  echo "CURRENT_OPENSHIFT_RUN=$CURRENT_OPENSHIFT_RUN"
+  echo "Current directory"
+  pwd
+
+  /tmp/opm  alpha bundle generate --directory operators/$OP_NAME/$OP_VER/ -u operators/$OP_NAME --package $OP_NAME
+  mkdir -p /tmp/$OP_NAME/$OP_VER
+  cp -a operators/$OP_NAME/metadata operators/$OP_NAME/manifests/ /tmp/$OP_NAME/$OP_VER
+
+  echo "Checking API validity ..."
+  $SDK_BIN_PATH bundle validate /tmp/$OP_NAME/$OP_VER --select-optional name=alpha-deprecated-apis  --optional-values=k8s-version=$K8S_VERSION || EXIT_NEEDED=1
+
+  if [[ "$EXIT_NEEDED" == "1" ]]; then
+    echo "This operator is not valid for testing due to deprecated API. Test is green then, operator will not be included in the current index, exit."
+    curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
+    -X POST \
+    -H "Accept: application/vnd.github.v3+json" \
+    "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
+    exit 0
+  else
+    echo "API valid [OK]"
+  fi
+fi
+#Prepare temp index
 echo "Preparing temp index ..."
 [[ $TEST_MODE -ne 1 ]] && OP_TOKEN=$(cat /var/run/cred/op_token_quay_test)
 echo
@@ -206,20 +274,36 @@ cd operator-test-playbooks
 [[ $TEST_MODE -eq 1 ]] && git checkout $TEST_PB_BRANCH
 [[ $TEST_MODE -ne 1 ]] && git checkout $PLAYBOOK_REPO_BRANCH
 cd upstream
-echo "Config ..."
+echo "Config"
 export ANSIBLE_CONFIG=/tmp/playbooks2/operator-test-playbooks/upstream/ansible.cfg
+echo "Installing ansible plugins"
+ansible-galaxy collection install ansible.utils
 set +e
-echo "Ansible initiated"
-ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS -vv
+echo "Op_info started"
+ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, local.yml -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false --tags operator_info -e operator_dir=$TARGET_PATH/$OP_NAME -e cluster_type=ocp -e strict_cluster_version_labels=true -e strict_k8s_bundles=true -e production_registry_namespace=""\
+ -e stream_kind=openshift_upstream -e operator_bundle_src_dir=/tmp/operators_bundle_dir -e operator_info_output_file=/tmp/op_info.yaml -e oi_failed_labels_output_file=/tmp/op_failed_labels.yaml -e oi_auto_labels_output_file=/tmp/op_auto_labels.yaml -e automatic_cluster_version_label=true
 ANSIBLE_STATUS=$?
+
+[[ $TEST_MODE -ne 1 ]] && if [ $ANSIBLE_STATUS -gt 0 ]; then
+  curl -fs -u framework-automation:$(cat /var/run/cred/framautom) \
+  -X POST \
+  -H "Accept: application/vnd.github.v3+json" \
+  "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
+  echo "Ansible failed, see output above"; exit 1
+fi
+
+echo "Ansible initiated"
+ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS\
+ -e fast_op_info=true -e skip_operator_info_consistency=true -e operator_bundle_version_for_upgrade=$OP_VER -e test_registry_namespace=quay.io/operator_testing -e external_production_registry_namespace=$EXTERNAL_PROD_REG_NAMESPACE -e operator_sdk_bin_path=$SDK_BIN_PATH -e tou_olm_namespace=openshift-operator-lifecycle-manager -vv -e operator_upgrade_testing_on_openshift_disabled=true
+ANSIBLE_STATUS=$(($ANSIBLE_STATUS+$?))
 echo "Reporting ..."
 [[ $TEST_MODE -ne 1 ]] && if [ $ANSIBLE_STATUS -eq 0 ]; then
-  curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
+  curl -fs -u framework-automation:$(cat /var/run/cred/framautom) \
   -X POST \
   -H "Accept: application/vnd.github.v3+json" \
   "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\"]}}"
 else
-  curl -f -u framework-automation:$(cat /var/run/cred/framautom) \
+  curl -fs -u framework-automation:$(cat /var/run/cred/framautom) \
   -X POST \
   -H "Accept: application/vnd.github.v3+json" \
   "https://api.github.com/repos/$PR_TARGET_REPO/dispatches" --data "{\"event_type\": \"openshift-test-status\", \"client_payload\": {\"source_pr\": \"$PULL_NUMBER\", \"remove_labels\": [\"openshift-started$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated$OCP_CLUSTER_VERSION_SUFFIX\", \"installation-validated\"], \"add_labels\": [\"installation-failed$OCP_CLUSTER_VERSION_SUFFIX\"]}}"

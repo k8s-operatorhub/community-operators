@@ -1,0 +1,276 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    capabilities: Basic Install
+    categories: "Security"
+    description: Trivy Operator for scheduled imagescans and an Admission Control.
+    repository: https://github.com/devopstales/trivy-operator
+    certified: "false"
+    createdAt: '2022-02-04T16:00:00Z'
+    containerImage: devopstales/trivy-operator:2.3
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "trivy-operator.devopstales.io/v1",
+          "kind": "NamespaceScanner",
+          "metadata": {
+            "name": "trivy-operator-main-config"
+          },
+          "spec": {
+            "crontab": "*/5 * * * *",
+            "namespace_selector": "trivy-scan",
+            "clusterWide": "False",
+            "registry": [
+              {
+                "name": "docker.io",
+                "user": "",
+                "password": ""
+              }
+            ]
+          }
+        }
+      ]
+  name: trivy-operator.v2.3.0
+  namespace: trivy-operator
+spec:
+  customresourcedefinitions:
+    owned:
+    - description: Confifuration for trivy-operator.
+      displayName: NamespaceScanner
+      kind: NamespaceScanner
+      name: namespace-scanners.trivy-operator.devopstales.io
+      resources:
+      - kind: Service
+        version: v1
+      - kind: Deployment
+        version: apps/v1
+      specDescriptors:
+      - description: Schedule scans of namespaces.
+        displayName: Crontab
+        path: crontab
+      - description: Name of the labet to select scannable namespaces.
+        displayName: Namespace Selector
+        path: namespace_selector
+      - description: Specifies how to authenticate to specifig registries.
+        displayName: Registry
+        path: registry
+      version: v1
+  description: |
+    Trivy Operator for scheduled imagescans and an Admission Control.
+
+    ### Add Github token to extend your Github API Rate Limit
+    The Operator use Github to download Trivy database. If your Github API Rate Limit Exceeded add your Github token to the operator deployment as GITHUB_TOKEN variable.
+
+    ```yaml
+    ...
+    env:
+    - name: GITHUB_TOKEN
+      value: "githubToken"
+    ```
+
+    ### Schefuled Image scans
+    Default every 5 minutes execute a scan script. It will get image list from all namespaces with the label `trivy-scan=true`, and then scan this images with trivy, finally we will get metrics on `http://[pod-ip]:9115/metrics`
+
+    ### Trivy Image Validator
+    The admission controller function can be configured as a ValidatingWebhook in a k8s cluster. Kubernetes will send requests to the admission server when a Pod creation is initiated. The admission controller checks the image using trivy if it is in a namespace with the lable `trivy-operator-validation=true`.
+
+    ### Persist Trivy database cache
+    To Persist Trivy cache you need to create a pvc and mount to the Deployment under `/home/trivy-operator/trivy-cache`
+
+    ```yaml
+    ...
+      volumeMounts:
+      - name: cache
+        mountPath: "/home/trivy-operator/trivy-cache"
+    volumes:
+    - name: cache
+      persistentVolumeClaim:
+        claimName: trivy-cache
+    ```
+
+    ### Usage
+    ```bash
+    kubectl label namespaces test-apps trivy-scan=true
+    # or
+    kubectl label namespaces test-apps trivy-operator-validation=true
+    ```
+
+    You can define policy to the Admission Controller, by adding annotation to the pod trough the deployment:
+
+    ```bash
+    spec:
+      ...
+      template:
+        metadata:
+          annotations:
+            trivy.security.devopstales.io/medium: "5"
+            trivy.security.devopstales.io/low: "10"
+            trivy.security.devopstales.io/critical: "2"
+    ...
+    ```
+
+    ```bash
+    curl -s http://10.43.179.39:9115/metrics | grep so_vulnerabilities
+
+    # HELP so_vulnerabilities Container vulnerabilities
+    # TYPE so_vulnerabilities gauge
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="UNKNOWN"} 0
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="LOW"} 23
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="MEDIUM"} 93
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="HIGH"} 76
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:1.18",severity="CRITICAL"} 25
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="UNKNOWN"} 0
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="LOW"} 23
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="MEDIUM"} 88
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="HIGH"} 60
+    so_vulnerabilities{exported_namespace="trivytest",image="docker.io/library/nginx:latest",severity="CRITICAL"} 8
+    ```
+
+    ```bash
+    curl -s http://10.43.179.39:9115/metrics | grep ac_vulnerabilities
+
+    # HELP ac_vulnerabilities Admission Controller vulnerabilities
+    # TYPE ac_vulnerabilities gauge
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="UNKNOWN"} 0.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="LOW"} 83.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="MEDIUM"} 6.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="HIGH"} 6.0
+    ac_vulnerabilities{exported_namespace="trivytest",image="nginxinc/nginx-unprivileged:latest",severity="CRITICAL"} 4.0
+    ```
+  displayName: Trivy Operator
+  minKubeVersion: "1.19.0"
+  icon:
+  - base64data: "iVBORw0KGgoAAAANSUhEUgAAAlgAAAJkCAMAAAD6AK84AAAAPFBMVEUIsdUZttf7+/n////////3pEH6woDw3zb2lCHH6fD958rz5Vv///8jutoIsdVZy+MpkKePzNpbqrsNgZugA6WzAAAABXRSTlPTAPSKIqr/6REAACTSSURBVHja7d1re6ywrQVgmgQaCGQw8///a/elO8N1hsuSvGSLT+dpT7OTzBtpIYNd/MevXdfHW9u+f/jvYe9V+K9gF6v39s/17r8Kh4Vn9et6c1oOC3W9v7Wj6837ocNChavp5VHLYSG74KhoOS2HheyC3g8dFqgLbrjyfuiwYOGqKcvGaTkscLhqys9fV9VMo5b/mhzWtXBVff7/qjxqOSxYF/xh9evyfuiwYOHqc3I5LYcFC1fTa9YPPWo5rPPh6iktL1oO61UXfNvByvuhw0J3wS1avsrjsLZZTapVU32+uDxqOSxYuJpe3g8d1sERw+e+y6OWw4KFq1k/9FUeh7WvCzbV56HLRw8Oa08XrMrPg5f3Q4f1OlwdZuW0HBY0XPnowWFBRwwetRzWwXD1ee3yfuiwoF1wm5bDclYAVh61HBY0XPkqj8PaGDF8Ii+PWrnCEuqCvsqTOaxr6zc+enBYu0YM5afI5f2wyJlVI8TKaeUFSzxc+eghS1hyIwaPWhnD+lBnlXc/zASWchf0VZ48YEVjlXHUygHWe4wumHvUSh/WR2RWmUat1GFF7YLbqzwfDss4K4X1G49a2cEi6ILZPlBTZMOq+Yx9ZRW1koVFEq6yfaAmVVg84SrT0UOasJQejvF+mBcsxYdjnFY+sCjDVX6jh+RgvVONGPKNWonB+jDBKod+mBQsA10wmwdqipRYvdlhlXzUSgfWu5UumMcqTyqw6NZvco9aacAyFa7yWOVJAhbr+k3Oo4cEYBGv32TcD83DMtwFk6ZVOCsfPTisFEYMmUQty7A+EmKVXD+0CyuZLpjmKk/hrDxqOawkw9UzWnb7oUlYRtdvsopaBmEl2gW3V3k+HJav3/jowSisj7e3RMNVYv2wMMYq8S6YDi1LsJIPVyk9UGMIVrojhhSjVmG0C2bAynY/LEyySr0LJkDLBKzMwlUSqzwWYL3n2AWtR63CQBd8y5qV0X5YeBe0R8vCKk9BziqD9Zs0oxY1rNzD1fSy1Q+JYSX9cEzyUavg7YIeriyv8hQmumBTOSpjo4fCQhesvFyZ64cFPyuCLlhOL6dlERZHuCrLqqqaX1e7df3+L3/9/8RwZmH0QAcr8oih/MOpPXj9JqYKjD9qFdRdsFIW1V67/vjyfsgHK1IXLK+TmvEqI9ByWEyswKZ0dVFHLR5Y6uGqrGRMjcdvwj8FcT9kgaW8fiOPSgcXb9Qq8uuCe1H9HSdUK5OrP//Rq3HEBJfcD8S6ylPwdUHR9Zuq2nNrd2h2UO66oZT7qThHDwVdF1T7617rWleGUS99Sdmi7IcFGSu5LvhMFfAe7jcv9aZISCsyLK1wtf1hi8wFnumSqVt0o4eCKFxJjRg2P2ThO7Yn/276UasgCldCH6/+ndoOXBJlkqofFml3wfXPtVF9cHADl8D3wLTKUyTMqmzilap9tkrhfvieHSyFcLX6WUZ8xlnp+2GJWkWa4Wo1WUV/cn7NFryAkkStIsUuWDaEqp7YKiX/jUivTRf6rN50IyzdWz4rtuC04vfDIrUuuPzYGrqXfFYaNZpW9H5YxGTVaLDifHVM/BuNHbWKlMLV4tNiftF1WbbAv5C4D9QowpIOV6ZYbXzHYFoRo1YRK1yVxj4kobIl+11H7IdFnHBVSn9AZjZ7WHTE5jMJWkUK4WrOytgeIpXoH0WkVZ5CPVzBi4lxVit9vBGl9ZEILOnJVWUwWr2mZT5qFca7oOgHErMhVqK0rMOar98Ihyvj+7NViv3w3TSsd9UumMC2f6LlV7cfFmrhCr5+UxodMBwowZXkF5elVVgNV59NeqyWn77dVZ5CpQtKPyiZ1J7KleRfjNroodDoglVp6c+aLGoZfeqhsNgFqzS74NanX30apFXYYzX7g/5M8qokf0aN0UMhG64kHhHN48AK0aKlELUK2XAlnD+SPrCiUlxgxffDwlYXLLM6X6dRXLV454Wl8HJzlU250vh5RaNWYSdcCf8F8yct4byK7YeFTLiSuFcrszwUsxL9rcpFrcJKF5z+hjM6Dmzy2eN/bqnXpgt8F5R5yqDJsVxptEOh0UOB6IJv4k1K+M8263Yo0w8LdLgqDf5mTRWt5tMErYI/XE1d5XmI70SWSIJFP1BTsI8YpvEq3zPHK+ksAI5aBa4LStWSJu82uDZtkc+xl/thwR2uFH6fdq5GfIdp4CpPQR2uPF4p127cKk/BHK4mP2i+8Wr91/GpQutDFZbG5ErrF+myZKJWwdsFFUKF6Qgv9qcGWeUpjrNSO1zQXT0vKI1GYTwbtQrScDV15fFq9ffSqPzyz/XDnbA+1B6OWfv9uautEFSq/CsTWh9QWO+/bw9UT252V7Fr+eoqz8fevrgX1i+ziic36yQJl3V09PC7tMBhiZ+3p3zvk8rYodT5+/5D68A8/hws4e7kro7IUgt0hxZ6dsJS3YKj9DHDEVmNGmFhWNIftrvikjWPWlZhuSsyWfOgZbUVNu6KSpZsK9QL7+6KSlYlHN7Vxg3uiknW2lG1wrCEPnh3dVaW9JYGerBkt1RjclX+uqrJ9fs/4fjeBH9ja+e1S8Gqa6XzZisKT1XVNE27ef36L38bY5ElucHy6LOXgfV9q+X6YcXi6o+odvfVRD11WkTWIlzVw10W1vd3kIpaHK6q6gApCl0NPsAvuuBwv4vDmtNC9cMy/vrgoTq1qisKLrSsBavQ31VgfXc1/nm/2K7OVioCXCW01C+74B9WKrC+BaJWVFcoVJFsAWWthau7IqzvLmBP3mriPS+6S1UzudhsVagAv+yC97surCWtEuKqpVL1d55Qbgy3Xtw7atqqIL+/jXClDGvZD8v4f3HXVyx+VOydUJVP0pneEYqAAL8ZrtRh/aKFGT2UUQYNWx5+mzoz+YpbtpqLv8In4SoCLEw/jOGqFHBQruPSSY0Xf4nPu6A+rOXooYxSxhHFClJcVmOXCq3yQpyoXnTBGLCuRy11V2usgGmorOLQqs7+Hl93wTiwLkatStlVpZCxV2wp0DoZs5q19RsOWFeiVql7Q1hp3bktQ5w8rebEr3JHuIoI60LUUg3uleo8YNFy1d6ba07zr7dYxYJ1dpWnUXRVqdeQxeem9Q5gc5LVcL/TwTr1QI1iwJr/FpWGl5XGE93n/k6rneEqOqzjD9SUais5kVitdETZMrk/se4PVwSw5v2w2fsHVurWDeWV7hktyWH83ph1JFwxwDoWtSqlgBWX1RothZ+1goUrDlgHRg+lTsAqm9islrg1NnksD3TB+50f1v7Rg84Eq2JgtfxGxIrWyz/XxRQk9HcbsHau8qhMGqblqon6+s/0e6nKKM3wVBekgbVnlUdl0lAp3uofjVpixbN5cqvdHBsx8MF6HbUUXM3K1SfBVSlA326G58IVF6xXUUth0lCRhKtt7NJHLZXPw1Xd3y3Cehq1Svn21FB1wXXvQtybFbjnwxUfrMUovtJrhGVDWK5WvrVKtBlWZ9dv2GFtrfJU0o2wIi1Xfz938VMY57/fw+s3/LBWX5sWb4Tsx96Lf3/TX/e1cEUKa22VpxH+zBvicrX8FhvZZng5XNHCWowehO8IS9p0tVG0Gkm4zZURAzmsBS3RYmLlGOnx91mK/nVdDFfMsBb9UO4hLDvHk5eislZ3ejzZBZlhLVZ5xLfHNXAenegpXg2UFTGsRT8shV198l+SsipcFySHBXltevcHZWM/70rqG64gIwYrsJA71CThSkoWasRgB9b3t2DQMnncr8SZlst4db+nDquTe7nP6DHSJVrW2v3gkDysILZjhtljpLGy1jdoCsnDqqUmpYaPJwfK2tqksE4e1r+/IPQ5BKaPvYftRb4cMfz7PfeJw/o3Jb2BzyEwfmwYRtba5KqHhSxuWP80nXhtOmFXEFkbD8fAQhY3rHryhVDnECRwzOHVk4Q2J1c1KmRxw/r39wPdLD6J4zOvydpevxlQIYsa1ihiCWyOa/tY1gub3T97uRkWsqhhjSMWapWnSsPV+V1+X6zfoEIWNax69etgNse1f4z0OVmvXm5GhSxqWLOIBd0ct/n8TEZWdeLvaqsyDaDlQurHZhYR62rUSsrV8S2kFw8grzwcM4BCFjOsfz2vgz1Q06Tk6uiWYTsfjgGFLGZY4cA5BLu2HErM1bE9ePa+3AwKWcyw6vWIdTpqYY7psxmz9j95HNKHtRmxzkUt5VMtdK59P9ORl5tBI1JiWLeXsA6t8pTpDBoOxqxjTx6DRqQGYB16bbpC3pybilnV+RGDRHonhhX2fZWdUatKLbgv/mDKw+s3kumdGNaL7H5s9FCm6ur5T3bm/ZuQOqx2L6w9qzwpBvfXzfDU5rSY2Tvxm9A7svvufphowJr9cBfDFXT2zgtrV3bfOXpINmBNm2H1NFztfrk5cVjhGKxnUatM2tXqVppXXm6uEbeF9LDqE0Vu/gfcpBuwpj9gc3T9Ru62kBdWvT+7v4haVcoBa1qSy4PrN3K3hbyw2hOw1qNW4o1wXrIub04LuS2kh3U7HPrnUSv5Rjgep1SAnWMgq4X0O/p1lzeLT74Rrna/K9swIG4L6WGh9hJJuRGuzkIvbMuXNKxw6WusbI5bpg2rAm5Oi5g3JAprSav6/MysZJ3flg8xb6CFVZ+6KXyyOW6VWcW6sDltcFhxN8clYgXdnBYxb6CFdXbaoLg5Ls98FLw5rcNCPFCTYLq6+k5gDxhkscK6MMZ6uu1yev2wEtibFvB12GGh9/NOjdbqLqIOSx7WbW1z3DJpVritYkKCsALk6eZ1WMJRq6yq5nFVVVmqdUHwVjEO6/XX6YJGP6yq9RLyi5fK5Cpgt4pJEVYNhiU/1So3UD1wlaJd8PfkCrUHEWBCSg4rXIU1/jqozXFXVbU7rqaSYzUgN3p0WMe+zv7Xpi/OvZ/YKmW6IPI9CId1fM4qEbUOsML8m09ebq4xt4WAlsoKCzR4X34d4DkEz5+wk6L1dP3GYUWDhV3lWWfVjC8wrefrN6DNrRzWqZUhWD9cmU82zdfXf2fX14quChyuZGD1DuvYAB8zelhwaRamRrgARev1wzGoecP1mwBSWKg16M2VoesP1FT7Va3bqpDhymHFWSrEP1BTHVP192ogRx88+dRRgyyHdWFl6ErUmlaPnaz+lK2Tt6R7nzx2WPFhXYha1UlW86q191/c/3Kzw2KAdXaVZ+LqGKt51ipB4Qo8yHJYlx+SOPEuz6Tm/PfE9XVI1qH900Cwrn+Z7GEdj1rN6S64WrRK6GtdDosG1tFVnuZiuVokrRL5/g32XIn0YIGf83u1ln0gajUX0tV6O2yQr3U5LB1Yex+S2P1ATXO5De6XdeblZofFBWvv6KFBtMF9ss693Oyw2GDtWuWpgK7GsirYy82gNR2HBX1e8NUqD9bVWFZ5Zv3GYVmB9WL0UIJdjWQ1qJ1jHBbRuGFv1IK7Gk0dqjPrNw7LDqwnUavBuxrJKjE7xzgsWlhbqzyVhKtFMzx5/o3DsgBrse9yOQlYX/8VkVVCtuUDwfJFaKGbgGXUamRcPZphc33nf4dFD2u5gCjSCKfNELEtn8OK/mjywdGDlKv588oXN6d1WPSwFv1QpBH+vtZYnd2c1mFFff3rZD+UcTV9Dv7i5rQOK+ILq2e+gFgjXCtZFz5PDCzA7raJw+ouf51J1BKC1eA2esTA8lfsNb7OKGopwLq087/DsgRrFLXEYdVX39tyWNjHEqS/Tq0D6/I+2qAH/QbfeC0lWBe7IBCW7+in9WCXDqy7wzK3HbfDOqHCYYmP8M3AqpGwUtznHb2m0+UFKzgsYVgdZm4RNGAFGlgZHNKEOlYuF1iYuUXCsGATUsztZV6wUj4IEw2rxkQ10UXo6+NR0FaRSR/dyzXIsgKLZkUnfViYsNZpPI9FAwsxDGOHdXmQBbot1ICV0uCdFxZqQgoKa5KDrIYNFmJmQQsLdto4pqcqwEpqPsoPq+NI70EwveOnDfHno7ywOtS8AVP6bvJv6SQ1xuKF9Y2GdYPcA3yZuCmMP8YihoWaN/wTShuygNmdZ9rAD6tGpfca8lVa6uzOM20ghgWbNwTykNXCn20gmDYQw4LNG8hn78CIRXRTaADW5XlDxz0iBUasHnpTmCos2G0hKGQFoZLV4iLWgJgTgO4AiGHBbgsxIauTeWkV2QkD8qYweVg1ScgSui9sIFVGILvXycIKqPTetcinSLG98AvYCUHZHbreyAgLlt5BtU+kFzbATsiU3ZlhwVYLf2oNqBd+4aM74p4QnN37ZGGB1mJgy4U/X6bBFyzEdJQqu1PDgqV3ENF/JbTFFyxEdKfK7tSwYOn9p4mBvqGGsmBhw1FIGBYuvYN6YQfe4/YLWrAw4QjEkxoWLr2DBg7okgUtWKBwBMru1LBws3dUL8SWLGzBurfIZ2baewawAOkd1AuxJauFFixsxKqThoULWaheiCxZDbZgBcxXQ2GnhoULWahe+DhwDtcIMQULVGoG1EoANSzciBTWCzvYlu8tcpXw0QkDR8Qih4ULWf9AwNrz1WYI3IIbWWpQEYscVoCFrJ9e2KG+UItxBWqE/z5I0OlMIXFYN1zIgn0pSDP8Ap1wgu6EsIhFDgsYsmC98JHfm+uuQHeEMBGwiMUOCxeyfjzAnqE/H7O+WnQjRHVCWMRih4WbZP18qQArfmdlCbgCdcIe932RwwJOsnDxfXQ65rXgjgpYsE6Ii1jssJC9EFeyHs3wRMz6ehwid7+TdUJcxKKHhXsmCxjfr8gaHQANq1ewFvYG3wKOFhZw4ACM76OY1Zx2NeAKVsB8yR74nbHD6nD9C1qybudkybjqQatDAf+OIy0sZMj6aWC3WLJkXP1kbtDjxPU9B1jAgcPP14J8Y+G4rEbG1U907zmSmg1YyIEDcOIwlfV18HYQ62oAdcJB4JUhXljQXgicOExk7ZmUjtog1hUquqNmFlZgAZ9weNzMdeqyRuUKOGdARndoJzQACzlw+KGAKVljWc3uNgh29VOwAqgTDpnA+kYm7m9syZrI+tpXrmqwq77FvlcDWg8wACtIJG5QyRrL2myHk3IVwK5gBasXeQSfGRa0F4JT1nietdUOx6zAsX1csHqqTmgBFrYXhhb7zY1Wd1aL1vhmEN4GgQULNQyzBAvaC38c3GCy6nYzaU26oIQrWMHqsS8NmYAF7YX4kvXdjYPWpB9OWOHb4KhgXfYA7oQmYGF7Ib5kTYPWg9aUlUC5GhUs1AumsGfETMAKImNNXMmatcO/tCbhSqZcAQtWL/QQPjesDjoj+ClZAShrMnf4TauVL1fIghXQ/k3Agu28MGtcSFjzojVhJVOugAUL+sSMIVgBG4tqiZI1T1qCM1H4LSHsiS5rsLpWZOSKzO/L20NpVo/AHWClr88MFvZBqseXq7/B16IfinXBUZm5zgE9xLIDC/sglVB+//ud1kqskAVrwN+6GoEF7oWPe7juW5BWkGT1075wGy0gH+gxAgsd3zuxZjimJQoLN2oQiO52YKFLllR+n2S4oNEIa1ztGzKEhY7vj3eZjcIacAVLILobggWO74/8XpuE1QNzXJCIhGZgdegKI9kM5WHVwAfo0evPtmCh4/uoGXb2YAEboUh0twSrE3v0szYHq0fu5V2LvDxkBxZ054VpMwzWYCEboUh0NwXr1ko9NAFvhsKwBuQENsg8MGYIFnziMGqGnSVY0EYoVLBMwbrBO9dNKGaJwuqRjVBm1mAMVofvXLXMzEEUVkA+7dy3ErMGY7DgrzGLxSxJWAP0dCepgmULVodfhnk89WkEVg/dc7lvRWYN1mBJlKwgEbPkYD0C1oAsf/jv1BYsgZL1aIbBAizws1612MtptmBJlKxOIMCLwQrY4zMHoVmDPVgSb249dvW4scMawIdayBUsa7BE3tx6BPiOG9YA3hRQsGCZgyXysmlAT+BlYPXo9/UFC5Y5WDIvm9ZgWSKwevRLGpIFyx4skZLVgW8NJWA9XIG3sJLZr8QcLJmS9QjwgRTWyBVomBkkC5ZBWDJbetygsgRgBfRu3n0rWbAMwhLa0uOGHDrgYcFdCRcsi7BuMo/nBaAsOKwA38BNuGBZhCW1CxFQFhoW3pV0wTIJqxN6oriGyQLDCnLH3ksVLJOwRHYRnQwdrsrCwhJwBdypJiVYndC7pjBZUFgSrgax57BMw5IqWeNTJm4ssCRcyRcso7CkShZKFg7WYy6KRCBfsIzCEpqSwmTBYMm46ttWa3MJa7CkRg4TWSE6LBlXj1FD77A2S9aNURYIVt+KuBIfNViGJbfx8URWFxPWIOMKuRdggrDE8vtE1snnsyCwgpArheRuGdZjBUYAbX1RFgBWL+VKI7mbhiW4V/vkHIAuCqxRbAdHoSD1Un0qsET3ehzLukWANYgdSKeS3G3D+pbcq318LE5QhzU+k6cX+cBlk7txWJLNcHIAYa0La9wG0aOmoJLcjcMSPbhkckrc0Qh/CdYgeICmUnK3Dkv24JLJ+YM3NVjjNii1uZB0crcOS/jgkvFA69is9DyscRvE5+tBKbmbhyW5V/v85vBIOzwNS7INgjcvTRvWdyvaDKdnpt6kYU3KlcAKca2V3BOAJdwMp0GrloU1LlcSzUqxEdqHJd0MZ0eI3+RgSZcr1UaYAKxOuBmO7e7O8CdgTcqVyINSmo0wAViCB5eszUrb+iYBa1KuZFqVaiNMAZZ8M5y1wx1F6yCs8ZMMUs916jbCJGCJHVyy1Q5fJ61jsCZd0MRxFnnA0miGs6L1ivARWEMtX67Ax1nkAkvq4JLtYekrw/thTbug/HlhSo0wEVjfrXzMmmX45yF+L6wZK7G3ZrDHWWQE6yY/c/jzz9Q7++FOWNNwJdilau1GmAqsRzEJov9MN2tcl2DNWAW5VB3UHpZJDpZOzFokra1/bQesGatasJYM4q02YVidTsyaJ62NqPUS1oyVaIvqW+VJQ1KwtGLWsmit0XoBa84qaLzhp9oIE4KlFbOWIX6F1jNYfahbnXvBWcCq7w7rWiG5yf9boX1KaxvWbMAgG66iBaykYCnGrJe0tmAN2qwiBay0YI1iVqfxr9XbtNZhDbU2K/z5O1nCkjmG9wCtn+ceVmAteqACq1jBPTlYXa0X4Fdp/XukZgFrUaxUWI2Ce++wMDHrpt1+Jx1xCmtZrHRYwQ/OzBeWwGGpR1P8n7I1gtUvi5USK/zBmRnDiiBrpSE+gs2KKuFx6JqrcHdYwADffcemtfafarESODgzb1iPAK+7orRVtWL0wNjBPUlY6MNS99MKr1gFzU84RAzuacKKcGu4nePHxUr1Ax5iBvdEYWEPS8V0xKBcNqK7ShLW6JGpTr9ehqjJiuGGMF1YUWXNypZyC5y5qu8OS+hZvCj//s9OgyFGch4NGnqHJTZ06OLBitOHRvtA3O8OS+zWMIasqLDqyIOGtGGNZeUFK0S/IUwb1mjoEHKCReIqYVgxZcWDxeIqZVgRZUWDFeIPsDKANRpnhTxg8bhKG1Y0WZFgDTyuEocVS1YcWAPBwD0XWKMtHkPqsIaWYOCeDawuiqwYsLhcJQ8rjqwIsMhcpQ8riix9WIHMVQawYshSh0XnKgdYEWRpw+JzlQUsfVnKsAhd5QFrLKtODxajq0xgTWR1acEaPddH5CoXWMqyFGGRusoGlq4sPVisrvKBNdlHu0sFVt+SusoJ1ljWLQ1YQ0v0PEO+sPRkKcEidpUXrLGsYB9WIHaVGazxzo6hMw4rtCzPt2vD0t+T45AswZtDBVjj48kJXf3r0jKw9h35rjx2aBVuDuVh9S2zq8cOmUKwZBvOdVk3q7DGxzz1bKzGu0SLwYrxuujOj13wm5OGNdCOr+abj2NhfbztPj058hBe6AZDFtb4o6NzNd0n+u0DCus/H+/tztOTo48dRL43UVjj2M42ZuinOxq+73S1G9a8aNFFrZts0JKENbS0rmZHcOxmdQTWr6D11hJHrZvotyYIa+C9HZyyens/gOUIrEU/vOUTtMRgjVsNWbyaHcJxhNVBWORRayKrswGL19XZcHUOFnnUCmJBSwgWbbyahau3j6NODsNaRK0ba9Cq6WFNPj2qeDWcD1fnYVFHLal2KAGLtg0O17rgaVjUUWssC3h3KABrXK6YXPUAVmdhLaNW6u0QDmvy8YWEwtVFWPOoxdQPbwIREA1rEmIG1i54JlxdhsUctWr4fSsWVk/aBgdIF7wKi3n0ENDiobBI2+D59Rs0LOKodQN/W0hYgbMNgsIVBtavfsgatWrobSsO1qRc1emFKxAs4tEDtGjBYE3qAk0b7GtgFwTB4o1aHbBogWBNy1XPGa7ePgAoELB4V3kCDDwGVoh5+K/g+o0YLNrRw/Ro1FtcWNMYM1CGqxbDCgaLNmp1oKJ1Hda039TJhis0LNrRww3SpS/DmvabId1whYdFG7VqQCm9CGtaGOqUw5UELNaodbt+13oJ1qwwDJzh6uM/vLAWtFhGD+FqKb0Ca2AsV9D1GwVYrFHrdrEfnoc164JD6uFKDBbpAzXT28PDpfQsrNknSDK7Qq/fKMEiHT109YVSehLWNB6TjNr7WrYLysFiXeW5nb+1OAVrFo+HLMKVLCzS16Zn/fAArROwZqxIumBoxbugLCzSB2qmIX5/lz4Ma1YYSEK7QrgSh8Uatab9cG+XPghrxoqlC9YqXVAcFmnUmvXDfd/VIVhzVhxdUH7EoAeLdJVndn+4JwAegDVnRXIvOLRaXVAFFukqz+0ord2wFqwYw5VsF9SBRRu1jtHaCWvOKsNwpQeLdJVnHrWeZ61dsBasOJ5p1w1XmrBYX5s+QGsHrCWrbNZv4sEijVrLqnU7C8sGK5UuqAqLdZVnQWuD/AtYs4+PhpXS+k1UWKwP1Oyj9RTWghXJreA9RriKAIv1tekFrZVyug2rD6ys4oSrGLCMvMuzFra2YPXL/yXJ64J9HasLxoBF+9r0klZ9617CWvRAHlYhKqsIsGjf5VnSGqtfgdWv/A+SfrmZHRbvjm1LKT9lawFrWax4tvgQermZHhbzDjX1RtmawlopVvVAs8VHHbkLRoTFvGNbvVq2RrD6lWJV0+yf1kccMTDAIj6HYCVstfUPrBVVPNGKIVxFh0W8OW63Urb+/02u/Echyc1pDcOifW16oyOuSyPaSjv6iIEGFvU5BF14bSv0tKzePuJ+spFhMZ9D8Kps1VzHKtUk4YoFFvkRiFu2mJIVzYiBCxb7adNrN4mB64hdqnBFBIv9tOn5VjUD1wm7ai83G4RFfA7B7IWxmuyYeb5wxQWLPGqJnmKfWLhig0UetThhkY0YSGFRnzZNCWtoKbsgHyziVR5CWANrFySExRu16GD11Kz4YLGu8pDBIg5XtLA4oxYXLOZwRQyLMWoxwRrIuyAvLMLRAw8sxvUbO7DoohYNLPpwxQ6L7IEaElik6ze2YFGNHihg9bWJLkgPiylqEcAyEq5MwOIZPcSHZWDEYAkWy+ghNiyGl5vTgkUSteLCshSu7MCiGD3EhNVbGTGYg0UQtSLCMhaubMGKHrWiwRrsdUFTsGJHrUiweqOsLMGKG7WiwDIZrgzCirnKEwOWnfUb87Di9UN9WHa7oEVY0VZ5tGHZWr9JAVak16aVYYXWcBe0CivKa9OqsEyHK8OwYkQtRVjGw5VpWPpRSw2W5RFDCrC0V3m0YA2t/S5oHJbuKo8OLHMPxyQJSzVqacBKI1ylAEtxlUceVirhKg1YalFLHFYy4SoVWEpRSxjWkFIXTASWzuhBFJb59ZtEYWlELUlYaYWrpGDJP1AjByuF9ZuEYUmPHqRg9XV6XTAtWMJRSwZWiuEqPViiowcRWKmNGJKFJTh6EICV0PpN8rDkohYcVrLhKlFYUqMHMKw+yRFD2rBkohYWVsrhKmFYElELCWtIvAumC0sgauFg9TmwShYWPGqhYKUfrlKHBV7lAcFKdP0mL1jQqAWBNeTRBZOHhVzlAcBKeP0mO1i416avwwptLl0wC1io16avwsonXOUCCzR6uAarr3PqgrnAgkStK7CyGTFkBwuwynMB1tBm1gVzgnV59HAaVtoPxzisq1HrJKwMw1V2sK6t8pyClWW4yhDWlah1Blae4SpLWOej1nFYQ7ZdMEdYp0cPR2HltX7jsE5HrWOwcg5X+cI69UDNIVjZrd84rNOjhwOw+jrzLpgxrONRazes7MNV5rCOjh72wsp6xOCwjo8e9sHKdf3GYZ2OWntgebhyWIej1mtYPmJwWCei1ktYHq4c1pmo9QLW4F3QYZ2KWk9hebhyWPui1iFYHq4c1t6oteyH27B8/cZhXYhaW7A8XDmsS6OHdVi+fuOwTowewitYwUcMDmtnP9yKWiuwPFw5rOujhwUsHzE4LETUmsHyEYPDuhy1bktYvn7jsECjhzEsfzjGYcGi1gOWhyuHBYxa/xLX3cOVw8JGrb+ly8OVw0L3w8XlXdBhQfuhs3JYYrQ8XDksgajl4cphSUQt74IOS6AfOiuHJdAPvQs6LKgsX8BxWBLXo2L578JhgSvW25tXLIcFr1i/w9WvqOUVy2FBK9bfe8GPd69YDgt5fSz+D78cll8Oyy+H5ZdfDssv5et/X3MZEYPGJmIAAAAASUVORK5CYII="
+    mediatype: image/png
+  keywords:
+  - trivy
+  - security
+  links:
+  - name: Documentation
+    url: https://github.com/devopstales/trivy-operator
+  - name: Blog
+    url: https://devopstales.github.io
+  maintainers:
+  - email: devopstales@protonmail.com
+    name: devopstales
+  maturity: stable
+  provider:
+    name: devopstales
+    url: devopstales.github.io
+  version: 2.3.0
+  replaces: trivy-operator.v2.2.0
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+            - "apiextensions.k8s.io"
+          resources:
+            - "customresourcedefinitions"
+          verbs: 
+            - "create"
+        - apiGroups:
+          - "trivy-operator.devopstales.io"
+          resources:
+          - namespace-scanners
+          - namespace-scanners/status
+          verbs:
+          - get
+          - watch
+          - list
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - get
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          - namespaces
+          verbs:
+          - get
+          - watch
+          - list
+        - apiGroups:
+          - "admissionregistration.k8s.io"
+          resources:
+          - mutatingwebhookconfigurations
+          - validatingwebhookconfigurations
+          verbs:
+          - create
+          - patch
+          - get
+          - watch
+          - list
+        serviceAccountName: trivy-operator
+      services:
+      - name: trivy-operator
+        spec:
+          selector:
+            app: trivy-operator
+          ports:
+            - name: metric
+              port: 9115
+              protocol: TCP
+              targetPort: 9115
+      - name: trivy-image-validator
+        spec:
+          selector:
+            app: trivy-operator
+          ports:
+            - name: webhook
+              targetPort: 8443
+              protocol: TCP
+              port: 443
+      deployments:
+      - name: trivy-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: trivy-operator
+          template:
+            metadata:
+              labels:
+                app: trivy-operator
+              annotations:
+                prometheus.io/port: "9115"
+                prometheus.io/scrape: "true"
+            spec:
+              imagePullSecrets:
+              securityContext:
+                fsGroup: 10001
+                fsGroupChangePolicy: "OnRootMismatch"
+              serviceAccountName: trivy-operator
+              containers:
+              - name: trivy-operator
+                image: "devopstales/trivy-operator:2.3"
+                imagePullPolicy: Always
+                env:
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                ports:
+                  - name: metric
+                    containerPort: 9115
+                    protocol: TCP
+                  - name: https
+                    containerPort: 8443
+                    protocol: TCP

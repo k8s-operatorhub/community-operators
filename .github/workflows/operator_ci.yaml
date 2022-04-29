@@ -12,7 +12,10 @@ env:
   OPP_SCRIPT_ENV_OPRT_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-oprt.sh"
   OPP_SCRIPT_ENV_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-env.sh"
   OPP_SCRIPT_COSMETICS_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-oprt-cosmetics.sh"
-  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks/"
+  OPP_THIS_REPO_BASE: "https://github.com"
+  OPP_THIS_REPO: "k8s-operatorhub/community-operators"
+  OPP_THIS_BRANCH: "main"
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
   OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_REVIEWERS_ENABLED: 1
 
@@ -103,18 +106,9 @@ jobs:
           OPP_OPRT_SHA: "${{ github.event.pull_request.head.sha }}"
           OPP_OPRT_SRC_REPO: "${{ github.event.pull_request.base.repo.full_name }}"
           OPP_OPRT_SRC_BRANCH: "${{ github.event.pull_request.base.ref }}"
+          OPP_THIS_PR: ${{ github.event.pull_request.number }}
         run: |
           bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
-
-      # - name: "Comment operator test error code [10]"
-      #   if: steps.op-traffic-light.outputs.opp_error_code == '10'
-      #   uses: mshick/add-pr-comment@v1
-      #   with:
-      #     message: |
-      #       If you want to accelerate publishing your changes, consider adding yourself and others you trust to the reviewers list see how that works [here](https://operator-framework.github.io/community-operators/operator-ci-yaml).
-      #     repo-token: ${{ secrets.GITHUB_TOKEN }}
-      #     repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-      #     allow-repeats: false
 
       - name: "Remove installation-validated"
         uses: actions/github-script@v4
@@ -123,7 +117,8 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            const arr = ['installation-validated', 'installation-validated-4.6', 'installation-validated-4.7', 'installation-validated-4.8'];
+            const arr = ['installation-validated', 'installation-validated-atest', ];
+
             for (let label of arr) {
               github.issues.removeLabel({
                 issue_number: context.issue.number,
@@ -139,13 +134,15 @@ jobs:
         with:
           message: |
             ${{ steps.op-traffic-light.outputs.opp_pr_revievers }}, please approve as you are original reviewer(s).
-            Please note, that you can more contributors to ci.yaml. More info [here](https://operator-framework.github.io/community-operators/operator-ci-yaml).
+            
+            - To add more contributors to `ci.yaml` follow instruction [here](https://operator-framework.github.io/community-operators/operator-ci-yaml). 
+            - To approve follow instruction [here](https://redhat-openshift-ecosystem.github.io/community-operators-prod/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: false
 
       - name: "Mention reviewers if ci.yaml was changed"
-        if: steps.op-traffic-light.outputs.opp_pr_revievers != '' && steps.op-traffic-light.outputs.opp_ci_yaml_changed == '1'
+        if: steps.op-traffic-light.outputs.opp_pr_revievers != '' && steps.op-traffic-light.outputs.opp_ci_yaml_changed == '1' && steps.op-traffic-light.outputs.opp_authorized_changes == '0'
         uses: mshick/add-pr-comment@v1
         with:
           message: |
@@ -153,7 +150,7 @@ jobs:
             
             ${{ steps.op-traffic-light.outputs.opp_pr_revievers }}, Please note that ci.yml was changed. 
 
-            Please add comment with `/hold cancel` if change is OK.
+            - To approve follow instruction [here](https://redhat-openshift-ecosystem.github.io/community-operators-prod/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: false
@@ -262,8 +259,6 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: true
-
-
 
       - name: Update title
         uses: actions/github-script@v3
@@ -447,6 +442,7 @@ jobs:
       #     repo-token: ${{ secrets.GITHUB_TOKEN }}
       #     repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
       #     allow-repeats: true
+
       - name: Info
         run: |
           echo "steps.op-traffic-light.outputs.opp_test_ready: ${{ steps.op-traffic-light.outputs.opp_test_ready }}"
@@ -455,6 +451,7 @@ jobs:
           echo "steps.op-traffic-light.outputs.opp_name: ${{ steps.op-traffic-light.outputs.opp_name }}"
           echo "steps.op-traffic-light.outputs.opp_version: ${{ steps.op-traffic-light.outputs.opp_version }}"
           echo "steps.op-traffic-light.outputs.opp_ci_yaml_only: ${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
+          echo "steps.op-traffic-light.outputs.opp_installation_skipped: ${{ steps.op-traffic-light.outputs.opp_installation_skipped }}"
     outputs:
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
       opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
@@ -462,6 +459,7 @@ jobs:
       opp_name: "${{ steps.op-traffic-light.outputs.opp_name }}"
       opp_version: "${{ steps.op-traffic-light.outputs.opp_version }}"
       opp_ci_yaml_only: "${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
+      opp_installation_skipped: "${{ steps.op-traffic-light.outputs.opp_installation_skipped }}"
 
   operator-ci-ok-to-test:
     needs: operator-ci
@@ -485,10 +483,11 @@ jobs:
         run: |
           echo "needs.operator-ci.outputs.opp_production_type: ${{ needs.operator-ci.outputs.opp_production_type }}"
           echo "needs.operator-ci.outputs.opp_ci_yaml_only: ${{ needs.operator-ci.outputs.opp_ci_yaml_only }}"
+          echo "needs.operator-ci.outputs.opp_installation_skipped: ${{ needs.operator-ci.outputs.opp_installation_skipped }}"
 
       - name: "Setting ok-to-test label"
         uses: actions/github-script@v3
-        if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only != '1' && (!contains(github.event.pull_request.labels.*.name, 'allow/ci-changes'))
+        if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only != '1' && (!contains(github.event.pull_request.labels.*.name, 'allow/ci-changes')) && needs.operator-ci.outputs.opp_installation_skipped == '0'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
@@ -511,3 +510,33 @@ jobs:
               repo: context.repo.repo,
               labels: [ 'installation-validated' ]
             })
+
+      - name: "Setting installation-validated label (when installation_skipped)"
+        uses: actions/github-script@v3
+        if: needs.operator-ci.outputs.opp_installation_skipped == '1'
+        continue-on-error: true
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: [ 'installation-validated', 'installation-skipped' ]
+            })
+
+      - name: Try to automerge
+        uses: actions/github-script@v3
+        if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only == '1'
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.FRAMEWORK_MERGE }}
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '/merge possible'
+            })
+
+

@@ -1,0 +1,394 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "flows.netobserv.io/v1alpha1",
+          "kind": "FlowCollector",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "cno": {
+              "namespace": "openshift-network-operator"
+            },
+            "consolePlugin": {
+              "image": "quay.io/netobserv/network-observability-console-plugin:v0.1.0",
+              "imagePullPolicy": "IfNotPresent",
+              "port": 9001
+            },
+            "goflowkube": {
+              "image": "quay.io/netobserv/goflow2-kube:v0.1.0",
+              "imagePullPolicy": "IfNotPresent",
+              "kind": "Deployment",
+              "logLevel": "info",
+              "port": 2055,
+              "printOutput": false,
+              "replicas": 1
+            },
+            "ipfix": {
+              "cacheActiveTimeout": "60s",
+              "cacheMaxFlows": 400,
+              "sampling": 100
+            },
+            "loki": {
+              "batchSize": 102400,
+              "batchWait": "1s",
+              "maxBackoff": "300s",
+              "maxRetries": 10,
+              "minBackoff": "1s",
+              "staticLabels": {
+                "app": "netobserv-flowcollector"
+              },
+              "url": "http://loki:3100/"
+            },
+            "namespace": "network-observability"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Monitoring
+    containerImage: quay.io/netobserv/network-observability-operator:0.1.0
+    description: A network observability operator based on netflows (IPFIX) for OVN
+    operators.operatorframework.io/builder: operator-sdk-v1.14.0+git
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+  name: netobserv-operator.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: FlowCollector is the Schema for the flowcollectors API, which pilots
+        and configures netflow collection.
+      displayName: Flow Collector
+      kind: FlowCollector
+      name: flowcollectors.flows.netobserv.io
+      version: v1alpha1
+  description: |-
+    This is an OpenShift / Kubernetes operator for network observability. It deploys
+    a netflow (IPFIX) collector, a console plugin, and configures OVS for netflow exports. This is an early release ("dev preview") and is not considered production-ready yet.
+
+    ## Pre-requisite
+
+    - Your CNI should be [ovn-kubernetes](https://github.com/ovn-org/ovn-kubernetes/). Other [OvS](https://www.openvswitch.org/)-based CNIs might work if they can export IPFIX flows, but would necessitate manual configuration and they haven't been tested. Future releases will include CNI independent features.
+
+    - [Loki](https://grafana.com/oss/loki/) installed: all collected flows are stored via Loki. Several installation options are [available here](https://grafana.com/docs/loki/latest/installation/). For a quick install, you can simply run:
+
+    ```
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/main/examples/zero-click-loki/1-storage.yaml) -n network-observability
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/main/examples/zero-click-loki/2-loki.yaml) -n network-observability
+    ```
+
+    - [Grafana](https://grafana.com/oss/grafana/) installed (optional): [a dashboard](https://github.com/netobserv/network-observability-operator/blob/main/config/samples/dashboards/Network%20Observability.json) can be imported to show flow logs and metrics.
+
+    ## Post-installation
+    Because the installed workloads operate cluster-wide, there is only one `FlowCollector` that can be installed, named `cluster`. The custom resource is [documented here](https://github.com/netobserv/network-observability-operator/blob/main/docs/FlowCollector.md). Make sure that Loki is reachable and its URL is properly configured in the operand resource.
+
+    ### Enabling IPFIX export
+
+    #### Generic Kubernetes with ovn-kubernetes
+    You need to explicitly turn on IPFIX export in ovn-kubernetes:
+
+    ```
+    GF_IP=`kubectl get svc goflow-kube -n network-observability -ojsonpath='{.spec.clusterIP}'` && echo $GF_IP
+    kubectl set env daemonset/ovnkube-node -c ovnkube-node -n ovn-kubernetes OVN_IPFIX_TARGETS="$GF_IP:2055"
+    ```
+
+    To turn it off, remove the `OVN_IPFIX_TARGETS` env from `daemonset/ovnkube-node`.
+
+    #### OpenShift 4.10 and above
+    No further action is required to enable IPFIX exports. Do not configure manually the goflow-kube IP in OVS, as it would conflict with the operator action (you can, however, set an additional target IP if you run another flow collector). If you want to turn off the exports, remove the `FlowCollector` cluster resource.
+
+    #### OpenShift 4.8 or 4.9
+    You need to explicitly turn on IPFIX export for the `ClusterNetworkOperator`:
+
+    ```
+    GF_IP=`oc get svc goflow-kube -n network-observability -ojsonpath='{.spec.clusterIP}'` && echo $GF_IP
+    oc patch networks.operator.openshift.io cluster --type='json' -p "[{'op': 'add', 'path': '/spec', 'value': {'exportNetworkFlows': {'ipfix': { 'collectors': ['$GF_IP:2055']}}}}]"
+    ```
+    To turn it off, remove the `exportNetworkFlows` from `networks.operator.openshift.io/cluster`.
+
+    ### OpenShift Console
+    OpenShift 4.10 or above is required to use the Console plugin. It needs to be enabled explicitly, either via the Console itself, or via this command:
+
+    ```
+    oc patch console.operator.openshift.io cluster --type='json' -p '[{"op": "add", "path": "/spec/plugins", "value": ["network-observability-plugin"]}]'
+    ```
+  displayName: Netobserv Operator
+  icon:
+  - base64data: iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAABhGlDQ1BJQ0MgcHJvZmlsZQAAKJF9kT1Iw0AcxV9TpVVaHOwg4pChOrUgKuKoVShChVArtOpgcukXNGlIUlwcBdeCgx+LVQcXZ10dXAVB8APE0clJ0UVK/F9SaBHrwXE/3t173L0DhEaFaVbPOKDptplOJsRsblUMvEJAEH0IIyYzy5iTpBS6jq97+Ph6F+dZ3c/9OcJq3mKATySeZYZpE28QT2/aBud94ggrySrxOXHMpAsSP3Jd8fiNc9FlgWdGzEx6njhCLBY7WOlgVjI14iniqKrplC9kPVY5b3HWKjXWuid/YSivryxzneYIkljEEiSIUFBDGRXYiNOqk2IhTfuJLv5h1y+RSyFXGYwcC6hCg+z6wf/gd7dWYXLCSwolgN4Xx/kYBQK7QLPuON/HjtM8AfzPwJXe9lcbwMwn6fW2Fj0CBraBi+u2puwBlzvA0JMhm7Ir+WkKhQLwfkbflAMGb4H+Na+31j5OH4AMdZW6AQ4OgbEiZa93eXews7d/z7T6+wEsx3KLl6wkfAAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAAd0SU1FB+YCCAksCxKPoBkAAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAcHUlEQVR42u1cd3wVVdp+3jP33vQeQkKR0HsLIE2kKYJlUVaaCspaWBsuu4qfrm3R1bUj6ooCFkQQXdvKKogKQXrH0DsJJEACIQmk3Znzfn/MmXJvbiBAcHe/z/n95pebe+fOnXnOW573Oe8Z4Nft1+3fudF/2gVFYS/FYUOYFxVeoEIT0CFgSEKlroMrDmCi8SuAAFom/SCKjuvRGirrMmR9DXoaoKcI6HEEvxcwvIChEQwhoAsBHQQJgn5KwDjGMA4J4ADDn10J/8m9eM74Pw9gIjZ5gMq6GsrbEiqbCfgTBXSfgE4EXRAMQfBrAoZgGBpBFzAB9BAM0mB4AMM6ViMYGkMagDxOMLYSeJUA787CCxX/ZwCMFetJk1GxGko7A5WtCP5EExi/EDCEBr8g08KEAkcT0DWGIQiGBugkYHhMK5Qa4CcTaKkBhjB3qQCVGkEeB3gtg78hMg5v4an8XwtgArbXE/B3JejNAN0LEywi6JoFmoBOQv0PGCTgt4DRzOMMIhhCg+ExQdIJJrgCMDRACkCSAlC9LxXAcq2A/FIS/ZzFb/J/DYDR2JfkQWVPAaO5gN8D6AToguC3rEwI+DULQNOidGvXAEmArgmXy2rKZQmGOpchYIIkXBZJZAKqwLQA5XWAnLUZ7+z6jwYwDIe84ai4lGBkCOheUhYH6MK86VDWZ6jP3O4rhRP/DHW81Jw4abmubW3K3aUwAXYDKIWyUibIfwH03ibMKKmte9Zq60Qx2F/fB/9QAb2Z5ZKW+ymXU9ZhkDCBEWS6nnWT6lhWLmq9JzUBSQKsqf/JAobB6hwsSL0GWABMwvlL5jnZI8DtAB6YhvaHjmDzof8IC0xGsdBFQQak3styMWUlZFqITqbrSjvTVnVdQ1mmoaxFFwTdE4aIivi0MJmflxfnsd03IP6RK4HY1madR9hAm25tJiHWCJIBOYcgZ6zHR/5/G4Bx2OUVkIMI3EJZkLIiCTKpiAKPyQWU0FzWqcAggl9TFioIhvj94z3LrrqybX2fV2g52YUnH5vwkSg5WhJGLte1LDVU/AMkKQBVSJAe00Klx2XdKwn4yzrMOXm+GIjzB29LlAb/cIK/FaFSE6hUmVQnQNdYURXDTAg2YMIGWCqXM8Em29UkUluH4eoh7S6JiBCRmgdhjZskpNz/50F+QMIcDNstlREwOX8ZZO4EMDFYfQfEYHZZDgHowzBmdsPIer8ogClYE+tF5WiByvoiIFH4NUAXRH4ae3989OLNGb3X7u4x5JvVGV36DU0QwrQSCNvF7RhIpjua2TQmNqrU56MwACAyEUhKSGQV38A2gFDfM0FTIIKVZ5kgWhuDzPtVwNufNWbwO10wsuEvkkRSsTbaAI0mcKIFgnIpgoprb3zcqNGEiU3vSk3ztU1I9FxSr354q2uHprb3a6W7NmSe8MNOBIblapoJjgloeUVp+IBBLbSoqHAvKRAX/7i14OcVe2IASays0EoeUIkE5v/kTiKwEwwLM/6xCikBx8cBsn8DtFmSi20lFy0GpmJFmA6+CaBUNYpwRtoc1Z5DvN6PP+t+X0SESAr+fnGRsS8jaf5cv1GhOXzQ0EyL0i0qAgHD039kfeP6ob1FXGxc+fp127R3/rIgllnXApOHGeOET2LE/b3K+gxpWjchNi7c46UIwy/LC4tP6qt/2JM/79VFyUa5XxDY40o2VlYXAFsZPVtA3roGXxbUOoDJWK4ReChgtHK5BQUD+NRrLRPunlB/YqhzSInKRx9a8vbcV/JKnQQiVRIxgREwNJh1r6aSg4qR5vvs4nfpnRKMR6cMadyla9uU8ChqUt21+8uxf92qrPyXH55XuH9NdhyZlEglISbYHsAaQa4G5Pi1+GeN6mlPzX29vDcDbat+YgdsECRFR3FEtQGX4ImOgdcFHllcz+GBVvZkYYJnWQzDcjkG86S3Bmmjb+3bMyyCzhq7vOFo3LNf+8Zzl7Y9+vlHi7b+7fYPojWAlPUQKyNQMbM3QA8DmFxrSSQV3zQhVPYV8GuquhAEvyrHzPes0uynZYcLDB1loc5TVsZHv/3kRJEDnklhFAUhsrkbK6tkK0kQTOJMBODdxXdG3Dq+39CagBcAZJioO2LcVZe/v2byCUArR0AysvBgAviWS3Hd4FoBsAH+ESGgD9Xg9wr4SYMuNPiFZtazrtc6EXT69v08rF+b/wMzZLD7Lv5h//e524u97sSjSDApJQVkxyXbOslKHN1vaOj/du/Epj37pv+GqObeExCzCJ6O3Zpd9day/yl3KA6TAs+K6R4Az3TDNSkXnIXjMGIwgVuQclHLVcl0NZUNHdZPkOKLuQfy01uFZ6emxkaSkN7C43LLnA9+XvDI2DUnYJNdQyO7FDPBM+tdK+7ZwZ6i62vi5Y9vjJvw8OABCckRzUEXXEFRvYYpDXyJnl1rFmRFqiytWRZo0h2OEeA6h7F7wXknkUaY04Ch/Z5BwjyUQkhCbFE1smKiohV0HDpOQVIqWAs37VC4Yh4CwTOCwDMIkGLYH9rpEx8Z0iMpJaJ1bSsppSUVR4e0uONA6ZHSWNPqpEVxlDDBgsA3r8K3medsgY1pHjF4OMB1LGZPTjEfsKsYRS4FhAi6FgXW4sHCozKdslTNtGKTNCtLrgJeYksfv7twTONRY3tcGRXjrYeLsHnDPNH1miQfWvzJqkgzC0OBx8LMeewhcNOGaPLxIezlc8rCzHpzgt6aQMy25RFs8ueiMeYnkpz3WFUELByLNK3OJLkBtSoFgEcGTZrW33fjqEv7RMd6G1xsxfzSPhkxWriAUW6Qy4sU0QYB6Ebg6wB8WeMkkk6zCagYqDKkEEqnswRPZzc/UyKopdFpzl9L/zMC+Jya33DpeKYQ0H1YKv9r5z3Nb7ur9+hfAjwASEiObl63Wd0jqtRTcpjFukxDkKC7e+BKrcYWSHwqjSFaKKrErEIlg2yTYzU87Bo182222L1FrqGShRIR2M3zCJCkw+Of8tng5EFXd7jcF07Jv/C0mu/qkX14xpa51j1YbkyOy3E3AvUEsKyGLiz7mfIPEQNsJg9rt8gzWSnfIrkuxcNRQ1StCuG8tmgKGJJuuK+18cc/D+ifUje2Kej81aEL2dJaJzQlsO4IDRBURXSQ43to/ZevMhbzGQFsgqnhBL0jQJppccSmukFETvwjJxa6yzm4i3g4yccq4E3gAEmpbSP4+bd+G9+tV/2rhWYqL6FjMQzD4GKPhxIuFoDecC0CwCnYdMYafJB0YuIAMigRwPEzxkAP9FYCRrzS74ige9S0or0PGNnAmP7tFU16XFNHTTk6M2ZKIBAaDE04E0G2VihI0j1/6+adv/KeK7r3aXBDdeBJifLcQyf2TP3b15/PnbVoVWDyqt3t1PGy46Gsj201B8TgWAZfXQMXNi4lkCBXqWjzc4C9wmu8PO2qa+PifU07dEpffVn9NzeztAOwrcm5BVKL7bcblIC/TR2Z3qRFQm8ieEPdjKHL0qyNOes+nL70wPzpG2N8IO+QOzqU8Djo1X3nQres7w9sBbibq5RT1ueEITV6NwL4sFoAm2G6l3CihZmJrBhqJQ4TQJYgf6VRAQD+ykpleeyiNbbMRaTA80SD/vreNTGDr+twmS+MQpVHXHrKf2jF0h2bX3l0QfHBzcfCBTjWBwIgtS9mZNEzrxtFvnCt1hMM+5H709KlHdWga4HWBxXXVQwDuvRG37jlyCwKCaAHx5IBTlTfs6yPYCcMMEMX942dt2Lsve2y3526MQ9SJ8fqAkAkAmPkI2084++9qmVq/aguoSqfvJyS9csyt2Q/OeafukmyZbhQyQaq1IuAEbVzy6Ed7bs2uqy2Ady7+2D+6YPlCe7YZ5ZcNp8VrkSSJEEtAawJCSBBbw6Qx1F5AogzW8BuXpgr/rQw94hK+Xa6d2cuAV/Z24uvb9q9d8tuHi9iA9zUj5P79uRv/nTO4sI5z270Q0rNmba0Xd/iYYIg6eNZP+a06zKunAjhtQngPz78CnDUaeEGkRzDUAkQIPDl1QIIGM0AEqQ4n2lOdiw8mzMAYJJg/P7ZXnzb+MuvjE8MT3d/sey03Je1ee/hvz74dfaelfk+xRc1iyuaVgdySfSqXGT6/PXVcZOevGl3XFJY+9oC78COQ+u/eH5RinJdYYUhDox95AIVADqfIYnIdABCmiyPHdc1498ZFAliMFoPSNaffmVEg9YdUvoRkVA0RD+RX75jyQ8bDr765PclhbtLPQQON0dXupKNY23mhTv1NyC15z662RObGNam9oSE8mOP3/WCF2xan5XoFG0RBKhrsL3M2jqEBDCDHhDlbKSymYHZsRw7RXBoK2QwPPKJDwZFXn9j9x7hkVoaAEgDJTnZ+bmzpv207tMXNmoG/B4Cex31OhA4xwpNYUK4rGDM0/1LfzOqzyCi2umkkAYXvfzMGwd3/bQvzUkcsGmLNUVKVa0PAJIvQ9/oZcg8FQBgJfsiARlOIOEWDjikhOVsvYc3rfjLy8M61WsY3wEAKiuMok1rD6x/5/Ufs5d9sifaA4S7Zidd0lcAcAGvLY2RwdT+qsan7/7DsO5CIKK2Eu9nH87fPf+FJQo8c9A8HmH06Nszs1NGx4MVlWUxmd9ltt69fVcncmpja/MxEGcS70AXjiBIrylxOeCRq0IO6IVp6OMX37spplfflt2FhriSoorsHxdmbXjtse8qju4+6SMg1lNFL7R5YrXAWa7EYIpI89Ar79/dPCLamxZ6skgeFRqiNK+Iril6Rw8XbH913MwEa1oTYPKFeU49/dzk9zLadD5hqQijB43a8P5X726f/c6sMUEJwCeBWACHgwCUPgJ7Yda/CCzdyI52JIARD3Yrv/ehq7slJEU0y9lfuGb+52v3v/bQIq/XPDCMAiiNW+IKINnBwEHFPmKASDDe/eZ/KDk1tm0oIHIPHM+aOO654sjwCGPshGu1rpd2oqh4X4YQ5EU1rs4Sp1567M0KA3qca66Yfjv2t0s7t+lcaE/kM0AaxO+u/936TVkb225ZmdXFHfYIiAyRRAwfAC8CE4jb6rhuuxj52uzb6zVv0fCSndtzdrz81++3fzllixRAuC8gpzCCOwCoavsFuRKJBRysCfbHZ93MrTs1GBgi5OprV2z5+e7LXikCyuMASZMWvEISkgDP2mF3XLX30Wm3DScNUcFfXfH9ui2Z769pIAB31hWDu16bSUCkUzooIAVErw69VgcBSAD7qgAoIAUDAgEZ1zQgA8x/nj6UBw7qFbVz107//TfOXJm/p9inimnhAIagyXZrHsfsUaHAeWR7Z8dKBYHFmGcGnL5+VL8qpFn3y+Kv5i5Z9uytM+sSZJy7T0YAguFPGjCqkzcUeCWFpfueuvvFugLwuLsTDDBiw6L9tvVJQJAzIRamhfnPNBXicd4x/CphaMIG0bTnx167Y0+lP6/ZdV0eLasoMCoBhBOCDTSwH4WDgBSuGEjKTV1Vi91+0WZAw9Lx9w/rKjTEuU9eXqofnDzxzf3fvbOmLgUQbqeFI7l5XHlG77atQlht2ayZc06X7DuV7B44qcLGj9sWZlyfNnQP2Ix/7q/+vO/nllUFIvKHcGHpFyYGQiUPYpNI4/kHZjZlk+R6z06m4QIsUO5iB1wX2zc5FyARnR5mvD7vwfpRsWF13Wc9tC8/6/6xzxTmLM+PddEdqJYMu89l3CM3lISFe+ODr2rb5l0HZz/8ZZJroCyhQACgebM+Hnx55z5vJ8UnVpILwLVr1yYsXZB5ZTALApx5b49z60aZgGBH4iJ2YqEUNZtHdCzMSd3sIpHO6JNLMmdTNpdvfPyQlpAc1c411BUbVm1f88A1L3nLC0ujXXO4AKSmQpVVq/KQof3Tg6+oskw/8ujv/gqW0qYsDt8zAT125FjDex+8++5xN9/2SZtWbUql35BLli9Jm/fpx7exOd0ZcEpSFCYoBmqnGYZuAqiMz65CWL2qHjZyuS0DSEiP9oeHh5fm7TiW6G4vs3gVg5ldCsgTH95kdOjeuLdlwYZuVHzy/veLXrrz/XpUNW4KS6ezRNCRjw3OjU2Iah58bZ9/+HX2kY35jdx1LtsxEMKqdQsOH7vkxReen8RgwzQCqu52KzWIqmrMJrzl74Q7TjKQ4Ko6LC2QHXhCV3OuTykpPaHw1Vef3uHz+vyvT5vWZOX8dekWaG7XteL2yMcGFNwwamA/y/rLTul7//LH1/K+n76uPrmST5DL2lOQElIMH3NtLIL0wtwDx7ZMGT89GDxywJNqUKVtxU4hUe1WclKEnbTSTJAawwcJ3MzkguyiMlwTNdgCBtHhCYXhET4Gw1OvYSIskcCyPhelQat+DcrunTSih/BQDAAc3H1k6yMTXjq+a8GhGArkkcLtsi75SQwc362sYbO0gBpV+vnki49N0UKAZ8VcywKDS7Wzbduy5AKuTo3ZAWAQbCXGVKg4SDhwua67ZVZ1j4Jzduxu8cGsOf7EhHj9i7e+T4M5QR3QvUBgIcKEPnXew3WiYsLrsETFutVZmyb0ehE6KmKpKnB2D0ugdsc0fMzQIhIUEKsWf7c0d9VHG+uEdlsHPEumqnEdCGysVo1h8BYBaMrPNCuUU837Qsg0LYkFc77r5MTRKr2ERAR6+4c/c1JKbDtpcPHcd/61dso9Hya5MrfViWrFOvd0oy0+JCTGF3Xu1q6F+yIKC4oOP3XtFKsVLhR4dD7gqftbXi2ABCMHoGKCJYDSOTVhBlOZQNLsAAMwPTpnXHHn3i36ni4qPzj5wamHf5yxPimoWVw4gqbdbuGuZAQA8YcZt4ZpPqrjlGvs//szM/N0lKW7su0FW541/wTQ5moB3IjZJV1w8x4A3UK3ctQkDnKIki5wvmToxH7Hht54RY/sfXn77xn29P6jmwuSlavCaamwCDbcUrtL8gKRYO4zoGfAAG/dsGPb168tTHeJFkLY+uIFgQcAu5jKjrkRCTErx4sB7uGa+j1HAINmAWxuaILY5PJ6FROfurXTxjXbsh647rmYihMVKU6Mg5snam4BIrBfxTzmrpduyo+Ki8hwqpWKgsfvfDZOqdrWBFFtgQcAX6/k1XzGeWGCkUmQlVbnqLPLM+yBx1JAp5bVCS9F1CVh/ikfPO7/dOY3O+7s/URCxYlyr+pLVrxOaqojygOXuKrOY3Xym1alQbvq+gHuxCFnvzVvf96mo7EKPOF2X6ff8Lw3HaBPz95cJCIKAN5AQUsJ3Iv3qu5OiWSBBWfdmgCkJiG1O+4dnfP6K9Mj//7HOSmaQyGs7nkP7ObvAOCE631hEm/p6Tmsc2799FS7Z/DQgdw9702a2ziQpphWbfG8el3TyqYsfmn7XW/9Lvc8AFwvCftr1GDZBSP6AfJ1lx7INU0eHDBP4lZlmAxI0iAQ6IogBGmHjgrsltfNpGGVczM2vmK07dQ6DQDYwLE7rrnv9LaFOxMdnRHu9SAAQH9fNXVTx+4durPkyt8PuG/vlsytjc8hNI1fgcwPatTeBujLCLwfjttoZ99ZLeRj1Sxpd9fb73tALktzFGH3mg8K+E27XrUWCWoEFimdkwrbtG9tD+p3X/yQs23hzqTAjGt3idkjvHP7zoYAYFQaObl78+LOwfoOA/xpDamcuXXDDaMBPMk1sj4Ea4CAq2k7hJXBNe9KrqxNQaWeqDq5w/Tsl48d7D+0TwYAnDhycvv1rUbV8xf5BdnVkBQhqwsBdO7Zec2uDbtani47fS4APrUCmc/XuD/QjJjyMw/oNgI3Oc+5GwrFDSlwWQEFZlqIAJpiD4LdOoeo+pGV3Qd2baCEpVPTpszw+Yv8GgW4ejVjLoGNyzdeeo43kidAb1X3YbVZaSO+qgT4DQSpx2ffrRXi7M7EGrlcUSUFKzFYruk1exKtMBCwBo6kudRBjPrj0NzI6IgUAFjz07qc+c9/W9dKFEEuW1vbi8uwpLi6Dz1nqVv+BZYjAfQO7fV8NlJNIfhhgBpTdRWlMwnFtvhqz9PKG0b/JgkAykrKjzw+9uloV0vGxWjcWg/w9DMdcEZetIa/kgAmA+x3WY61CEYgwKJCWhdZ3M2ysnoZyWWPz5tQ+Pa65/Oe/ueD5S2vaJyLECuS2LWGjcCaAGsD7rrsUFJqYioYcva0OQWnsovrXCSrAwA/AX9agaV6DSqHM2/dcc2dDDx5NhpDTk9clXKOABo47rIDT7z5UD1fhNNArvuNkrlvf7b2zftndgyshd1Jxuz4n7Xpnb0tOjbrsG/L/i03tb+1iQZx0VqCGXhuJTLPul6uRhfggfYeQS5Sy+Y11+5xdvY4NIZdx5jxzAtf0SOvTkxygwcAHq8WM+rOYV3qda1TYLmjOe3IbjIsMoa3P9WsXZPWul+veObBZ+MvJngAlhHo+ZocWKOLWI5/6oCcROBsCgCJRfDuLrfcrWqDJvWMjIqLSA91fm+YJ27MhBFea4UQ20/igF3ijRg37LDQhPfrufN37ly4u85FBO8wgW5fgSUVtQYgAKzGwnwC30KQJ5xMG3K31V+pnpjBYBGXGHsCZ1gZFZsSnUJ23QoXsZYiCpEnL+vXO60gr2Dv1Fv/3gAXr1/6FICRy7Eku6ZfOCc3WImFuwzw7QwuZbXKO3CXgs2nZNjViWWpuzfti2YZehksAOxYuXuPIygYrnUmwJ3vjivVwrX4lx9+VVaiMjL4u/Hx8Yc6t+28KMIbcfQCwKsAcNcKZK4/J4X1fH6pB668msEzCYgIdQ4KnGRS83XMs7Nm7GvWrkmn4OMLco8fGJlxc3L50XJPVe4r5YL8r7N3Zu2SEwc81Dj49+Li4nM+uOvDB2JjY3jzgc3xD8380xs69KjzAG/8CmTOO1cszisQr8KibwTkTYA8GULecgV/KzZCCJB23+CJyds37tjGBhcpXEuy9+UcnXDLRA4FHgCMemL4Yc2jRT552+S6oQYrvUGjnNjYGAaAjo06FiakJBSf4+2cBjDufMA7K5E+szv/uLgn+l8N0D8AXHL2so1Rcrgo+faM8UnNBzQtrtc2TTt5qKhy8xdZUQSqti69dvg1xTNffk8UZ5eEXPyctXVLh+V7lzXq3CAj+9ut33TNP1ZwLp38eQyMXonM1eeLwwU/+qk3+tVn8DQAV9R2RG83sO3BiS88UHrHpeNbs3GmvEGVYQjLq0D5JedwT2sJGLscmQcu5BovmEstx5LDgPZbgCYDqKxNAG96YOTpyfc+U/fM4AEA+ypQ3qiG4OkAphB40IWCB9TS09tysN/IwYFllyB9KYB2AC54gbQ31mskxiduXf6PlW1qcUy2ATRuBTJn5OCgXhsnrPUHMPZGPw/A4xl4CEDdC7662mF8xwG8qkN/Yw2W1+rzVS/aI0B74fJ4gO4FcOcFA3n+WwGAjwB+aQWWFlyMH7joD6G9DP1jJOQtAMYA6IRf5snBWwHMBviDFVhaeDF/6Bd7DHIv9PUAaAXgFgBDADQG4KsFJyUAfgDZAC0g4CMCspZhif+XuK9/y4O4e6GPB6AGDOpBQB8AXQE0hFnZhJ3hulhVDeUwlxmsM5UTrCLwwWVY6v+l7+U/5lHwl6NvpB9IJiABoASAo5WFkqJHpwgolEChD+J4Jhafwq/br9v/++1/AR81MtSHzRANAAAAAElFTkSuQmCC
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - namespaces
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - update
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterroles
+          verbs:
+          - create
+          - delete
+          - get
+        - apiGroups:
+          - security.openshift.io
+          resourceNames:
+          - hostnetwork
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: netobserv-controller-manager
+      deployments:
+      - name: netobserv-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: network-observability-operator
+              control-plane: controller-manager
+              version: 0.1.0
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app: network-observability-operator
+                control-plane: controller-manager
+                version: 0.1.0
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources: {}
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                command:
+                - /manager
+                image: quay.io/netobserv/network-observability-operator:0.1.0
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 200m
+                    memory: 100Mi
+                  requests:
+                    cpu: 100m
+                    memory: 20Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: netobserv-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: netobserv-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - network observability
+  - ipfix
+  - flow tracing
+  - flows
+  - network
+  - observability
+  links:
+  - name: Project page
+    url: https://github.com/netobserv/network-observability-operator
+  - name: Issue tracker
+    url: https://github.com/netobserv/network-observability-operator/issues
+  - name: Discussion board
+    url: https://github.com/netobserv/network-observability-operator/discussions
+  maintainers:
+  - email: jtakvori@redhat.com
+    name: Joel Takvorian
+  - email: jpinsonn@redhat.com
+    name: Julien Pinsonneau
+  - email: mmaciasl@redhat.com
+    name: Mario Macias
+  - email: ocazade@redhat.com
+    name: Olivier Cazade
+  maturity: alpha
+  provider:
+    name: Red Hat
+    url: https://www.redhat.com
+  version: 0.1.0

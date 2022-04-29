@@ -1,0 +1,354 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "apis.integrityshield.io/v1",
+          "kind": "IntegrityShield",
+          "metadata": {
+            "finalizers": [
+              "cleanup.finalizers.integrityshield.io"
+            ],
+            "name": "integrity-shield"
+          },
+          "spec": {
+            "affinity": {},
+            "labels": {
+              "app": "ishield-api"
+            },
+            "observer": {
+              "enabled": true,
+              "exportDetailResult": true,
+              "image": "quay.io/stolostron/integrity-shield-observer",
+              "imagePullPolicy": "IfNotPresent",
+              "interval": "5",
+              "logLevel": "info",
+              "name": "integrity-shield-observer",
+              "resources": {
+                "limits": {
+                  "cpu": "250m",
+                  "memory": "256Mi"
+                }
+              },
+              "resultDetailConfigKey": "config.yaml",
+              "resultDetailConfigName": "verify-resource-result",
+              "selector": {
+                "app": "integrity-shield-observer"
+              }
+            },
+            "rego": "package integrityshieldcheck\nviolation[{\"msg\": msg}] {\n  not is_allowed_kind\n  not is_excluded\n  is_create_or_update\n  ishield_input := {\"parameters\":input.parameters, \"request\":input.review}\n  reqdata := json.marshal(ishield_input)\n  url := \"https://integrity-shield-api.REPLACE_WITH_SERVER_NAMESPSCE.svc:8123/api/request\"\n  resp := http_post(url, reqdata)\n  should_be_denied(resp)\n  not is_detect_mode\n  result := get_result(resp)\n  msg := sprintf(\"denied; %v\", [result])\n}\n\nhttp_post(url, postdata) = resp {\n  resp := http.send({\n    \"url\": url,\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Accept\": \"application/json\",\n      \"Content-type\": \"application/json\",\n    },\n    \"raw_body\": postdata,\n    \"timeout\": \"2500ms\",\n    \"raise_error\": false,\n    \"tls_ca_cert\": REPLACE_WITH_CA_CERT\n  })\n}\n\n# get decision result from API response\nget_result(resp) = result {\n  raw_body := object.get(resp, \"raw_body\", null)\n  not is_null(raw_body)\n  result := json.unmarshal(raw_body)\n}\n# if error, return it as result\nget_result(resp) = result {\n  raw_body := object.get(resp, \"raw_body\", null)\n  is_null(raw_body)\n  error_msg := object.get(resp, \"error\", \"\")\n  result := {\"http_error\":error_msg}\n}\n\n# if API response is null, deny\nshould_be_denied(resp) {\n  is_null(resp)\n}\n\n# if API response has status_code other than 200, deny\nshould_be_denied(resp) {\n  not is_null(resp)\n  resp.status_code != 200\n}\n\n# if decision result is \"allow == false\" or not set, then deny\nshould_be_denied(resp) {\n  not is_null(resp)\n  result := get_result(resp)\n  allow := object.get(result, \"allow\", false)\n  allow == false\n}\n\n# request check\nis_create_or_update { is_create }\nis_create_or_update { is_update }\nis_create { input.review.operation == \"CREATE\" }\nis_update { input.review.operation == \"UPDATE\" }\n\n# shield config: allow\nis_allowed_kind { skip_kinds[_].kind == input.review.kind.kind }\n# shield config: inScopeNamespaceSelector\nis_excluded { exclude_namespaces[_] = input.review.namespace}\n\n# detect mode\nis_detect_mode { enforce_mode == \"detect\" }\n\n################### \n# Default setting #\n###################\n\n# Mode whether to deny a invalid request [enforce/detect]\nenforce_mode = \"enforce\"\n\n# kinds to be skipped\nskip_kinds = [\n          {\n            \"kind\": \"Event\"\n          },\n          {\n            \"kind\": \"Lease\"\n          },\n          {\n            \"kind\": \"Endpoints\"\n          },\n          {\n            \"kind\": \"TokenReview\"\n          },\n          {\n            \"kind\": \"SubjectAccessReview\"\n          },\n          {\n            \"kind\": \"SelfSubjectAccessReview\"\n          }\n        ]\n\n# exclude namespaces\nexclude_namespaces = [\n                      \"kube-node-lease\",\n                      \"kube-public\",\n                      \"kube-storage-version-migrator-operator\",\n                      \"kube-system\",\n                      \"open-cluster-management\",\n                      \"open-cluster-management-hub\",\n                      \"open-cluster-management-agent\",\n                      \"open-cluster-management-agent-addon\",\n                      \"openshift\",\n                      \"openshift-apiserver\",\n                      \"openshift-apiserver-operator\",\n                      \"openshift-authentication\",\n                      \"openshift-authentication-operator\",\n                      \"openshift-cloud-credential-operator\",\n                      \"openshift-cluster-csi-drivers\",\n                      \"openshift-cluster-machine-approver\",\n                      \"openshift-cluster-node-tuning-operator\",\n                      \"openshift-cluster-samples-operator\",\n                      \"openshift-cluster-storage-operator\",\n                      \"openshift-cluster-version\",\n                      \"openshift-compliance\",\n                      \"openshift-config\",\n                      \"openshift-config-managed\",\n                      \"openshift-config-operator\",\n                      \"openshift-console\",\n                      \"openshift-console-operator\",\n                      \"openshift-console-user-settings\",\n                      \"openshift-controller-manager\",\n                      \"openshift-controller-manager-operator\",\n                      \"openshift-dns\",\n                      \"openshift-dns-operator\",\n                      \"openshift-etcd\",\n                      \"openshift-etcd-operator\",\n                      \"openshift-gatekeeper-system\",\n                      \"openshift-image-registry\",\n                      \"openshift-infra\",\n                      \"openshift-ingress\",\n                      \"openshift-ingress-canary\",\n                      \"openshift-ingress-operator\",\n                      \"openshift-insights\",\n                      \"openshift-kni-infra\",\n                      \"openshift-kube-apiserver\",\n                      \"openshift-kube-apiserver-operator\",\n                      \"openshift-kube-controller-manager\",\n                      \"openshift-kube-controller-manager-operator\",\n                      \"openshift-kube-scheduler\",\n                      \"openshift-kube-scheduler-operator\",\n                      \"openshift-kube-storage-version-migrator\",\n                      \"openshift-kube-storage-version-migrator-operator\",\n                      \"openshift-kubevirt-infra\",\n                      \"openshift-machine-api\",\n                      \"openshift-machine-config-operator\",\n                      \"openshift-marketplace\",\n                      \"openshift-monitoring\",\n                      \"openshift-multus\",\n                      \"openshift-network-diagnostics\",\n                      \"openshift-network-operator\",\n                      \"openshift-node\",\n                      \"openshift-oauth-apiserver\",\n                      \"openshift-openstack-infra\",\n                      \"openshift-operators\",\n                      \"openshift-operator-lifecycle-manager\",\n                      \"openshift-ovirt-infra\",\n                      \"openshift-ovn-kubernetes\",\n                      \"openshift-sdn\",\n                      \"openshift-service-ca\",\n                      \"openshift-service-ca-operator\",\n                      \"openshift-user-workload-monitoring\",\n                      \"openshift-vsphere-infra\"\n                  ]\n",
+            "reporter": {
+              "image": "quay.io/stolostron/integrity-shield-reporter",
+              "imagePullPolicy": "IfNotPresent",
+              "intervalSeconds": "10",
+              "name": "integrity-shield-reporter",
+              "resources": {
+                "limits": {
+                  "cpu": "100m",
+                  "memory": "128Mi"
+                }
+              }
+            },
+            "requestHandlerConfig": "defaultConstraintAction:\n  mode: inform\nsideEffect: \n  createDenyEvent: true\nlog:\n  level: info\n  manifestSigstoreLogLevel: info\n  format: json\ndecisionReporterConfig:\n  enabled: true\nrequestFilterProfile: \n  skipObjects:\n  - kind: ConfigMap\n    name: kube-root-ca.crt\n  - kind: ConfigMap\n    name: openshift-service-ca.crt\n  ignoreFields:\n  - fields:\n    - spec.host\n    objects:\n    - kind: Route\n  - fields:\n    - metadata.namespace\n    objects:\n    - kind: ClusterServiceVersion\n  - fields:\n    - metadata.labels.app.kubernetes.io/instance\n    - metadata.managedFields.*\n    - metadata.resourceVersion\n    - metadata.selfLink\n    - metadata.annotations.control-plane.alpha.kubernetes.io/leader\n    - metadata.annotations.kubectl.kubernetes.io/last-applied-configuration\n    - metadata.finalizers*\n    - metadata.annotations.namespace\n    - metadata.annotations.deprecated.daemonset.template.generation\n    - metadata.creationTimestamp\n    - metadata.uid\n    - metadata.generation\n    - status\n    - metadata.annotations.deployment.kubernetes.io/revision\n    - metadata.annotations.cosign.sigstore.dev/imageRef\n    - metadata.annotations.cosign.sigstore.dev/bundle\n    - metadata.annotations.cosign.sigstore.dev/message\n    - metadata.annotations.cosign.sigstore.dev/certificate\n    - metadata.annotations.cosign.sigstore.dev/signature\n    objects:\n    - name: '*'\n  - fields:\n    - secrets.*.name\n    - imagePullSecrets.*.name\n    objects:\n    - kind: ServiceAccount\n  - fields:\n    - spec.ports.*.nodePort\n    - spec.clusterIP\n    - spec.clusterIPs.0\n    objects:\n    - kind: Service\n  - fields:\n    - metadata.labels.olm.api.*\n    - metadata.labels.operators.coreos.com/*\n    - metadata.annotations.*\n    - spec.install.spec.deployments.*.spec.template.spec.containers.*.resources.limits.cpu\n    - spec.cleanup.enabled\n    objects:\n    - kind: ClusterServiceVersion\n  skipUsers:\n  - users: \n    - system:admin\n    - system:apiserver\n    - system:kube-scheduler\n    - system:kube-controller-manager\n    - system:serviceaccount:kube-system:generic-garbage-collector\n    - system:serviceaccount:kube-system:attachdetach-controller\n    - system:serviceaccount:kube-system:certificate-controller\n    - system:serviceaccount:kube-system:clusterrole-aggregation-controller\n    - system:serviceaccount:kube-system:cronjob-controller\n    - system:serviceaccount:kube-system:disruption-controller\n    - system:serviceaccount:kube-system:endpoint-controller\n    - system:serviceaccount:kube-system:horizontal-pod-autoscaler\n    - system:serviceaccount:kube-system:ibm-file-plugin\n    - system:serviceaccount:kube-system:ibm-keepalived-watcher\n    - system:serviceaccount:kube-system:ibmcloud-block-storage-plugin\n    - system:serviceaccount:kube-system:job-controller\n    - system:serviceaccount:kube-system:namespace-controller\n    - system:serviceaccount:kube-system:node-controller\n    - system:serviceaccount:kube-system:job-controller\n    - system:serviceaccount:kube-system:pod-garbage-collector\n    - system:serviceaccount:kube-system:pv-protection-controller\n    - system:serviceaccount:kube-system:pvc-protection-controller\n    - system:serviceaccount:kube-system:replication-controller\n    - system:serviceaccount:kube-system:resourcequota-controller\n    - system:serviceaccount:kube-system:service-account-controller\n    - system:serviceaccount:kube-system:statefulset-controller\n  - objects: \n    - kind: ControllerRevision\n    - kind: Pod\n    users: \n    - system:serviceaccount:kube-system:daemon-set-controller\n  - objects: \n    - kind: Pod\n    - kind: PersistentVolumeClaim\n    users: \n    - system:serviceaccount:kube-system:persistent-volume-binder\n  - objects: \n    - kind: ReplicaSet\n    users: \n    - system:serviceaccount:kube-system:deployment-controller\n  - objects: \n    - kind: Pod\n    users:  \n    - system:serviceaccount:kube-system:replicaset-controller\n  - objects: \n    - kind: PersistentVolumeClaim\n    users: \n    - system:serviceaccount:kube-system:statefulset-controller\n  - objects: \n    - kind: ServiceAccount\n    users: \n    - system:kube-controller-manager\n  - objects: \n    - kind: EndpointSlice\n    users: \n    - system:serviceaccount:kube-system:endpointslice-controller\n  - objects: \n    - kind: Secret\n    users: \n    - system:kube-controller-manager\n  - users: \n    - system:serviceaccount:openshift-marketplace:marketplace-operator\n    - system:serviceaccount:openshift-monitoring:cluster-monitoring-operator\n    - system:serviceaccount:openshift-network-operator:default\n    - system:serviceaccount:openshift-monitoring:prometheus-operator\n    - system:serviceaccount:openshift-cloud-credential-operator:default\n    - system:serviceaccount:openshift-machine-config-operator:default\n    - system:serviceaccount:openshift-infra:namespace-security-allocation-controller\n    - system:serviceaccount:openshift-cluster-version:default\n    - system:serviceaccount:openshift-authentication-operator:authentication-operator\n    - system:serviceaccount:openshift-apiserver-operator:openshift-apiserver-operator\n    - system:serviceaccount:openshift-kube-scheduler-operator:openshift-kube-scheduler-operator\n    - system:serviceaccount:openshift-kube-controller-manager-operator:kube-controller-manager-operator\n    - system:serviceaccount:openshift-controller-manager:openshift-controller-manager-sa\n    - system:serviceaccount:openshift-controller-manager-operator:openshift-controller-manager-operator\n    - system:serviceaccount:openshift-kube-apiserver-operator:kube-apiserver-operator\n    - system:serviceaccount:openshift-sdn:sdn-controller\n    - system:serviceaccount:openshift-machine-api:cluster-autoscaler-operator\n    - system:serviceaccount:openshift-machine-api:machine-api-operator\n    - system:serviceaccount:openshift-machine-config-operator:machine-config-controller\n    - system:serviceaccount:openshift-machine-api:machine-api-controllers\n    - system:serviceaccount:openshift-cluster-storage-operator:csi-snapshot-controller-operator\n    - system:serviceaccount:openshift-kube-controller-manager:localhost-recovery-client\n    - system:serviceaccount:openshift-kube-storage-version-migrator-operator:kube-storage-version-migrator-operator\n    - system:serviceaccount:openshift-etcd-operator:etcd-operator\n    - system:serviceaccount:openshift-service-ca:service-ca\n    - system:serviceaccount:openshift-config-operator:openshift-config-operator\n    - system:serviceaccount:openshift-kube-apiserver:localhost-recovery-client\n    - system:serviceaccount:openshift-cluster-node-tuning-operator:cluster-node-tuning-operator\n  - objects:\n    - namespace: openshift-service-ca, openshift-network-operator\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-ca:configmap-cabundle-injector-sa\n  - objects: \n    - namespace: openshift-service-ca-operator\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-ca-operator:service-ca-operator\n  - objects: \n    - namespace: openshift-service-catalog-controller-manager-operator\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-catalog-controller-manager-operator:openshift-service-catalog-controller-manager-operator\n  - objects: \n    - namespace: openshift-console-operator, openshift-console\n    users: \n    - system:serviceaccount:openshift-console-operator:console-operator\n  - objects: \n    - namespace: openshift-service-ca\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-ca:apiservice-cabundle-injector-sa\n    - namespace: openshift-service-ca\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-ca:service-serving-cert-signer-sa\n  - objects: \n    - namespace: openshift-service-catalog-apiserver-operator\n      kind: ConfigMap\n    users: \n    - system:serviceaccount:openshift-service-catalog-apiserver-operator:openshift-service-catalog-apiserver-operator\n  - objects: \n    - namespace: openshift-operator-lifecycle-manager\n    users: \n    - system:serviceaccount:openshift-operator-lifecycle-manager:olm-operator-serviceaccount\n  - objects: \n    - namespace: openshift-cluster-node-tuning-operator\n      kind: ConfigMap,DaemonSet\n    users: \n    - system:serviceaccount:openshift-cluster-node-tuning-operator:cluster-node-tuning-operator\n  - objects: \n    - namespace: openshift\n      kind: Secret\n    users: \n    - system:serviceaccount:openshift-cluster-samples-operator:cluster-samples-operator\n  - objects: \n    - namespace: openshift-ingress\n      kind: Deployment\n    users: \n    - system:serviceaccount:openshift-ingress-operator:ingress-operator\n  - objects: \n    - kind: ServiceAccount, Secret\n    users: \n    - system:serviceaccount:openshift-infra:serviceaccount-pull-secrets-controller\n  - objects: \n    - namespace: openshift-marketplace\n      kind: Pod\n    users: \n    - system:node:*\n  - objects: \n    - kind: ServiceAccount, InstallPlan, OperatorGroup, Role, RoleBinding, Deployment\n    users: \n    - system:serviceaccount:openshift-operator-lifecycle-manager:olm-operator-serviceaccount\n  - objects: \n    - kind: InstallPlan, Role, RoleBinding, Deployment\n    users: \n    - system:serviceaccount:openshift-operator-lifecycle-manager:olm-operator-serviceaccount\n",
+            "requestHandlerConfigKey": "config.yaml",
+            "requestHandlerConfigName": "request-handler-config",
+            "security": {
+              "observerRole": "integrity-shield-observer-role",
+              "observerRoleBinding": "integrity-shield-observer-rolebinding",
+              "observerServiceAccountName": "integrity-shield-observer-sa",
+              "podSecurityPolicyName": "integrity-shield-psp",
+              "role": "integrity-shield-role",
+              "roleBinding": "integrity-shield-rolebinding",
+              "securityContext": {},
+              "serviceAccountName": "integrity-shield-sa"
+            },
+            "shieldApi": {
+              "image": "quay.io/stolostron/integrity-shield-api",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "integrity-shield-api",
+              "port": 8080,
+              "resources": {
+                "limits": {
+                  "cpu": "250m",
+                  "memory": "256Mi"
+                }
+              },
+              "selector": {
+                "app": "integrity-shield-api"
+              }
+            },
+            "shieldApiServiceName": "integrity-shield-api",
+            "shieldApiServicePort": 8123,
+            "shieldApiTlsSecretName": "integrity-shield-api-tls",
+            "useGatekeeper": true
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Security
+    certified: "false"
+    createdAt: "2022-01-25T18:00:00Z"
+    description: K8s Integrity Shield is a tool for built-in preventive integrity control for regulated cloud workloads.
+    operators.operatorframework.io/builder: operator-sdk-v1.15.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    containerImage: quay.io/stolostron/integrity-shield-operator:0.3.2
+    repository: https://github.com/stolostron/integrity-shield
+    support: Community
+  name: integrity-shield-operator.v0.3.2
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: IntegrityShield is the Schema for the integrityshields API
+        displayName: Integrity Shield
+        kind: IntegrityShield
+        name: integrityshields.apis.integrityshield.io
+        version: v1
+  description: |-
+    Kubernetes resources are represented as YAML files, which are applied to clusters when you create and update the resource. The YAML content is designed carefully to achieve the application desired state and should not be tampered with. If the YAML content is modified maliciously or accidentally, and applied to a cluster without notice, the cluster moves to an unexpected state.
+    [K8s Integrity Shield](https://github.com/stolostron/integrity-shield) provides preventive control for enforcing signature verification for any requests to create or update resources. This operator supports the installation and management of K8s Integrity Shield on cluster.
+    Two modes are selectively enabled on your cluster.
+    - Enforce (Admission Control): Block to deploy unauthorized Kubernetes resources. K8s Integrity Shield works with [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) to enable admission control based on signature verification for Kubernetes resources.
+    - Inform (Continuous Monitoring): monitor Kubernetes resource integrity and report if unauthorized Kubernetes resources are deployed on cluster
+    X509, PGP and Sigstore signing are supported for singing Kubernetes manifest YAML. K8s Integrity Shield supports Sigstore signing by using [k8s-manifest-sigstore](https://github.com/sigstore/k8s-manifest-sigstore).
+    ## Preparations before installation
+    OPA/Gatekeeper should be deployed before installing K8s Integrity Shield.
+    The installation instructions to deploy OPA/Gatekeeper components is [here](https://open-policy-agent.github.io/gatekeeper/website/docs/install/).
+    ## Installation
+    Install K8s Integrity Shield Operator by following the instruction after clicking Install button at the top right. Then you can create the operator Custom Resource `IntegrityShield` to complete installation.
+    If you want to change the settings such as default run mode (inform/enforce) or audit interval,  please check [here](https://github.com/stolostron/integrity-shield/blob/master/docs/README_ISHIELD_OPERATOR_CR.md).
+    To verify that installation was completed successfully,
+    run the following command.
+    The following three pods will be installed with default CR.
+    ```
+    $ kubectl get pod -n integrity-shield-operator-system
+    NAME                                                            READY   STATUS    RESTARTS   AGE
+    integrity-shield-api-5799f69896-zbcjs                           2/2     Running   0          88s
+    integrity-shield-observer-757f58f7d7-7pf5h                      1/1     Running   0          55s
+    integrity-shield-operator-controller-manager-6f94d7d684-dg5bt   2/2     Running   0          4m27s
+    ```
+    After installation, you can protect Kubernetes resources by following this [document](https://github.com/stolostron/integrity-shield/blob/master/docs/README_GETTING-STARTED-TUTORIAL.md).
+    ## Supported Versions
+    ### Platform
+    K8s Integrity Shield can be deployed with the operator. We have verified the feasibility on the following platforms:
+    - [RedHat OpenShift 4.7.1 and 4.9.0](https://www.openshift.com)
+    - [Kuberenetes v1.19.7 and v1.21.1](https://kubernetes.io)
+    ### OPA/Gatekeeper
+    - [gatekeeper-operator v0.2.0](https://github.com/open-policy-agent/gatekeeper)
+    - [gatekeeper v3.5.2 and v3.6.0](https://github.com/open-policy-agent/gatekeeper)
+  displayName: K8s Integrity Shield
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTkuMzQgMTk1LjE2Ij48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6IzI5NzdmZjt9LmNscy0ye2ZpbGw6I2ZmZjt9LmNscy0ze2ZpbGw6I2JhYzVmNzt9PC9zdHlsZT48L2RlZnM+PGcgaWQ9IkxheWVyXzIiIGRhdGEtbmFtZT0iTGF5ZXIgMiI+PGcgaWQ9IkxheWVyXzEtMiIgZGF0YS1uYW1lPSJMYXllciAxIj48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik05Mi41MywxLjYzLDI1LjgsMzMuNzdhMTYuNDUsMTYuNDUsMCwwLDAtOC45MSwxMS4xNkwuNDEsMTE3LjE0YTE2LjQ4LDE2LjQ4LDAsMCwwLDMuMTgsMTMuOTJMNDkuNzcsMTg5YTE2LjQ2LDE2LjQ2LDAsMCwwLDEyLjg2LDYuMTlIMTM2LjdBMTYuNDgsMTYuNDgsMCwwLDAsMTQ5LjU3LDE4OWw0Ni4xOC01Ny45MWExNi40NCwxNi40NCwwLDAsMCwzLjE3LTEzLjkyTDE4Mi40NCw0NC45M2ExNi40NCwxNi40NCwwLDAsMC04LjktMTEuMTZMMTA2LjgxLDEuNjNBMTYuNDgsMTYuNDgsMCwwLDAsOTIuNTMsMS42M1oiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0xNTYuMDYsNjMuNTdhOC4xMiw4LjEyLDAsMCwwLTQuOTEtNi4zbC00OC4zOS0yMGE4LjEsOC4xLDAsMCwwLTYuMTksMGwtNDguMzksMjBhOC4xNiw4LjE2LDAsMCwwLTQuOTEsNi4zLDEwNy4yOSwxMDcuMjksMCwwLDAsMy4zOSw0NS4xNiw5NC44MSw5NC44MSwwLDAsMCwxNS44MiwzMC44LDEwOC4zNywxMDguMzcsMCwwLDAsMzMuMjUsMjgsOC4xLDguMSwwLDAsMCw3Ljg3LDBjMTMuNTQtNy41NiwyNC43My0xNywzMy4yNS0yOGE5NC45NCw5NC45NCwwLDAsMCwxNS44My0zMC44LDEwNy40MSwxMDcuNDEsMCwwLDAsMy4zOC00NS4xNloiLz48cGF0aCBjbGFzcz0iY2xzLTMiIGQ9Ik05OS42NywxNjguNTVhOCw4LDAsMCwwLDMuOTMtMWMxMy41NC03LjU2LDI0LjczLTE3LDMzLjI1LTI4YTk0Ljk0LDk0Ljk0LDAsMCwwLDE1LjgzLTMwLjgsMTA3LjQxLDEwNy40MSwwLDAsMCwzLjM4LTQ1LjE2aDBhOC4xMiw4LjEyLDAsMCwwLTQuOTEtNi4zbC00OC4zOS0yMCIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTExNS44MSw1OC4yMywxMDIsNTIuNTJhNi4xOCw2LjE4LDAsMCwwLTQuNzQsMEw2MC4yMyw2Ny44OGE2LjIyLDYuMjIsMCwwLDAtMy43Niw0LjgyLDgyLjM0LDgyLjM0LDAsMCwwLDIuNTksMzQuNTksNzIuODMsNzIuODMsMCwwLDAsMTIuMTIsMjMuNiw4Mi44OCw4Mi44OCwwLDAsMCwyNS40NywyMS40NCw2LjIyLDYuMjIsMCwwLDAsNiwwLDgyLjg4LDgyLjg4LDAsMCwwLDI1LjQ3LTIxLjQ0LDcyLjY0LDcyLjY0LDAsMCwwLDEyLjEyLTIzLjYsODIuMjIsODIuMjIsMCwwLDAsMi42LTM0LjU5aDBhNi4yMiw2LjIyLDAsMCwwLTMuNzYtNC44MmwtOS42LTQiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik05OS42NywxNTQuMTFhNy4yMSw3LjIxLDAsMCwxLTMuNS0uOUE4NCw4NCwwLDAsMSw3MC4zOSwxMzEuNWE3My42LDczLjYsMCwwLDEtMTIuMjgtMjMuOTIsODMuMjQsODMuMjQsMCwwLDEtMi42My0zNUE3LjIzLDcuMjMsMCwwLDEsNTkuODUsNjdMOTYuOTEsNTEuNmE3LjIxLDcuMjEsMCwwLDEsNS41MSwwbDEzLjc3LDUuNy0uNzcsMS44NS0xMy43Ni01LjdhNS4xOCw1LjE4LDAsMCwwLTQsMEw2MC42MSw2OC44YTUuMTksNS4xOSwwLDAsMC0zLjE1LDRBODEuMjQsODEuMjQsMCwwLDAsNjAsMTA3YTcxLjgzLDcxLjgzLDAsMCwwLDEyLDIzLjI3LDgxLjkyLDgxLjkyLDAsMCwwLDI1LjE2LDIxLjE4LDUuMzIsNS4zMiwwLDAsMCw1LDAsODEuODUsODEuODUsMCwwLDAsMjUuMTctMjEuMTksNzEuNjYsNzEuNjYsMCwwLDAsMTItMjMuMjYsODEuMjksODEuMjksMCwwLDAsMi41Ny0zNC4xNyw1LjIyLDUuMjIsMCwwLDAtMy4xNi00bC05LjU5LTQsLjc2LTEuODQsOS42LDRhNy4yNSw3LjI1LDAsMCwxLDQuMzcsNS42LDgzLjQxLDgzLjQxLDAsMCwxLTIuNjMsMzUsNzMuNjMsNzMuNjMsMCwwLDEtMTIuMjksMjMuOTIsODQsODQsMCwwLDEtMjUuNzcsMjEuNzFBNy4yMSw3LjIxLDAsMCwxLDk5LjY3LDE1NC4xMVoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik05NS44LDEyMC4zNmE0LDQsMCwwLDEtMi42Ni0xTDgwLjc3LDEwOEE0LDQsMCwxLDEsODYsMTAxLjlsLjE0LjEyLDksOC40NCwxNy40LTIzLjg0YTQsNCwwLDEsMSw2Ljc4LDQuMjgsMy43NywzLjc3LDAsMCwxLS4zMS40MmwtMjAsMjcuNDZhNCw0LDAsMCwxLTIuODEsMS42M1oiLz48L2c+PC9nPjwvc3ZnPg==
+      mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - validatingwebhookconfigurations
+              verbs:
+                - '*'
+            - apiGroups:
+                - apiextensions.k8s.io
+              resources:
+                - customresourcedefinitions
+              verbs:
+                - '*'
+            - apiGroups:
+                - apis.integrityshield.io
+              resources:
+                - integrityshields
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apis.integrityshield.io
+              resources:
+                - integrityshields/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - apis.integrityshield.io
+              resources:
+                - integrityshields/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+                - events
+                - secrets
+                - serviceaccounts
+                - services
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterrolebindings
+                - clusterroles
+                - rolebindings
+                - roles
+              verbs:
+                - '*'
+            - apiGroups:
+                - templates.gatekeeper.sh
+              resources:
+                - constrainttemplates
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+          serviceAccountName: integrity-shield-operator-controller-manager
+      deployments:
+        - name: integrity-shield-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            strategy: {}
+            template:
+              metadata:
+                labels:
+                  control-plane: controller-manager
+              spec:
+                containers:
+                  - args:
+                      - --secure-listen-address=0.0.0.0:8443
+                      - --upstream=http://127.0.0.1:8080/
+                      - --logtostderr=true
+                      - --v=10
+                    image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                    name: kube-rbac-proxy
+                    ports:
+                      - containerPort: 8443
+                        name: https
+                    resources: {}
+                  - args:
+                      - --health-probe-bind-address=:8081
+                      - --metrics-bind-address=127.0.0.1:8080
+                      - --leader-elect
+                    command:
+                      - /ishield-op-app/manager
+                    image: quay.io/stolostron/integrity-shield-operator:0.3.2
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 500Mi
+                      requests:
+                        cpu: 200m
+                        memory: 200Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                serviceAccountName: integrity-shield-operator-controller-manager
+                terminationGracePeriodSeconds: 10
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+                - coordination.k8s.io
+              resources:
+                - configmaps
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: integrity-shield-operator-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: false
+      type: AllNamespaces
+  keywords:
+    - integrity
+  links:
+    - name: Integrity Shield Operator
+      url: https://github.com/stolostron/integrity-shield
+    - name: Operator Documentation
+      url: https://github.com/stolostron/integrity-shield/tree/master/docs  
+  maintainers:
+    - email: acm-contact@redhat.com
+      name: Community
+  maturity: alpha
+  provider:
+    name: Community
+  replaces: integrity-shield-operator.v0.3.1
+  version: 0.3.2

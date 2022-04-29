@@ -15,7 +15,7 @@ env:
   OPP_SCRIPT_ENV_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-env.sh"
   OPP_SCRIPT_ENV_OPRT_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-oprt.sh"
   OPP_IMAGE: "quay.io/operator_testing/operator-test-playbooks:latest"
-  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks/"
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
   OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_THIS_REPO_BASE: "https://github.com"
   OPP_THIS_REPO: "k8s-operatorhub/community-operators"
@@ -24,15 +24,19 @@ env:
   OPP_RELEASE_BUNDLE_ORGANIZATION: "operatorhubio"
   OPP_RELEASE_INDEX_REGISTRY: "quay.io"
   OPP_RELEASE_INDEX_ORGANIZATION: "operatorhubio"
-  OPP_RELEASE_INDEX_NAME: "catalog"
-  OPP_MIRROR_INDEX_MULTIARCH_BASE: "registry.redhat.io/openshift4/ose-operator-registry:v4.5"
+  OPP_RELEASE_INDEX_NAME: "catalog_tmp"
+  OPP_MIRROR_INDEX_MULTIARCH_BASE: "registry.redhat.io/openshift4/ose-operator-registry"
+  OPP_MULTIARCH_SUPPORTED_VERSIONS: "v4.9"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
-  IIB_INPUT_REGISTRY_USER: "jbreza"
+  IIB_INPUT_REGISTRY_USER: "mavala"
   OPP_PROD: 0
   OPP_DRY_RUN: 0
-  KIND_KUBE_VERSION: "v1.21.1"
+  KIND_VERSION: "v0.12.0"
+  KIND_KUBE_VERSION: "v1.22.7"
   OPP_PRODUCTION_TYPE: "k8s"
   OPP_REVIEWERS_ENABLED: 1
+  OPP_FORCE_DEPLOY_ON_K8S_OPENSHIFT_VERSION: 4.8
+#  ARTEFACT_PATH: "/tmp/operator-test" #hardcoded for now
 
 
 jobs:
@@ -41,30 +45,12 @@ jobs:
     name: "PR-traffic-light"
     runs-on: ubuntu-latest
     steps:
-      # Checks out a copy of your repository on the ubuntu-latest machine
-      # - name: Checkout code
-      #   uses: actions/checkout@v2
-      # - id: files
-      #   uses: jitterbit/get-changed-files@v1
-      #   continue-on-error: true
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.x'
       - name: Install dependencies
         run: python -m pip install --upgrade pip yq
-      # - name: Operator traffic light
-      #   id: op-traffic-light
-      #   env:
-      #     OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
-      #     OPP_MODIFIED_FILES: "${{ steps.files.outputs.modified }}"
-      #     OPP_ADDED_MODIFIED_FILES: "${{ steps.files.outputs.added_modified }}"
-      #     OPP_RENAMED_FILES: "${{ steps.files.outputs.renamed }}"
-      #     OPP_REMOVED_FILES: "${{ steps.files.outputs.removed }}"
-      #   run: |
-      #     echo "Using script '$OPP_SCRIPT_ENV_URL' ..."
-      #     echo "global labels $OPP_LABELS"
-      #     bash <(curl -sL $OPP_SCRIPT_ENV_URL)
       - name: Operator traffic light
         id: op-traffic-light
         env:
@@ -79,6 +65,68 @@ jobs:
           echo "global labels $OPP_LABELS"
           bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
 
+      - name: Operator info
+        id: op-info
+        if: steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1'
+        env:
+          OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_PR_AUTHOR: "${{ github.event.pull_request.user.login }}"
+          OPP_OPRT_REPO: "${{ github.event.pull_request.head.repo.full_name }}"
+          OPP_OPRT_SHA: "${{ github.event.pull_request.head.sha }}"
+          OPP_OPRT_SRC_REPO: "${{ github.event.pull_request.base.repo.full_name }}"
+          OPP_OPRT_SRC_BRANCH: "${{ github.event.pull_request.base.ref }}"
+          OPP_AUTO_LABEL: "${{ steps.op-traffic-light.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          ANSIBLE_FORCE_COLOR: 1
+          ANSIBLE_DISPLAY_SKIPPED_HOSTS: 0
+          ANSIBLE_STDOUT_CALLBACK: "yaml"
+        run: |
+          # OPP_ANSIBLE_PULL_BRANCH="upstream-community-dev"
+          [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
+
+
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false upstream/local.yml --tags reset_tools,operator_info -e operator_dir=$PWD/operators/operators/${{ steps.op-traffic-light.outputs.opp_name }} -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e strict_k8s_bundles=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
+
+      - name: Operator info (result)
+        id: op-info-result
+        if: always() && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' )
+        run: |
+          echo "::set-output name=opp_check_err_k8s_bundles::0"
+          echo "::set-output name=opp_check_err_k8s_bundles_value::"
+          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "::set-output name=opp_check_err_k8s_bundles::1" || true
+          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "::set-output name=opp_check_err_k8s_bundles_value::$(cat /tmp/operator-test/op_failed_k8s_bundles.yaml | yq -r '.operators | @csv' | tr -d '"')" || true
+      - name: Operator info (comment)
+        id: op-info-comment
+        if: always() && steps.op-info-result.outputs.opp_check_err_k8s_bundles == '1' && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' )
+        uses: mshick/add-pr-comment@v1
+        with:
+          message: |
+            Dear @${{ github.event.pull_request.user.login }},
+            There are some operators version that are using **deprecated api** and kubernetes max versions (`operatorhub.io/ui-metadata-max-k8s-version`) is **NOT** set correctly under annotation field in CSV file.
+            
+            Affected versions : `${{ steps.op-info-result.outputs.opp_check_err_k8s_bundles_value }}`
+            
+            More info in 'Kubernetes max version in CSV' section [here](https://redhat-openshift-ecosystem.github.io/community-operators-pipeline/operator-ci-yaml/#kubernetes-max-version-in-csv).
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
+
+      - name: Upload operator_info
+        uses: actions/upload-artifact@v2
+        if: steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' 
+        with:
+          name: operator_info
+          path: "/tmp/operator-test/op_info.yaml"
+      - name: Upload converted operators
+        if: steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' 
+        uses: actions/upload-artifact@v2
+        with:
+          name: operators_converted
+          path: "/tmp/operator-test/operators"
+      - shell: bash
+        if: steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' 
+        run: |
+          ls /tmp/operator-test/
+          cat /tmp/operator-test/op_info.yaml
+
     outputs:
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
       opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
@@ -87,20 +135,41 @@ jobs:
       opp_version: "${{ steps.op-traffic-light.outputs.opp_version }}"
       opp_ci_yaml_only: "${{ steps.op-traffic-light.outputs.opp_ci_yaml_only }}"
       opp_op_delete: "${{ steps.op-traffic-light.outputs.opp_op_delete }}"
+      opp_recreate: "${{ steps.op-traffic-light.outputs.opp_recreate }}"
+      opp_is_new_operatror: "${{ steps.op-traffic-light.outputs.opp_is_new_operatror }}"
+      opp_auto_packagemanifest_cluster_version_label: "${{ steps.op-traffic-light.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+      opp_installation_skipped: "${{ steps.op-traffic-light.outputs.opp_installation_skipped }}"
 
   test-kiwi:
     name: "kiwi / Full operator test"
     needs: pr-check
-    if: needs.pr-check.outputs.opp_test_ready == '1'
+    if: needs.pr-check.outputs.opp_test_ready == '1' && (needs.pr-check.outputs.outputs.opp_op_delete == '0' || needs.pr-check.outputs.opp_is_new_operatror == '1' || needs.pr-check.outputs.outputs.opp_recreate == '1' )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Download operator_info
+        uses: actions/download-artifact@v2
+        with:
+          name: operator_info
+          path: "/tmp/operator-test/"
+      - name: Download converted operators
+        uses: actions/download-artifact@v2
+        with:
+          name: operators_converted
+          path: "/tmp/operator-test/operators"
+      - name: Debug artefacts
+        shell: bash
+        run: |
+          ls /tmp/operator-test/operators
+          head /tmp/operator-test/op_info.yaml
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPP_INSTALLATION_SKIP: "${{ needs.pr-check.outputs.opp_installation_skipped }}"
         run: |
           echo "kiwi operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
           bash <(curl -sL $OPP_SCRIPT_URL) kiwi "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
@@ -119,7 +188,7 @@ jobs:
           message: |
             Dear @${{ github.event.pull_request.user.login }},
             :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) might **not** run on k8s 1.22 or  in the Openshift version 4.9. **For more info see details bellow.**
-            :---: | :---
+            :---: | :--- |
 
             **IMPORTANT** : Kubernetes has been deprecating API(s) which will be removed and no longer available in 1.22 and in the Openshift version 4.9. Note that your project will be unable to use them on OCP 4.9/K8s 1.22 and then, it is strongly recommended to check [Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22) and ensure that your projects have them migrated and are not using any deprecated API.
             To prevent workflow issues, its users will need to have installed in their OCP cluster a version of your operator compatible with 4.9 before they try to upgrade their cluster from any previous version to 4.9 or higher. However, If you still need to publish the operator bundles with any of these API(s) for use on earlier k8s/OCP versions, ensure that the operator bundle is configured accordingly:
@@ -141,8 +210,13 @@ jobs:
   test-lemon:
     name: "lemon / Deploy from scratch"
     needs: pr-check
-    if: needs.pr-check.outputs.opp_test_ready == '1'
+    if: needs.pr-check.outputs.opp_test_ready == '1' && (needs.pr-check.outputs.outputs.opp_op_delete == '0' || needs.pr-check.outputs.opp_is_new_operatror == '1' || needs.pr-check.outputs.outputs.opp_recreate == '1')
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        index-tag: ['latest']
+
+      fail-fast: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -151,17 +225,24 @@ jobs:
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
         run: |
-          echo "lemon operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
-          bash <(curl -sL $OPP_SCRIPT_URL) lemon "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
+          echo "lemon_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
+          bash <(curl -sL $OPP_SCRIPT_URL) lemon_${OPERATOR_INDEX_TAG} "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
 
 
 
   test-orange-latest:
-    name: "orange / Deploy k8s latest"
+    name: "orange / Deploy k8s"
     needs: pr-check
-    if: needs.pr-check.outputs.opp_test_ready == '1' && needs.pr-check.outputs.opp_op_delete == '0'
+    if: needs.pr-check.outputs.opp_test_ready == '1' && (needs.pr-check.outputs.opp_op_delete == '0' || needs.pr-check.outputs.opp_is_new_operatror == '1' || needs.pr-check.outputs.outputs.opp_recreate == '1' )
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        index-tag: ['latest']
+
+      fail-fast: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -170,9 +251,15 @@ jobs:
       - name: Operator test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
+          OPP_MIRROR_INDEX_ENABLED: 1
+          OPP_IIB_INSTALL: 1
+          IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
+          OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
+          OPP_INSTALLATION_SKIP: "${{ needs.pr-check.outputs.opp_installation_skipped }}"
         run: |
-          echo "orange operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
-          bash <(curl -sL $OPP_SCRIPT_URL) orange "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
+          echo "orange_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
+          bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
 
 
   test-summary:

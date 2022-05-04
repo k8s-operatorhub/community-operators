@@ -166,14 +166,56 @@ jobs:
           ls /tmp/operator-test/operators
           head /tmp/operator-test/op_info.yaml
       - name: Operator test
+        id: operator-test
         env:
           OPP_LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
           OPP_INSTALLATION_SKIP: "${{ needs.pr-check.outputs.opp_installation_skipped }}"
         run: |
           echo "kiwi operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
-          bash <(curl -sL $OPP_SCRIPT_URL) kiwi "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}"
-      - name: Search operator test error olm.maxOpenShiftVersion error 
+          bash <(curl -sL $OPP_SCRIPT_URL) kiwi "operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}" || { RC=$?; echo $RC; true; }
+          echo $RC
+          if [[ $RC -gt 0 ]];then
+            OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER=/tmp/operator-test/operator-files/operator_sdk_bundle_validate_warnings_and_errors.txt
+            OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_warnings_and_errors.txt
+            docker cp op-test:$OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER $OPP_BUNDLE_VALIDATE_FILE || true
+            exit $RC
+          fi
+
+      - name: "Parse operator_sdk_bundle_validate_warnings_and_errors"
+        id: op-kiwi-test-err-bundle-validate
+        if: always()
+        run: |
+          echo "::set-output name=opp_check_err_bundle_validate::"
+          OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_warnings_and_errors.txt
+          if [ -f $OPP_BUNDLE_VALIDATE_FILE ] ;then
+            OPP_BUNDLE_VALIDATE_FILE_OUTPUT=$(cat $OPP_BUNDLE_VALIDATE_FILE)
+            echo $OPP_BUNDLE_VALIDATE_FILE_OUTPUT
+
+            OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//'%'/'%25'}"
+            OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//$'\n'/'%0A'}"
+            OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//$'\r'/'%0D'}"
+            echo "::set-output name=opp_check_err_bundle_validate::$OPP_BUNDLE_VALIDATE_FILE_OUTPUT"
+          fi
+
+      - name: "Comment operator_sdk_bundle_validate_warnings_and_errors if exists"
+        if: always() && steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate != ''
+        uses: mshick/add-pr-comment@v1
+        with:
+          message: |
+            Dear @${{ github.event.pull_request.user.login }},
+            :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) has some errors or warnings while doing `operator-sdk bundle validate`. 
+            :---: | :--- |
+            - `Errors` has to be fixed
+            - `Warnings` are informative and fixing them might improve your operator.
+
+            ${{ steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate }}
+
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
+          allow-repeats: true
+
+      - name: "Search operator test error olm.maxOpenShiftVersion error"
         id: op-kiwi-test-err-maxOpenShiftVersion
         if: always()
         run: |

@@ -7,6 +7,9 @@ This repo is the canonical source for Kubernetes Operators that appear on [Opera
 The solutions merged on this repository are distributed via the [OLM][olm] index catalog [quay.io/operatorhubio/catalog][quay.io].
 Users can install [OLM][olm] in any Kubernetes or vendor such as Openshift to consume this content by adding a new CatalogSource for the index image `quay.io/operatorhubio/catalog`. [(more info)][catalog]
 
+**NOTE** If you are looking to distribute solutions on Openshift/OKD catalog then, you also should publish them 
+into the repository [Community Operators](https://github.com/redhat-openshift-ecosystem/community-operators-prod).
+
 ## Documentation
 
 Full documentation is generated via [mkdoc](https://www.mkdocs.org/) and is located at [https://k8s-operatorhub.github.io/community-operators/](https://k8s-operatorhub.github.io/community-operators/)

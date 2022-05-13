@@ -19,7 +19,7 @@ Full documentation is generated via [mkdoc](https://www.mkdocs.org/) and is loca
 Some APIs versions are deprecated and are OR will no longer be served on the Kubernetes version 
 `1.22/1.25/1.26` and consequently on vendors like Openshift `4.9/4.12/4.13`.
 
-**What that does mean for you**
+**What does it mean for you?**
 
 Operator bundle versions using the removed APIs can not work successfully from the respective releases. 
 Therefore, it is recommended to check if your solutions are failing in these scenarios to let its users be aware. 

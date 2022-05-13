@@ -27,8 +27,7 @@ Note that you can inform via the CSV the minimal (`spec.minKubeVersion`) and the
 version (metadata.annotation `operatorhub.io/ui-metadata-max-k8s-version`) where your solution can 
 successfully work. This information can be checked on the details of each release on [OperatorHub.io](https://operatorhub.io).
 
-Please, make sure you check the following announcements to know how you can check these scenarios and adequately deal with these cases:
-
+Please, make sure you check the following announcements:
 - [How to deal with removal of v1beta1 CRD removals in Kubernetes 1.22](https://github.com/k8s-operatorhub/community-operators/discussions/468)
 - [Kubernetes API removals on 1.25/1.26 might impact your Operator. How to deal with it?](https://github.com/k8s-operatorhub/community-operators/discussions/1194)
 

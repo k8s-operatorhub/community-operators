@@ -180,6 +180,11 @@ jobs:
             OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER=/tmp/operator-test/operator-files/operator_sdk_bundle_validate_warnings_and_errors.txt
             OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_warnings_and_errors.txt
             docker cp op-test:$OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER $OPP_BUNDLE_VALIDATE_FILE || true
+
+            OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER=/tmp/operator-test/operator-files/operator_sdk_bundle_validate_info.txt
+            OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_info.txt
+            docker cp op-test:$OPP_BUNDLE_VALIDATE_FILE_IN_CONTAINER $OPP_BUNDLE_VALIDATE_FILE || true
+
             exit $RC
           fi
 
@@ -188,6 +193,9 @@ jobs:
         if: always()
         run: |
           echo "::set-output name=opp_check_err_bundle_validate::"
+          echo "::set-output name=operator_sdk_version::n/a"
+          echo "::set-output name=operator_sdk_args::n/a"
+
           OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_warnings_and_errors.txt
           if [ -f $OPP_BUNDLE_VALIDATE_FILE ] ;then
             OPP_BUNDLE_VALIDATE_FILE_OUTPUT=$(cat $OPP_BUNDLE_VALIDATE_FILE)
@@ -199,16 +207,21 @@ jobs:
             echo "::set-output name=opp_check_err_bundle_validate::$OPP_BUNDLE_VALIDATE_FILE_OUTPUT"
           fi
 
+          OPP_BUNDLE_VALIDATE_INFO_FILE=/tmp/operator_sdk_bundle_validate_info.txt
+          if [ -f $OPP_BUNDLE_VALIDATE_INFO_FILE ] ;then
+            echo "::set-output name=operator_sdk_version::$(sed '1q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)"
+            echo "::set-output name=operator_sdk_args::$(sed '2q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)"
+          fi
+
       - name: "Comment operator_sdk_bundle_validate_warnings_and_errors if exists"
         if: always() && steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate != ''
         uses: mshick/add-pr-comment@v1
         with:
           message: |
-            Dear @${{ github.event.pull_request.user.login }},
-            :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) has some errors or warnings while doing `operator-sdk bundle validate`. 
-            :---: | :--- |
-            - `Errors` has to be fixed
-            - `Warnings` are informative and fixing them might improve your operator.
+            Dear @${{ github.event.pull_request.user.login }},        
+            Some errors and/or warnings were found while doing the check of your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) against the entire suite of validators for Operator Framework with [Operator-SDK](https://github.com/operator-framework/operator-sdk) version `${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_version }}` and the command `$ operator-sdk bundle validate <bundle-path> ${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_args }}`. 
+            
+            **Errors (:bug:)  must be fixed while warnings (:warning:) are informative, and fixing them might improve the quality of your solution.**
 
             ${{ steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate }}
 

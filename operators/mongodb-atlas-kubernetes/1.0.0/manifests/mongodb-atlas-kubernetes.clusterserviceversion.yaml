@@ -1,0 +1,499 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "atlas.mongodb.com/v1",
+          "kind": "AtlasBackupPolicy",
+          "metadata": {
+            "name": "atlasbackuppolicy-sample"
+          },
+          "spec": {
+            "id": "1",
+            "items": [
+              {
+                "frequencyInterval": 6,
+                "frequencyType": "WEEKLY",
+                "id": "2",
+                "retentionUnit": "DAYS",
+                "retentionValue": 6
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "atlas.mongodb.com/v1",
+          "kind": "AtlasBackupSchedule",
+          "metadata": {
+            "name": "atlasbackupschedule-sample"
+          },
+          "spec": {
+            "autoExportEnabled": true,
+            "policies": [
+              {
+                "name": "atlas-default-backuppolicy",
+                "namespace": "mongodb-atlas-system"
+              },
+              {
+                "name": "atlas-default-backuppolicy2",
+                "namespace": "mongodb-atlas-system"
+              }
+            ],
+            "referenceHourOfDay": 10,
+            "referenceMinuteOfHour": 10,
+            "restoreWindowDays": 2
+          }
+        },
+        {
+          "apiVersion": "atlas.mongodb.com/v1",
+          "kind": "AtlasDatabaseUser",
+          "metadata": {
+            "name": "my-database-user"
+          },
+          "spec": {
+            "databaseName": "admin",
+            "passwordSecretRef": {
+              "name": "my-database-user-password"
+            },
+            "projectRef": {
+              "name": "my-project"
+            },
+            "roles": [
+              {
+                "databaseName": "admin",
+                "roleName": "readWriteAnyDatabase"
+              }
+            ],
+            "username": "david"
+          }
+        },
+        {
+          "apiVersion": "atlas.mongodb.com/v1",
+          "kind": "AtlasDeployment",
+          "metadata": {
+            "name": "my-atlas-cluster"
+          },
+          "spec": {
+            "deploymentSpec": {
+              "name": "test-cluster",
+              "providerSettings": {
+                "instanceSizeName": "M10",
+                "providerName": "AWS",
+                "regionName": "US_EAST_1"
+              }
+            },
+            "projectRef": {
+              "name": "my-project"
+            }
+          }
+        },
+        {
+          "apiVersion": "atlas.mongodb.com/v1",
+          "kind": "AtlasProject",
+          "metadata": {
+            "name": "my-project"
+          },
+          "spec": {
+            "name": "Test Atlas Operator Project",
+            "projectIpAccessList": [
+              {
+                "comment": "IP address for Application Server A",
+                "ipAddress": "192.0.2.15"
+              }
+            ]
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Database
+    containerImage: mongodb/mongodb-atlas-kubernetes-operator:1.0.0
+    description: The MongoDB Atlas Kubernetes Operator enables easy management of Clusters in MongoDB Atlas
+    operators.operatorframework.io/builder: operator-sdk-v1.15.0+git
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
+  name: mongodb-atlas-kubernetes.v1.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: AtlasBackupPolicy is the Schema for the atlasbackuppolicies API
+        displayName: Atlas Backup Policy
+        kind: AtlasBackupPolicy
+        name: atlasbackuppolicies.atlas.mongodb.com
+        version: v1
+      - description: AtlasBackupSchedule is the Schema for the atlasbackupschedules API
+        displayName: Atlas Backup Schedule
+        kind: AtlasBackupSchedule
+        name: atlasbackupschedules.atlas.mongodb.com
+        version: v1
+      - description: AtlasDatabaseUser is the Schema for the Atlas Database User API
+        displayName: Atlas Database User
+        kind: AtlasDatabaseUser
+        name: atlasdatabaseusers.atlas.mongodb.com
+        version: v1
+      - description: AtlasDeployment is the Schema for the atlasclusters API
+        displayName: Atlas Deployment
+        kind: AtlasDeployment
+        name: atlasdeployments.atlas.mongodb.com
+        version: v1
+      - description: AtlasProject is the Schema for the atlasprojects API
+        displayName: Atlas Project
+        kind: AtlasProject
+        name: atlasprojects.atlas.mongodb.com
+        version: v1
+  description: |
+    The MongoDB Atlas Operator provides a native integration between the Kubernetes orchestration platform and MongoDB Atlas —
+    the only multi-cloud document database service that gives you the versatility you need to build sophisticated and resilient applications that can adapt to changing customer demands and market trends.
+
+    > Current Status: *Beta*. The Operator gives users the ability to provision
+    > Atlas projects, clusters and database users using Kubernetes Specifications and bind connection information
+    > into applications deployed to Kubernetes.
+
+    ## Quick Start guide
+    ### Step 1. Deploy Kubernetes operator by clicking Install button.
+
+    ### Step 2. Create Atlas Cluster
+
+    **1.** Create an Atlas API Key Secret
+    In order to work with the Atlas Operator you need to provide [authentication information](https://docs.atlas.mongodb.com/configure-api-access)
+     to allow the Atlas Operator to communicate with Atlas API. Once you have generated a Public and Private key in Atlas, you can create a Kuberentes Secret with:
+    ```
+    kubectl create secret generic mongodb-atlas-operator-api-key \
+             --from-literal="orgId=<the_atlas_organization_id>" \
+             --from-literal="publicApiKey=<the_atlas_api_public_key>" \
+             --from-literal="privateApiKey=<the_atlas_api_private_key>" \
+             -n openshift-operators
+    ```
+    (Note, that you should use the namespace where the Operator was installed - it's `openshift-operators` by default)
+
+    **2.** Create an `AtlasProject` Custom Resource
+
+    The `AtlasProject` CustomResource represents Atlas Projects in our Kubernetes cluster. You need to specify
+    `projectIpAccessList` with the IP addresses or CIDR blocks of any hosts that will connect to the Atlas Cluster.
+    ```
+    apiVersion: atlas.mongodb.com/v1
+    kind: AtlasProject
+    metadata:
+      name: my-project
+    spec:
+      name: Test Atlas Operator Project
+      projectIpAccessList:
+        - ipAddress: "192.0.2.15"
+          comment: "IP address for Application Server A"
+        - ipAddress: "203.0.113.0/24"
+          comment: "CIDR block for Application Server B - D"
+    ```
+    **3.** Create an `AtlasDeployment` Custom Resource.
+    The example below is a minimal configuration to create an M10 Atlas cluster in the AWS US East region. For a full list of properties, check
+    `atlasclusters.atlas.mongodb.com` [CRD specification](config/crd/bases/atlas.mongodb.com_atlasclusters.yaml)):
+    ```
+    apiVersion: atlas.mongodb.com/v1
+    kind: AtlasDeployment
+    metadata:
+      name: my-atlas-cluster
+    spec:
+      name: "Test-cluster"
+      projectRef:
+        name: my-project
+      providerSettings:
+        instanceSizeName: M10
+        providerName: AWS
+        regionName: US_EAST_1
+    ```
+
+    **4.** Create a database user password Kubernetes Secret
+    The Secret must be created in the same namespace as the `AtlasDeployment` and `AtlasProject` were created.
+    ```
+    kubectl create secret generic the-user-password --from-literal="password=P@@sword%"
+    ```
+
+    **5.** Create an `AtlasDatabaseUser` Custom Resource
+
+    In order to connect to an Atlas Cluster the database user needs to be created. `AtlasDatabaseUser` resource should reference
+    the password Kubernetes Secret created in the previous step.
+    ```
+    apiVersion: atlas.mongodb.com/v1
+    kind: AtlasDatabaseUser
+    metadata:
+      name: my-database-user
+    spec:
+      roles:
+        - roleName: "readWriteAnyDatabase"
+          databaseName: "admin"
+      projectRef:
+        name: my-project
+      username: theuser
+      passwordSecretRef:
+        name: the-user-password
+    ```
+    **6.** Wait for the `AtlasDatabaseUser` Custom Resource to be ready
+
+    Wait until the AtlasDatabaseUser resource gets to "ready" status (it will wait until the cluster is created that may take around 10 minutes):
+    ```
+    kubectl get atlasdatabaseusers my-database-user -o=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+    True
+    ```
+    ### Step 3. Connect your application to the Atlas Cluster
+
+    The Atlas Operator will create a Kubernetes Secret with the information necessary to connect to the Atlas Cluster created
+    in the previous step. An application in the same Kubernetes Cluster can mount and use the Secret:
+
+    ```
+    ...
+    containers:
+          - name: test-app
+            env:
+             - name: "CONNECTION_STRING"
+               valueFrom:
+                 secretKeyRef:
+                   name: test-atlas-operator-project-test-cluster-theuser
+                   key: connectionStringStandardSrv
+
+    ```
+  displayName: MongoDB Atlas Operator
+  icon:
+    - base64data: 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mrIHXO4A/U+GbMqu5Kcp5HLA+xl9UwbovQWCq/XeGvs4fQBS1FXiBjg4BIbzlL3m8e7O1t7+PdPo7wdVb3KbaWTEXAAADRxpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+Cjx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IlhNUCBDb3JlIDQuNC4wLUV4aXYyIj4KIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIKICAgIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIgogICAgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIKICAgIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIKICAgIHhtbG5zOkdJTVA9Imh0dHA6Ly93d3cuZ2ltcC5vcmcveG1wLyIKICAgIHhtbG5zOnRpZmY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vdGlmZi8xLjAvIgogICAgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIgogICB4bXBNTTpEb2N1bWVudElEPSJnaW1wOmRvY2lkOmdpbXA6ZDk1YjhmMjctMWM0NS00YjU1LWEwZTMtNmNmMjM0Yzk1ZWVkIgogICB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOmVhMGY5MTI5LWJlMDItNDVjOS1iNGU4LTU3N2MxZTBiZGJhNyIKICAgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOjcyNmY4ZGFlLTM4ZTYtNGQ4Ni1hNTI4LWM0NTc4ZGE4ODA0NSIKICAgZGM6Rm9ybWF0PSJpbWFnZS9wbmciCiAgIEdJTVA6QVBJPSIyLjAiCiAgIEdJTVA6UGxhdGZvcm09Ik1hYyBPUyIKICAgR0lNUDpUaW1lU3RhbXA9IjE2MzQ4MzgwMTYyMTQ2MTMiCiAgIEdJTVA6VmVyc2lvbj0iMi4xMC4yNCIKICAgdGlmZjpPcmllbnRhdGlvbj0iMSIKICAgeG1wOkNyZWF0b3JUb29sPSJHSU1QIDIuMTAiPgogICA8eG1wTU06SGlzdG9yeT4KICAgIDxyZGY6U2VxPgogICAgIDxyZGY6bGkKICAgICAgc3RFdnQ6YWN0aW9uPSJzYXZlZCIKICAgICAgc3RFdnQ6Y2hhbmdlZD0iLyIKICAgICAgc3RFdnQ6aW5zdGFuY2VJRD0ieG1wLmlpZDo1YWNhZmVhMC0xZmY5LTRiMmUtYmY0NC02NTM3MzYwMGQzNjEiCiAgICAgIHN0RXZ0OnNvZnR3YXJlQWdlbnQ9IkdpbXAgMi4xMCAoTWFjIE9TKSIKICAgICAgc3RFdnQ6d2hlbj0iMjAyMS0xMC0yMVQxODo0MDoxNiswMTowMCIvPgogICAgPC9yZGY6U2VxPgogICA8L3htcE1NOkhpc3Rvcnk+CiAgPC9yZGY6RGVzY3JpcHRpb24+CiA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgCjw/eHBhY2tldCBlbmQ9InciPz6528V0AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAABYlAAAWJQFJUiTwAAAAB3RJTUUH5QoVESgQ+iToFAAAA8xJREFUeNrlW01PU0EUPTPV+oqb4h+wENYKXbmzsjLEKPAHwB1xQ6N7adiboBtrSAT5AaQmBpuYSN25MS17k5Zf0MemFGznungttCkf782bmTels2w6mbnnnnPv3DvzYrBhrMytIT01gz9/f5temkVv/NMUwKsg1MFEGvlizeTy3ALj9zuuGAf4T2QzydEBACwHINXzwwSOE29N7iAWqe7BsoOYsEdITx2ZigcsIupnzqh/8SC0/6Wx+aNy8yTg6X7rWsfEbu96/71JAGQzyY7n/Rg2AcZ3dQdFswA0Exs+je8KYUZ3UDQXA1bmlgFsScwkMFrEx++F4QXgPN/LaZpQR6IxiY2SO6QSGMj3Qd00jpPE5+FkgDz1B3kAMYt8sTQ8AGQzSTTHyqG83z+qcBpplVLQK4Hm2KpC473U2BzLDgcDwgY+QwFRIwP4knLjuwFRIQv0MGB5PgnntKwFAMUs0MMA53Rem/Ge25I4ufvCXgkQVrVXsSSW7JTAq7lpCJQNnK4IEJNhW2jqGdDGsrH6QrB5GyXwWMKXLoi5gdnL8dwuCXjRvy4xs0vjVGDonMa9MNlALQPiJxlJOcvruOlM2yMBzuQ3Q3Al44BFADA8lJ9LrtSKnD2wBwAhe/hhIVIZpWxiQJgG5qHkohYBoPP4q6tks2Qfh1GBzu3xhWQckM0eWgAIfprrBE+SN4LZBACTNIQzF4KO5EAnmxgQwhtckj2WMeBA8gARpqQ9sAcAAfnrbLk4QGBUsQcAHmIzXFLLrbZFDMgXS1KZoN2W1DHVwj6iUH8O4FQKPCcWc3t6AkGCTin0dpUDQPhq6OREgNixD4BmvBBYBlKNTaqpuChVD8B2wQWj98EnOrVA3hf4YHExJLb1l3FUsBeAfLEG0Bef//Y8H28FqSW2VT2p1VgNUi5QLKC4z1qCqoBYt78fkC/WfMWCwMUM21H5oFrzA4n4xrUt724xQy0fxRRVkd/LKQ0lWgHYLrgAvfQXN1vXSYAAmlUeS7VH63yxBMIVUvDdB1jX8S2BmZbYp70scNkRmXtXaQkOXN4b3FJNfbMAAEDzzoLcFRhV4TReaztOGAPAiwdPLgDh8OqUR7M6XoiaB6CbGtts4cLzwbtv1N8Z7hiv+Rsi823xzb0KRB8T7gMA3jxj59dcZoz3snBUY+VpCmD7nautXGcva2Aog8Siqa/Hov1sbuAxJZXgHC/o1Hz0Ehgsmn71/FIxaXz0AAwS8sj0ihYAcBb5CVJ9weFnwLnR1K6PHgC9FyJsFCVwq+9afAQlIITbnxXMjv+6222dh4/VtAAAAABJRU5ErkJggg==
+      mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasbackuppolicies
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasbackuppolicies/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasbackupschedules
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasbackupschedules/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasdatabaseusers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasdatabaseusers/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasdeployments
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasdeployments/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasprojects
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - atlas.mongodb.com
+              resources:
+                - atlasprojects/status
+              verbs:
+                - get
+                - patch
+                - update
+          serviceAccountName: mongodb-atlas-operator
+      deployments:
+        - name: mongodb-atlas-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: controller
+                app.kubernetes.io/instance: mongodb-atlas-kubernetes-operator
+                app.kubernetes.io/name: mongodb-atlas-kubernetes-operator
+            strategy: {}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: controller
+                  app.kubernetes.io/instance: mongodb-atlas-kubernetes-operator
+                  app.kubernetes.io/name: mongodb-atlas-kubernetes-operator
+              spec:
+                containers:
+                  - args:
+                      - --atlas-domain=https://cloud.mongodb.com/
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                      - --metrics-bind-address=127.0.0.1:8080
+                      - --log-level=info
+                      - --log-encoder=json
+                    command:
+                      - /manager
+                    env:
+                      - name: OPERATOR_POD_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.name
+                      - name: OPERATOR_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: WATCH_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.annotations['olm.targetNamespaces']
+                    image: mongodb/mongodb-atlas-kubernetes-operator:1.0.0
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 256Mi
+                      requests:
+                        cpu: 100m
+                        memory: 50Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                serviceAccountName: mongodb-atlas-operator
+                terminationGracePeriodSeconds: 10
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+                - coordination.k8s.io
+              resources:
+                - configmaps
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: mongodb-atlas-operator
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - MongoDB
+    - Atlas
+    - Database
+    - Replica Set
+    - Cluster
+  links:
+    - name: MongoDB Atlas Kubernetes
+      url: https://github.com/mongodb/mongodb-atlas-kubernetes
+  maintainers:
+    - email: support@mongodb.com
+      name: MongoDB, Inc
+  maturity: beta
+  provider:
+    name: MongoDB, Inc
+  version: 1.0.0
+  replaces: mongodb-atlas-kubernetes.v0.8.1

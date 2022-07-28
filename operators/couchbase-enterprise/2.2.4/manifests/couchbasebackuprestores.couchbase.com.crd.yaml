@@ -1,0 +1,238 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.8
+  name: couchbasebackuprestores.couchbase.com
+spec:
+  group: couchbase.com
+  names:
+    kind: CouchbaseBackupRestore
+    listKind: CouchbaseBackupRestoreList
+    plural: couchbasebackuprestores
+    shortNames:
+    - cbrestore
+    singular: couchbasebackuprestore
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.capacityUsed
+      name: capacity used
+      type: string
+    - jsonPath: .status.lastRun
+      name: last run
+      type: string
+    - jsonPath: .status.lastSuccess
+      name: last success
+      type: string
+    - jsonPath: .status.duration
+      name: duration
+      type: string
+    - jsonPath: .status.running
+      name: running
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: age
+      type: date
+    name: v2
+    schema:
+      openAPIV3Schema:
+        description: CouchbaseBackupRestore allows the restoration of all Couchbase cluster data from a CouchbaseBackup resource.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CouchbaseBackupRestoreSpec allows the specification of data restoration to be configured.  This includes the backup and repository to restore data from, and the time range of data to be restored.
+            properties:
+              backoffLimit:
+                default: 2
+                description: Number of times the restore job should try to execute.
+                format: int32
+                type: integer
+              backup:
+                description: The backup resource name associated with this restore, or the backup PVC we want to restore from.
+                type: string
+              buckets:
+                default: {}
+                description: Specific buckets can be explicitly included or excluded in the restore, as well as bucket mappings.
+                properties:
+                  bucketMap:
+                    description: Maps a backup bucket to a destination bucket that has a different name than the bucket that was originally backed up. This parameter takes a list of mappings since multiple buckets may be restored at the same time. Each bucket mapping is separated by an "=" If we have two buckets, bucket-1 and bucket-2, and we want to restore them to renamed-1 and renamed-2 then we would denote the mapping as "bucket-1=renamed-1,bucket-2=renamed-2". This option will only restore data to the Data service and will not restore the metadata for any other service.
+                    items:
+                      properties:
+                        destination:
+                          description: Destination is the destination bucket name in the Couchbase cluster.
+                          type: string
+                        source:
+                          description: Source is the source bucket name in the backup.
+                          type: string
+                      required:
+                      - destination
+                      - source
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - source
+                    x-kubernetes-list-type: map
+                  exclude:
+                    description: Exclude stops the restoration of the named buckets defined in this list. Bucket names refer to the Couchbase bucket name, which may be that of the bucket's resource name, or the name defined in the bucket specification if overidden.
+                    items:
+                      type: string
+                    type: array
+                  include:
+                    description: Include restores only the named buckets defined in this list.  Bucket names refer to the Couchbase bucket name, which may be that of the bucket's resource name, or the name defined in the bucket specification if overidden.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              end:
+                description: End denotes the last backup to restore from.  Omitting this field will only restore the backup referenced by start.
+                properties:
+                  int:
+                    description: Int references a relative backup by index.
+                    minimum: 1
+                    type: integer
+                  str:
+                    description: Str references an absolute backup by name.
+                    type: string
+                type: object
+              logRetention:
+                default: 168h
+                description: 'Number of hours to hold restore script logs for, everything older will be deleted. More info: https://golang.org/pkg/time/#ParseDuration'
+                type: string
+              repo:
+                description: Repo is the backup folder to restore from.
+                type: string
+              s3bucket:
+                description: Name of S3 bucket to restore from. If non-empty this overrides local backup.
+                type: string
+              services:
+                default: {}
+                description: This list accepts a certain set of parameters that will disable that data and prevent it being restored.
+                properties:
+                  analytics:
+                    default: true
+                    description: Analytics restores analytics datasets from the backup.  This field defaults to true.
+                    type: boolean
+                  bucketConfig:
+                    description: BucketConfig restores all bucket configuration settings. If you are restoring to cluster with managed buckets, then this option may conflict with existing bucket settings, and the results are undefined, so avoid use.  This option is intended for use with unmanaged buckets.  Note that bucket durability settings are not restored in versions less than and equal to 1.1.0, and will need to be manually applied.  This field defaults to false.
+                    type: boolean
+                  data:
+                    default: true
+                    description: Data restores document data from the backup.  This field defaults to true.
+                    type: boolean
+                  eventing:
+                    default: true
+                    description: Eventing restores eventing functions from the backup.  This field defaults to true.
+                    type: boolean
+                  ftAlias:
+                    default: true
+                    description: FTAlias restores full-text search aliases from the backup.  This field defaults to true.
+                    type: boolean
+                  ftIndex:
+                    default: true
+                    description: FTIndex restores full-text search indexes from the backup.  This field defaults to true.
+                    type: boolean
+                  gsiIndex:
+                    default: true
+                    description: GSIIndex restores document indexes from the backup.  This field defaults to true.
+                    type: boolean
+                  views:
+                    default: true
+                    description: Views restores views from the backup.  This field defaults to true.
+                    type: boolean
+                type: object
+              start:
+                description: Start denotes the first backup to restore from.
+                properties:
+                  int:
+                    description: Int references a relative backup by index.
+                    minimum: 1
+                    type: integer
+                  str:
+                    description: Str references an absolute backup by name.
+                    type: string
+                type: object
+              threads:
+                default: 1
+                description: How many threads to use during the restore.
+                minimum: 1
+                type: integer
+            required:
+            - backup
+            - start
+            type: object
+          status:
+            description: CouchbaseBackupRestoreStatus provides status indications of a restore from backup.  This includes whether or not the restore is running, whether the restore succeed or not, and the duration the restore took.
+            properties:
+              archive:
+                description: Location of Backup Archive.
+                type: string
+              backups:
+                description: Backups gives us a full list of all backups and their respective repository locations.
+                items:
+                  properties:
+                    full:
+                      description: Full backup inside the repository.
+                      type: string
+                    incrementals:
+                      description: Incremental backups inside the repository.
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Name of the repository.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              duration:
+                description: 'Duration tells us how long the last restore took.  More info: https://golang.org/pkg/time/#ParseDuration'
+                type: string
+              failed:
+                description: Failed indicates whether the most recent restore has failed.
+                type: boolean
+              job:
+                description: DEPRECATED - field may no longer be populated. Job tells us which job is running/ran last.
+                type: string
+              lastFailure:
+                description: LastFailure tells us the time the last failed restore failed.
+                format: date-time
+                type: string
+              lastRun:
+                description: LastRun tells us the time the last restore job started.
+                format: date-time
+                type: string
+              lastSuccess:
+                description: LastSuccess gives us the time the last successful restore finished.
+                format: date-time
+                type: string
+              output:
+                description: Output reports useful information from the backup process.
+                type: string
+              pod:
+                description: Pod tells us which pod is running/ran last.
+                type: string
+              repo:
+                description: Repo is where we are currently performing operations.
+                type: string
+              running:
+                description: Running indicates whether a restore is currently being performed.
+                type: boolean
+            required:
+            - failed
+            - running
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true

@@ -1,0 +1,1198 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "postgresql.k8s.enterprisedb.io/v1",
+          "kind": "Backup",
+          "metadata": {
+            "name": "backup-sample"
+          },
+          "spec": {
+            "cluster": {
+              "name": "cluster-sample"
+            }
+          }
+        },
+        {
+          "apiVersion": "postgresql.k8s.enterprisedb.io/v1",
+          "kind": "Cluster",
+          "metadata": {
+            "name": "cluster-sample"
+          },
+          "spec": {
+            "instances": 3,
+            "logLevel": "info",
+            "primaryUpdateStrategy": "unsupervised",
+            "storage": {
+              "size": "1Gi"
+            }
+          }
+        },
+        {
+          "apiVersion": "postgresql.k8s.enterprisedb.io/v1",
+          "kind": "Pooler",
+          "metadata": {
+            "name": "pooler-sample-rw"
+          },
+          "spec": {
+            "cluster": {
+              "name": "cluster-sample"
+            },
+            "instances": 1,
+            "pgbouncer": {
+              "poolMode": "session"
+            },
+            "type": "rw"
+          }
+        },
+        {
+          "apiVersion": "postgresql.k8s.enterprisedb.io/v1",
+          "kind": "ScheduledBackup",
+          "metadata": {
+            "name": "scheduledbackup-sample"
+          },
+          "spec": {
+            "cluster": {
+              "name": "cluster-sample"
+            },
+            "schedule": "0 0 0 * * *"
+          }
+        }
+      ]
+    capabilities: Auto Pilot
+    categories: Database
+    certified: "true"
+    containerImage: quay.io/enterprisedb/cloud-native-postgresql@sha256:15956f64258fbaa09f6b234f47312f9692baf15880cb3e235725c3139b3cf066
+    createdAt: "2022-10-07T15:28:53+00:00"
+    description: Operator to manage Postgres high availability clusters with a primary/standby architecture.
+    operators.operatorframework.io/builder: operator-sdk-v1.23.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v2
+    support: EnterpriseDB Corporation
+    olm.skipRange: '>=1.15.3 < 1.15.5'
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.ppc64le: supported
+    operatorframework.io/arch.s390x: supported
+  name: cloud-native-postgresql.v1.15.5
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: PostgreSQL backup manager
+        displayName: Backups
+        kind: Backup
+        name: backups.postgresql.k8s.enterprisedb.io
+        resources:
+          - kind: PersistentVolumeClaim
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: The cluster to backup
+            displayName: Cluster
+            path: cluster
+          - description: The name of the cluster to backup
+            displayName: Cluster Name
+            path: cluster.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Clusters
+        statusDescriptors:
+          - description: Current backupphase
+            displayName: Phase
+            path: phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+        version: v1
+      - description: PostgreSQL cluster manager
+        displayName: Cluster
+        kind: Cluster
+        name: clusters.postgresql.k8s.enterprisedb.io
+        resources:
+          - kind: Service
+            name: ""
+            version: v1
+          - kind: Pod
+            name: ""
+            version: v1
+          - kind: Secret
+            name: ""
+            version: v1
+          - kind: PersistentVolumeClaim
+            name: ""
+            version: v1
+          - kind: Job
+            name: ""
+            version: v1
+        specDescriptors:
+          - displayName: Description
+            path: description
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Name of the container image
+            displayName: Image Name
+            path: imageName
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: When to pull the image
+            displayName: ImagePullPolicy
+            path: imagePullPolicy
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Postgres user Id used inside the container
+            displayName: Postgres UID
+            path: postgresUID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:hidden
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Postgres group Id used inside the container
+            displayName: Postgres GID
+            path: postgresGID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:hidden
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Number of instances required in the cluster
+            displayName: Instances
+            path: instances
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:podCount
+          - description: Minimum number of instances required in synchronous replication with the primary. Undefined or 0 allow writes to complete when no standby is available.
+            displayName: Min Synchronous Replicas
+            path: minSyncReplicas
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The target value for the synchronous replication quorum, that can be decreased if the number of ready standbys is lower than this. Undefined or 0 disable synchronous replication.
+            displayName: Max Synchronous Replicas
+            path: maxSyncReplicas
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Options for postgresql.conf
+            displayName: PostgreSQL Configuration
+            path: postgresql
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Options for postgresql.conf
+            displayName: PostgreSQL configuration parameter
+            path: postgresql.parameters[0]
+          - description: PostgreSQL Host Based Authentication rules
+            displayName: pg_hba rules
+            path: postgresql.pg_hba[0]
+          - description: Boolean to enable edb_audit logging
+            displayName: EPAS Configuration
+            path: postgresql.epas.audit
+          - description: maximum number of seconds to wait when promoting an instance to primary
+            displayName: pgctl Timeout
+            path: postgresql.promotionTimeout
+          - description: List of shared preload libraries to add to the default ones
+            displayName: Preload Libraries
+            path: postgresql.shared_preload_libraries[0]
+          - description: Options to specify LDAP configuration
+            displayName: LDAP Authentication configuration
+            path: postgresql.ldap
+          - description: The IP or hostname of your LDAP server
+            displayName: LDAP Server hostname or IP Address
+            path: postgresql.ldap.server
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The port of your LDAP server
+            displayName: LDAP Server port
+            path: postgresql.ldap.port
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: LDAP scheme
+            displayName: LDAP scheme to be used
+            path: postgresql.ldap.scheme
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:ldap
+              - urn:alm:descriptor:com.tectonic.ui:select:ldaps
+          - description: Boolean to enable TLS
+            displayName: Enable LDAP over TLS
+            path: postgresql.ldap.tls
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: Instructions to bootstrap the cluster
+            displayName: Bootstrap Configuration
+            path: bootstrap
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The name of the Bootstrap secret
+            displayName: Bootstrap Configuration Secret Name
+            path: bootstrap.initdb.secret.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - description: Replica cluster configuration
+            displayName: Replica
+            path: replica
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: |
+              The secret containing the superuser password.
+              If not defined a new secret will be created with a randomly generated password
+            displayName: Superuser Secret
+            path: superuserSecret
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Name of hte Superuser Secret
+            displayName: Superuser Secret
+            path: superuserSecret.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - description: Boolean to enable or disable use of SuperUserSecret to update postgres user password
+            displayName: Enable Super User Access
+            path: enableSuperuserAccess
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The configuration for the CA and related certificates
+            displayName: Certificates
+            path: certificates
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Secret for pulling the image. If empty, no secret will be used
+            displayName: Image Pull Secret
+            path: imagePullSecrets[0].name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - description: Configuration of the storage of the instances
+            displayName: Storage
+            path: storage
+          - description: StorageClass to use for database data (PGDATA). Applied after evaluating the PVC template, if available.
+            displayName: Storage Class
+            path: storage.storageClass
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:StorageClass
+          - description: Storage size for database data (PGDATA). (default size 1G)
+            displayName: Storage Size
+            path: storage.size
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - displayName: Resize in-use volumes
+            path: storage.resizeInUseVolumes
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: Template to be used to generate the Persistent Volume Claim
+            displayName: PVC template
+            path: storage.pvcTemplate
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The time in seconds that is allowed for a PostgreSQL instance to successfully start up (default 30)
+            displayName: Maximum Start Delay
+            path: startDelay
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The time in seconds that is allowed for a PostgreSQL instance node to gracefully shutdown (default 30)
+            displayName: Maximum Stop Delay
+            path: stopDelay
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: Affinity/Anti-affinity rules for Pods
+            displayName: Pod Affinity
+            path: affinity
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: activates anti-affinity for the pods
+            displayName: Pod Anti-Affinity
+            path: affinity.enablePodAntiAffinity
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: Key value pair of which nodes the pods can run
+            displayName: Node Selector
+            path: affinity.nodeSelector
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:selector:core:v1:Node
+          - path: resources
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+          - displayName: Primary Update Strategy
+            path: primaryUpdateStrategy
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Primary Update Method
+            path: primaryUpdateMethod
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: S3-compatible object storage Endpoint. If empty the S3 default is used
+            displayName: Object Storage Endpoint
+            path: backup.barmanObjectStore.endpointURL
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: Name of the Secret containing the Secret Access Key
+            path: backup.barmanObjectStore.s3Credentials.secretAccessKey.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - description: Key inside the Secret containing the Secret Access Key
+            path: backup.barmanObjectStore.s3Credentials.secretAccessKey.key
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: Name of the Secret containing the Access Key Id
+            path: backup.barmanObjectStore.s3Credentials.accessKeyId.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - description: Key inside the Secret containing the Access Key Id
+            path: backup.barmanObjectStore.s3Credentials.accessKeyId.key
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: WAL compression algorithm
+            displayName: WAL compression
+            path: backup.barmanObjectStore.wal.compression
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: WAL encryprion algorithm
+            displayName: WAL encryption
+            path: backup.barmanObjectStore.wal.encryption
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: Data compression algorithm
+            displayName: Data compression
+            path: backup.barmanObjectStore.data.compression
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: Data encryprion algorithm
+            displayName: Data encryption
+            path: backup.barmanObjectStore.data.encryption
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - displayName: Immediate Checkpoint
+            path: backup.barmanObjectStore.data.immediateCheckpoint
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - displayName: Jobs
+            path: backup.barmanObjectStore.data.jobs
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: Define a maintenance window is in progress for Kubernetes nodes.
+            displayName: In Progress
+            path: nodeMaintenanceWindow.inProgress
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: Should the existing PVC be reused
+            displayName: Node Maintenance Window reuse PVC
+            path: nodeMaintenanceWindow.reusePVC
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - displayName: License Key
+            path: licenseKey
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The reference to the license key. When set takes precedence over LicenseKey
+            displayName: License Key Secret
+            path: licenseKeySecret
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The name of the secret containing the Licnese Key
+            displayName: Name
+            path: licenseKeySecret.name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The key inside the secret that contains the license
+            displayName: Key
+            path: licenseKeySecret.key
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The configuration of the monitoring infrastructure of this cluster
+            displayName: Monitoring
+            path: monitoring
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Custom queries ConfigMap name
+            path: monitoring.customQueriesConfigMap[0].name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:ConfigMap
+          - displayName: Custom queries ConfigMap key
+            path: monitoring.customQueriesConfigMap[0].key
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - displayName: Custom queries Secret name
+            path: monitoring.customQueriesSecret[0].name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Secret
+          - displayName: Custom queries Secret key
+            path: monitoring.customQueriesSecret[0].key
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - displayName: Enable PodMonitor resource
+            path: monitoring.enablePodMonitor
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: List of external clusters which are used in the configuration
+            displayName: External Clusters
+            path: externalClusters
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: One of error, info (default), debug or trace
+            displayName: Log Level
+            path: logLevel
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+        statusDescriptors:
+          - description: Status Pods
+            displayName: Working Pods
+            path: instancesStatus
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:podStatuses
+          - description: License Status, trial or active
+            displayName: License Status
+            path: licenseStatus.licenseStatus
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - description: License expiration date
+            displayName: License expiration date
+            path: licenseStatus.licenseExpiration
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - description: License is Valid
+            displayName: License is Valid
+            path: licenseStatus.valid
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - description: Current Primary Pod
+            displayName: Current Primary Pod
+            path: currentPrimary
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Pod
+          - description: Service for written process
+            displayName: Write Service
+            path: writeService
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Service
+          - description: Service for read process
+            displayName: Read Service
+            path: readService
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Service
+          - description: Current cluster phase
+            displayName: Phase
+            path: phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+          - description: Current phase reason
+            displayName: Phase Reason
+            path: phaseReason
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase:reason
+          - description: Postgres user Id used inside the container
+            displayName: Postgres UID
+            path: postgresUID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:hidden
+          - description: Postgres group Id used inside the container
+            displayName: Postgres GID
+            path: postgresGID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:hidden
+          - description: Show the current condition of the cluster
+            displayName: Cluster Condition
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+        version: v1
+      - description: PgBouncer Pooler Manager
+        displayName: Pooler
+        kind: Pooler
+        name: poolers.postgresql.k8s.enterprisedb.io
+        resources:
+          - kind: Service
+            name: ""
+            version: v1
+          - kind: Deployment
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: The cluster from which the Pooler will work.
+            displayName: Cluster
+            path: cluster
+          - description: The name of the cluster reference from which the Pooler will work.
+            displayName: Cluster Name
+            path: cluster.name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The type of connection pool. Either 'rw' or 'ro'.
+            path: type
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: Number of instances required in the cluster.
+            displayName: Instances
+            path: instances
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:podCount
+          - description: Pod Template Spec for pod to be created.
+            path: template
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The PgBouncer configuration
+            displayName: PgBouncer
+            path: pgbouncer
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The poolmode to use. One of 'session' or 'transaction'.
+            displayName: PgBouncer PoolMode
+            path: pgbouncer.poolMode
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:text
+          - description: The secret containing the credentials of the user that needs to be used for the authentication query. An AuthQuery must also be specified.
+            displayName: PgBouncer AuthQuerySecret
+            path: pgbouncer.authQuerySecret
+          - description: The name of the secret containing the credentials of the user that needs to be used for the authentication query.
+            displayName: PgBouncer AuthQuerySecret Name
+            path: pgbouncer.authQuerySecret.name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: The query that will be used to download the hashed password of a certain user. When this is specified an AuthQuerySecret must also be specified.
+            displayName: PgBouncer AuthQuery
+            path: pgbouncer.authQuery
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: Boolean to pause PgBouncer causing it to disconnect from the PostgreSQL server.
+            displayName: Paused
+            path: pgbouncer.paused
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        statusDescriptors:
+          - description: The name of the secret for server TLS
+            path: secrets.serverTLS.name
+          - description: The name of the CA secret for the server
+            path: secrets.serverCA.name
+          - description: The name of the CA secret for the client
+            path: secrets.clientCA.name
+          - description: The authQuery secret
+            path: secrets.pgBouncerSecrets.authQuery.name
+        version: v1
+      - description: PostgreSQL backups schedule
+        displayName: Scheduled Backups
+        kind: ScheduledBackup
+        name: scheduledbackups.postgresql.k8s.enterprisedb.io
+        resources:
+          - kind: PersistentVolumeClaim
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: The cluster from which to take the scheduled backup.
+            displayName: Cluster
+            path: cluster
+          - description: The PostgreSQL cluster to backup
+            displayName: Cluster name
+            path: cluster.name
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Clusters
+          - description: If the first backup has to be immediately started
+            path: immediate
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+            displayName: Schedule
+            path: schedule
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: If this is true, the schedule is suspended, defaults to False
+            displayName: Schedule is suspended
+            path: suspend
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+        statusDescriptors:
+          - description: When it's the next backup scheduled
+            displayName: Next backup
+            path: nextScheduleTime
+          - description: When it was the last backup
+            displayName: Last backup
+            path: lastScheduleTime
+        version: v1
+  description: "EDB Postgres for Kubernetes is an operator designed, developed, and supported by EDB that covers the full \nlifecycle of a highly available Postgres database clusters with a primary/standby architecture, using native\nstreaming replication. It is based on the open source CloudNativePG operator, and provides additional value\nsuch as compatibility with Oracle using EDB Postgres Advanced Server and additional supported platforms such\nas IBM Power and OpenShift.\n\nKey features available include:\n\n* Kubernetes API integration for high availability\n* Self-healing through failover and automated recreation of replicas\n* Capacity management with scale up/down capabilities\n* Planned switchovers for scheduled maintenance\n* Read-only and read-write Kubernetes services definitions\n* Rolling updates for Postgres minor versions and operator upgrades\n* Continuous backup and point-in-time recovery\n* Connection Pooling with PgBouncer\n* Integrated metrics exporter out of the box\n* PostgreSQL replication across multiple Kubernetes clusters\n* Red Hat certified operator for OpenShift\n\nThe operator has been renamed from Cloud Native PostgreSQL. Existing users of Cloud Native PostgreSQL will not\nexperience any change, as the underlying components and resources have not changed.\n"
+  displayName: EDB Postgres for Kubernetes
+  icon:
+    - base64data: PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI1LjIuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAxNjAgODAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDE2MCA4MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPgo8c3R5bGUgdHlwZT0idGV4dC9jc3MiPgoJLnN0MHtmaWxsOiNGRjNFMDA7fQoJLnN0MXtmaWxsOiNGRkZGRkY7fQoJLnN0MntmaWxsOiMxMjE2NDY7fQo8L3N0eWxlPgo8Zz4KCTxnPgoJCTxnPgoJCQk8Y2lyY2xlIGNsYXNzPSJzdDAiIGN4PSIyNi41IiBjeT0iNDAiIHI9IjI2Ii8+CgkJPC9nPgoJCTxnPgoJCQk8Zz4KCQkJCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik00MiwzOC43YzEtMSwxLjYtMi4zLDEuNi0zLjdjMC0yLjYtMi4xLTQuNS00LjgtNC4ybC00LDAuNGMtMC40LDAtMC44LDAuNC0wLjgsMC44djdWNDB2NwoJCQkJCWMwLDAuNCwwLjMsMC43LDAuOCwwLjdsNC0wLjRjMi42LTAuMyw0LjgtMi42LDQuOC01LjJ2MEM0My42LDQwLjcsNDMsMzkuNSw0MiwzOC43eiIvPgoJCQk8L2c+CgkJCTxnPgoJCQkJPHBhdGggY2xhc3M9InN0MSIgZD0iTTE4LjIsMzEuMmwtNC0wLjRjLTIuNi0wLjMtNC44LDEuNi00LjgsNC4yYzAsMS40LDAuNiwyLjcsMS42LDMuN2MtMSwwLjgtMS42LDItMS42LDMuM3YwCgkJCQkJYzAsMi42LDIuMSw0LjksNC44LDUuMmw0LDAuNGMwLjQsMCwwLjgtMC4zLDAuOC0wLjd2LTd2LTAuOXYtN0MxOC45LDMxLjcsMTguNiwzMS4zLDE4LjIsMzEuMnoiLz4KCQkJPC9nPgoJCQk8Zz4KCQkJCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0yNi41LDM0LjZoLTRjLTAuNCwwLTAuOCwwLjMtMC44LDAuOHYxMC40djEuMWMwLDAuNCwwLjMsMC45LDAuOCwwLjloNGMwLDAuOC0xLjIsMS44LTMuOSwyLjFsLTAuMywwCgkJCQkJYy0wLjIsMC0wLjYsMC0wLjYsMC44djAuMmMwLDAuNCwwLjMsMC44LDAuOCwwLjhoNGMyLjYsMCw0LjgtMi41LDQuOC01LjJ2LTcuMUMzMS4yLDM2LjcsMjkuMSwzNC42LDI2LjUsMzQuNnoiLz4KCQkJPC9nPgoJCTwvZz4KCTwvZz4KCTxnPgoJCTxnPgoJCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTU1LjcsMjQuNnYwLjVoLTAuOXYyLjZoLTAuNnYtMi42aC0wLjl2LTAuNUgxNTUuN3ogTTE1OC45LDI3LjdsLTAuMS0xLjhjMC0wLjIsMC0wLjUsMC0wLjloMAoJCQkJYy0wLjEsMC4zLTAuMiwwLjYtMC4yLDAuOWwtMC41LDEuN2gtMC42bC0wLjUtMS44Yy0wLjEtMC4yLTAuMS0wLjYtMC4yLTAuOWgwYzAsMC4zLDAsMC42LDAsMC45bC0wLjEsMS44aC0wLjZsMC4yLTMuMWgwLjkKCQkJCWwwLjUsMS41YzAuMSwwLjIsMC4xLDAuNSwwLjIsMC44aDBjMC4xLTAuMywwLjEtMC42LDAuMi0wLjhsMC41LTEuNWgwLjhsMC4yLDMuMUgxNTguOXoiLz4KCQk8L2c+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTY4LjgsNDMuMnY3LjJoMTcuNGMwLjMsMCwwLjcsMC40LDAuNywwLjd2NC42YzAsMC4zLTAuNCwwLjctMC43LDAuN0g2Mi42Yy0wLjMsMC0wLjYtMC4zLTAuNi0wLjZWMjUuMwoJCQljMC0wLjMsMC4zLTAuNiwwLjYtMC42aDIzLjZjMC4zLDAsMC43LDAuNCwwLjcsMC43djQuNmMwLDAuMy0wLjQsMC43LTAuNywwLjdINjguOHY2LjVoMTUuOWMwLjMsMCwwLjcsMC40LDAuNywwLjd2NC42CgkJCWMwLDAuMy0wLjQsMC43LTAuNywwLjdINjguOHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNOTEuOSw1Ni41Yy0wLjMsMC0wLjYtMC4zLTAuNi0wLjZWMjUuM2MwLTAuMywwLjMtMC42LDAuNi0wLjZoMTIuN2M5LjUsMCwxNi43LDYuMiwxNi43LDE2CgkJCWMwLDkuNi02LDE2LTE2LjYsMTZIOTEuOXogTTk4LjEsMzAuN3YxOS44aDYuNmM2LjQsMCw5LjctMy44LDkuNy05LjljMC02LjEtNC4xLTkuOS05LjgtOS45SDk4LjF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTEyNi4zLDU2LjVjLTAuMywwLTAuNi0wLjMtMC42LTAuNlYyNS4zYzAtMC4zLDAuMy0wLjYsMC42LTAuNmgxNS40YzYuOCwwLDEwLjQsMy44LDEwLjQsOC44CgkJCWMwLDIuNi0xLDQuNi0yLjYsNnYwLjFjMi40LDEuNiwzLjgsNC4yLDMuOCw3LjRjMCw2LjEtNC4yLDkuNi0xMS40LDkuNkgxMjYuM3ogTTEzMi41LDMwLjd2Ni41aDguN2MzLDAsNC4xLTEuNSw0LjEtMy4yCgkJCWMwLTEuOC0xLjQtMy4zLTQuNi0zLjNIMTMyLjV6IE0xNDEuMSw1MC41YzMuOCwwLDUuMy0xLjMsNS4zLTMuOGMwLTIuMy0xLjctMy45LTUuNS0zLjloLTguNXY3LjhIMTQxLjF6Ii8+Cgk8L2c+Cgk8Zz4KCQk8Zz4KCQkJPGNpcmNsZSBjbGFzcz0ic3QwIiBjeD0iMjYuNSIgY3k9IjQwIiByPSIyNiIvPgoJCTwvZz4KCQk8Zz4KCQkJPGc+CgkJCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNNDIsMzguN2MxLTEsMS42LTIuMywxLjYtMy43YzAtMi42LTIuMS00LjUtNC44LTQuMmwtNCwwLjRjLTAuNCwwLTAuOCwwLjQtMC44LDAuOHY3VjQwdjcKCQkJCQljMCwwLjQsMC4zLDAuNywwLjgsMC43bDQtMC40YzIuNi0wLjMsNC44LTIuNiw0LjgtNS4ydjBDNDMuNiw0MC43LDQzLDM5LjUsNDIsMzguN3oiLz4KCQkJPC9nPgoJCQk8Zz4KCQkJCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0xOC4yLDMxLjJsLTQtMC40Yy0yLjYtMC4zLTQuOCwxLjYtNC44LDQuMmMwLDEuNCwwLjYsMi43LDEuNiwzLjdjLTEsMC44LTEuNiwyLTEuNiwzLjN2MAoJCQkJCWMwLDIuNiwyLjEsNC45LDQuOCw1LjJsNCwwLjRjMC40LDAsMC44LTAuMywwLjgtMC43di03di0wLjl2LTdDMTguOSwzMS43LDE4LjYsMzEuMywxOC4yLDMxLjJ6Ii8+CgkJCTwvZz4KCQkJPGc+CgkJCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNMjYuNSwzNC42aC00Yy0wLjQsMC0wLjgsMC4zLTAuOCwwLjh2MTAuNHYxLjFjMCwwLjQsMC4zLDAuOSwwLjgsMC45aDRjMCwwLjgtMS4yLDEuOC0zLjksMi4xbC0wLjMsMAoJCQkJCWMtMC4yLDAtMC42LDAtMC42LDAuOHYwLjJjMCwwLjQsMC4zLDAuOCwwLjgsMC44aDRjMi42LDAsNC44LTIuNSw0LjgtNS4ydi03LjFDMzEuMiwzNi43LDI5LjEsMzQuNiwyNi41LDM0LjZ6Ii8+CgkJCTwvZz4KCQk8L2c+Cgk8L2c+Cgk8Zz4KCQk8Zz4KCQkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTE1NS43LDI0LjZ2MC41aC0wLjl2Mi42aC0wLjZ2LTIuNmgtMC45di0wLjVIMTU1Ljd6IE0xNTguOSwyNy43bC0wLjEtMS44YzAtMC4yLDAtMC41LDAtMC45aDAKCQkJCWMtMC4xLDAuMy0wLjIsMC42LTAuMiwwLjlsLTAuNSwxLjdoLTAuNmwtMC41LTEuOGMtMC4xLTAuMi0wLjEtMC42LTAuMi0wLjloMGMwLDAuMywwLDAuNiwwLDAuOWwtMC4xLDEuOGgtMC42bDAuMi0zLjFoMC45CgkJCQlsMC41LDEuNWMwLjEsMC4yLDAuMSwwLjUsMC4yLDAuOGgwYzAuMS0wLjMsMC4xLTAuNiwwLjItMC44bDAuNS0xLjVoMC44bDAuMiwzLjFIMTU4Ljl6Ii8+CgkJPC9nPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02OC44LDQzLjJ2Ny4yaDE3LjRjMC4zLDAsMC43LDAuNCwwLjcsMC43djQuNmMwLDAuMy0wLjQsMC43LTAuNywwLjdINjIuNmMtMC4zLDAtMC42LTAuMy0wLjYtMC42VjI1LjMKCQkJYzAtMC4zLDAuMy0wLjYsMC42LTAuNmgyMy42YzAuMywwLDAuNywwLjQsMC43LDAuN3Y0LjZjMCwwLjMtMC40LDAuNy0wLjcsMC43SDY4Ljh2Ni41aDE1LjljMC4zLDAsMC43LDAuNCwwLjcsMC43djQuNgoJCQljMCwwLjMtMC40LDAuNy0wLjcsMC43SDY4Ljh6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTkxLjksNTYuNWMtMC4zLDAtMC42LTAuMy0wLjYtMC42VjI1LjNjMC0wLjMsMC4zLTAuNiwwLjYtMC42aDEyLjdjOS41LDAsMTYuNyw2LjIsMTYuNywxNgoJCQljMCw5LjYtNiwxNi0xNi42LDE2SDkxLjl6IE05OC4xLDMwLjd2MTkuOGg2LjZjNi40LDAsOS43LTMuOCw5LjctOS45YzAtNi4xLTQuMS05LjktOS44LTkuOUg5OC4xeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0xMjYuMyw1Ni41Yy0wLjMsMC0wLjYtMC4zLTAuNi0wLjZWMjUuM2MwLTAuMywwLjMtMC42LDAuNi0wLjZoMTUuNGM2LjgsMCwxMC40LDMuOCwxMC40LDguOAoJCQljMCwyLjYtMSw0LjYtMi42LDZ2MC4xYzIuNCwxLjYsMy44LDQuMiwzLjgsNy40YzAsNi4xLTQuMiw5LjYtMTEuNCw5LjZIMTI2LjN6IE0xMzIuNSwzMC43djYuNWg4LjdjMywwLDQuMS0xLjUsNC4xLTMuMgoJCQljMC0xLjgtMS40LTMuMy00LjYtMy4zSDEzMi41eiBNMTQxLjEsNTAuNWMzLjgsMCw1LjMtMS4zLDUuMy0zLjhjMC0yLjMtMS43LTMuOS01LjUtMy45aC04LjV2Ny44SDE0MS4xeiIvPgoJPC9nPgo8L2c+Cjwvc3ZnPgo=
+      mediatype: image/svg+xml
+  install:
+    spec:
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - persistentvolumeclaims
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - pods/exec
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - pods/status
+              verbs:
+                - get
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - serviceaccounts
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - services
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - mutatingwebhookconfigurations
+              verbs:
+                - get
+                - list
+                - update
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - validatingwebhookconfigurations
+              verbs:
+                - get
+                - list
+                - update
+            - apiGroups:
+                - apiextensions.k8s.io
+              resources:
+                - customresourcedefinitions
+              verbs:
+                - get
+                - list
+                - update
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - get
+                - update
+            - apiGroups:
+                - monitoring.coreos.com
+              resources:
+                - podmonitors
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - backups
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - backups/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - clusters
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - clusters/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - clusters/status
+              verbs:
+                - get
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - poolers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - poolers/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - poolers/status
+              verbs:
+                - get
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - scheduledbackups
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - scheduledbackups/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - rolebindings
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - roles
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - update
+                - watch
+          serviceAccountName: postgresql-operator-manager
+      deployments:
+        - label:
+            app.kubernetes.io/name: cloud-native-postgresql
+          name: postgresql-operator-controller-manager-1-15-5
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: cloud-native-postgresql
+            strategy: {}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: cloud-native-postgresql
+              spec:
+                containers:
+                  - args:
+                      - controller
+                      - --leader-elect
+                      - --config-map-name=postgresql-operator-controller-manager-config
+                      - --secret-name=postgresql-operator-controller-manager-config
+                      - --webhook-port=9443
+                    command:
+                      - /manager
+                    env:
+                      - name: WATCH_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.annotations['olm.targetNamespaces']
+                      - name: WEBHOOK_CERT_DIR
+                        value: /apiserver.local.config/certificates
+                      - name: OPERATOR_IMAGE_NAME
+                        value: quay.io/enterprisedb/cloud-native-postgresql@sha256:15956f64258fbaa09f6b234f47312f9692baf15880cb3e235725c3139b3cf066
+                      - name: OPERATOR_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: MONITORING_QUERIES_CONFIGMAP
+                        value: postgresql-operator-default-monitoring
+                    image: quay.io/enterprisedb/cloud-native-postgresql@sha256:15956f64258fbaa09f6b234f47312f9692baf15880cb3e235725c3139b3cf066
+                    livenessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 9443
+                        scheme: HTTPS
+                    name: manager
+                    ports:
+                      - containerPort: 8080
+                        name: metrics
+                        protocol: TCP
+                      - containerPort: 9443
+                        name: webhook-server
+                        protocol: TCP
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 9443
+                        scheme: HTTPS
+                    resources: {}
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                    volumeMounts:
+                      - mountPath: /controller
+                        name: scratch-data
+                      - mountPath: /run/secrets/k8s.enterprisedb.io/webhook
+                        name: webhook-certificates
+                imagePullSecrets:
+                  - name: postgresql-operator-pull-secret
+                serviceAccountName: postgresql-operator-manager
+                terminationGracePeriodSeconds: 10
+                volumes:
+                  - emptyDir: {}
+                    name: scratch-data
+                  - name: webhook-certificates
+                    secret:
+                      defaultMode: 420
+                      optional: true
+                      secretName: postgresql-operator-webhook-cert
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - namespaces
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+              verbs:
+                - get
+                - list
+                - watch
+          serviceAccountName: postgresql-operator-manager
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: true
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - postgresql
+    - postgres
+    - database
+    - sql
+    - cloud
+    - native
+    - edb
+    - enterprisedb
+    - cnp
+  links:
+    - name: EDB Postgres for Kubernetes
+      url: https://www.enterprisedb.com/products/postgresql-on-kubernetes-ha-clusters-k8s-containers-scalable
+    - name: Documentation
+      url: https://www.enterprisedb.com/docs/postgres_for_kubernetes/latest/
+  maintainers:
+    - email: sales@enterprisedb.com
+      name: Sales
+    - email: support@enterprisedb.com
+      name: Support
+  maturity: stable
+  provider:
+    name: EnterpriseDB Corporation
+  version: 1.15.5
+  webhookdefinitions:
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: mbackup.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - backups
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-postgresql-k8s-enterprisedb-io-v1-backup
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: mcluster.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - clusters
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-postgresql-k8s-enterprisedb-io-v1-cluster
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: mscheduledbackup.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - scheduledbackups
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-postgresql-k8s-enterprisedb-io-v1-scheduledbackup
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: vbackup.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - backups
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-postgresql-k8s-enterprisedb-io-v1-backup
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: vcluster.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - clusters
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-postgresql-k8s-enterprisedb-io-v1-cluster
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: vpooler.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - poolers
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-postgresql-k8s-enterprisedb-io-v1-pooler
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: postgresql-operator-controller-manager-1-15-5
+      failurePolicy: Fail
+      generateName: vscheduledbackup.kb.io
+      rules:
+        - apiGroups:
+            - postgresql.k8s.enterprisedb.io
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - scheduledbackups
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-postgresql-k8s-enterprisedb-io-v1-scheduledbackup

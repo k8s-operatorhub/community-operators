@@ -32,7 +32,7 @@ EXIT_NEEDED=0
 SDK_BIN_PATH='/tmp/operator-sdk'
 
 OPM_VERSION='v1.21.0'
-OPERATOR_SDK_VERSION='v1.19.1'
+OPERATOR_SDK_VERSION='v1.25.0'
 JQ_VERSION='1.6'
 MAX_LIMIT_FOR_INDEX_WAIT=20
 EXTRA_ARGS=''
@@ -293,7 +293,7 @@ fi
 
 echo "Ansible initiated"
 ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS\
- -e fast_op_info=true -e skip_operator_info_consistency=true -e operator_bundle_version_for_upgrade=$OP_VER -e test_registry_namespace=quay.io/operator_testing -e external_production_registry_namespace=$EXTERNAL_PROD_REG_NAMESPACE -e operator_sdk_bin_path=$SDK_BIN_PATH -e tou_olm_namespace=openshift-operator-lifecycle-manager -v -e operator_upgrade_testing_on_openshift_disabled=true
+ -e fast_op_info=true -e skip_operator_info_consistency=true -e operator_bundle_version_for_upgrade=$OP_VER -e test_registry_namespace=quay.io/operator_testing -e external_production_registry_namespace=$EXTERNAL_PROD_REG_NAMESPACE -e operator_sdk_bin_path=$SDK_BIN_PATH -e tou_olm_namespace=openshift-operator-lifecycle-manager -v
 ANSIBLE_STATUS=$(($ANSIBLE_STATUS+$?))
 echo "Reporting ..."
 [[ $TEST_MODE -ne 1 ]] && if [ $ANSIBLE_STATUS -eq 0 ]; then

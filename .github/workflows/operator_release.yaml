@@ -328,8 +328,38 @@ jobs:
           docker exec -t op-test /bin/bash -c "podman images ; df -h" || true
           echo "local df:"
           df -h
-          
+  index-verify-k8s:
+    name: "Index Verify / k8s"
+    needs: [ pr-check, operators-k8s, bundles-k8s, release-k8s]
+    if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
 
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        index-tag: ['latest']
+
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+      - name: Index verify
+        id: index-verify
+        env:
+          OPP_CONTAINER_TOOL: podman
+        run: |
+          MY_TAG=${{ matrix.index-tag }}
+          MY_TAG=$(echo $MY_TAG | cut -d '-' -f 1)
+          MY_INDEXES="quay.io/operatorhubio/catalog_tmp:${MY_TAG}"
+          MY_INDEXES="$MY_INDEXES,quay.io/operatorhubio/catalog_tmp:${MY_TAG}s"
+          MY_INDEXES="$MY_INDEXES,quay.io/operatorhubio/catalog:${MY_TAG}"
+
+          echo "MY_INDEXES=$MY_INDEXES"
+          echo "$REGISTRY_MIRROR_PW" | $OPP_CONTAINER_TOOL login $OPP_MIRROR_INDEX_REGISTRY -u $OPP_REGISTRY_MIRROR_USER --password-stdin || { echo "Problem to login to '$OPP_MIRROR_INDEX_REGISTRY' !!!"; exit 1; }
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e container_tool=$OPP_CONTAINER_TOOL upstream/local.yml --tags reset_tools,index_verify  -e iv_indexes="$MY_INDEXES"
 
 
   ohio-image-k8s:
@@ -365,7 +395,7 @@ jobs:
 
   slack-notification:
     name: "Slack notification"
-    needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, ohio-image-k8s, ohio-page-k8s ]
+    needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, index-verify-k8s, ohio-image-k8s, ohio-page-k8s ]
 
 
     if: failure()

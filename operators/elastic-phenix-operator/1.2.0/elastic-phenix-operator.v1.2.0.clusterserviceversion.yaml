@@ -1,0 +1,521 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: elastic-phenix-operator.v1.2.0
+  namespace: placeholder
+  annotations:
+    operatorhub.io/ui-metadata-max-k8s-version: "1.25"
+    alm-examples: |-
+      [
+         {
+            "apiVersion":"elastic.carrefour.com/v1alpha1",
+            "kind":"ElasticIndex",
+            "metadata":{
+               "name":"product-index",
+               "namespace":"elastic-phenix-operator-system"
+            },
+            "spec":{
+               "indexName":"product",
+               "elasticURI":{
+                  "secretKeyRef":{
+                     "name":"elasticsearch-cluster-secret",
+                     "key":"uri"
+                  }
+               },
+               "numberOfShards":6,
+               "numberOfReplicas":1,
+               "model":"{\n  \"settings\": {\n      \"index.codec\": \"best_compression\"\n  },\n  \"mappings\": {\n    \"_source\": {\n      \"enabled\": true\n    },\n    \"dynamic\": false,\n    \"properties\": {\n      \"barcode\": {\n        \"type\": \"keyword\",\n        \"index\": true\n      },\n      \"description\": {\n        \"type\": \"text\",\n        \"index\": true\n      }\n    }\n  }\n}"
+            }
+         },
+         {
+            "apiVersion":"elastic.carrefour.com/v1alpha1",
+            "kind":"ElasticTemplate",
+            "metadata":{
+               "name":"invoice-template",
+               "namespace":"elastic-phenix-operator-system"
+            },
+            "spec":{
+               "templateName":"invoice",
+               "elasticURI":{
+                  "secretKeyRef":{
+                     "name":"elasticsearch-cluster-secret",
+                     "key":"uri"
+                  }
+               },
+               "numberOfShards":5,
+               "numberOfReplicas":1,
+               "order":1,
+               "model":"{\n  \"index_patterns\": [\"invoice*\"],\n  \"settings\": {\n      \"index.codec\": \"best_compression\"\n  },\n  \"mappings\": {\n    \"_source\": {\n      \"enabled\": true\n    },\n    \"properties\": {\n      \"key\": {\n        \"type\": \"keyword\",\n        \"index\": true\n      },\n      \"content\": {\n        \"type\": \"text\",\n        \"index\": true\n      }\n    }\n  }\n}"
+            }
+         }
+      ]
+    categories: 'Developer Tools'
+    certified: 'false'
+    createdAt: 2022-11-08 19:17:00
+    description: 'Manage elasticsearch indices, templates lifecycle (creation, update and delete)'
+    containerImage: 'docker.io/carrefourphx/elastic-phenix-operator:1.2.0'
+    support: Carrefour
+    capabilities: Basic Install
+    repository: 'https://github.com/Carrefour-Group/elastic-phenix-operator'
+spec:
+  displayName: Elasticsearch Phenix Operator
+  description: |
+    The Elasticsearch Phenix Operator (EPO) is a Kubernetes operator to manage elasticsearch Indices and Templates lifecycle.
+
+    See the [Quickstart](https://github.com/Carrefour-Group/elastic-phenix-operator#quick-start) to get started with Elasticsearch Phenix Operator.
+
+    ## Features
+    *  Manage Elasticsearch indices and templates lifecycle: create, update and delete
+    *  Create new indices/templates, or manage existing indices/templates
+    *  One instance of the operator can manage indices and templates on different elasticsearch servers
+    *  Elasticsearch server URI is provided from a secret when you create ElasticIndex and ElasticTemplate objects
+    *  Manage indices and templates uniqueness inside kubernetes
+    *  A ValidatingWebhook is implemented to validate ElasticIndex and ElasticTemplate objects
+
+    ## Supported Elasticsearch versions
+    *  Elasticsearch 8+
+    *  Elasticsearch 7+
+    *  Elasticsearch 6+
+
+    ## Prerequisites
+
+    #### Cert-manager
+
+    Cert-manager is needed to handle TLS certificate for admission webhook . You need cert-manager version v1.0.0 or above. For more information [cert-manager](https://github.com/jetstack/cert-manager/)
+
+    ```
+    # install cert-manager
+    kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.1/cert-manager.yaml
+
+    # wait until the cert-manager becomes in running state
+    kubectl wait --for=condition=Ready --timeout=-1s --all pods -n cert-manager
+    ```
+
+    #### Secret for connection URL
+
+    Before creating an ElasticIndex or an ElasticTemplate, you should create a secret containing elasticsearch URI that respects this pattern: `<scheme>://<user>:<password>@<hostname>:<port>` e.g. `http://localhost:9200, https://elastic:pass@myshost:9200`
+
+    ```
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: elasticsearch-cluster-secret
+      namespace: elastic-phenix-operator-system
+    type: Opaque
+    stringData:
+      uri: http://elasticsearch-host:9200
+    ```
+  maturity: alpha
+  version: 1.2.0
+  replaces: elastic-phenix-operator.v0.1.0
+  skips: []
+  minKubeVersion: 1.11.0
+  keywords:
+    - Elasticsearch
+    - Elastic
+    - Index
+    - Template
+    - ElasticIndex
+    - ElasticTemplate
+    - Kubernetes
+    - Operator
+  maintainers:
+    - name: Walid Mellouli
+      email: walid_mellouli@carrefour.com
+    - name: David Loriot
+      email: david_loriot@carrefour.com
+  provider:
+    name: Carrefour
+  labels: {}
+  selector:
+    matchLabels: {}
+  links:
+    - name: Documentation
+      url: >-
+        https://github.com/Carrefour-Group/elastic-phenix-operator/blob/master/README.md
+  icon:
+    - base64data: >-
+        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
+      mediatype: image/png
+  customresourcedefinitions:
+    owned:
+      - name: elasticindices.elastic.carrefour.com
+        displayName: ElasticIndex
+        kind: ElasticIndex
+        version: v1alpha1
+        description: Elastic Index
+        resources:
+          - version: v1
+            kind: Deployment
+          - version: v1
+            kind: Service
+          - version: v1
+            kind: ReplicaSet
+          - version: v1
+            kind: Pod
+          - version: v1
+            kind: Secret
+          - version: v1
+            kind: ConfigMap
+        specDescriptors:
+          - path: elasticURI
+            description: Elastic URI
+            displayName: Elastic URI
+            x-descriptors: []
+          - path: indexName
+            description: Index Name
+            displayName: Index Name
+            x-descriptors: []
+          - path: model
+            description: Model
+            displayName: Model
+            x-descriptors: []
+          - path: numberOfReplicas
+            description: Number Of Replicas
+            displayName: Number Of Replicas
+            x-descriptors: []
+          - path: numberOfShards
+            description: Number Of Shards
+            displayName: Number Of Shards
+            x-descriptors: []
+        statusDescriptors:
+          - path: httpCodeStatus
+            description: Http Code Status
+            displayName: Http Code Status
+            x-descriptors: []
+          - path: message
+            description: Message
+            displayName: Message
+            x-descriptors: []
+          - path: status
+            description: Status
+            displayName: Status
+            x-descriptors: []
+      - name: elastictemplates.elastic.carrefour.com
+        displayName: ElasticTemplate
+        kind: ElasticTemplate
+        version: v1alpha1
+        description: Elastic Template
+        resources:
+          - version: v1
+            kind: Deployment
+          - version: v1
+            kind: Service
+          - version: v1
+            kind: ReplicaSet
+          - version: v1
+            kind: Pod
+          - version: v1
+            kind: Secret
+          - version: v1
+            kind: ConfigMap
+        specDescriptors:
+          - path: elasticURI
+            description: Elastic URI
+            displayName: Elastic URI
+            x-descriptors: []
+          - path: model
+            description: Model
+            displayName: Model
+            x-descriptors: []
+          - path: numberOfReplicas
+            description: Number Of Replicas
+            displayName: Number Of Replicas
+            x-descriptors: []
+          - path: numberOfShards
+            description: Number Of Shards
+            displayName: Number Of Shards
+            x-descriptors: []
+          - path: order
+            description: Order
+            displayName: Order
+            x-descriptors: []
+          - path: templateName
+            description: Template Name
+            displayName: Template Name
+            x-descriptors: []
+        statusDescriptors:
+          - path: httpCodeStatus
+            description: Http Code Status
+            displayName: Http Code Status
+            x-descriptors: []
+          - path: message
+            description: Message
+            displayName: Message
+            x-descriptors: []
+          - path: status
+            description: Status
+            displayName: Status
+            x-descriptors: []
+    required: []
+  install:
+    strategy: deployment
+    spec:
+      permissions:
+        - rules:
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps/status
+            verbs:
+              - get
+              - update
+              - patch
+          - apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+          serviceAccountName: default
+      clusterPermissions:
+        - rules:
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+              - list
+              - watch
+          - apiGroups:
+              - ""
+            resources:
+              - secrets
+            verbs:
+              - get
+              - list
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices/finalizers
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices/status
+            verbs:
+              - get
+              - patch
+              - update
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates/finalizers
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates/status
+            verbs:
+              - get
+              - patch
+              - update
+          - apiGroups:
+              - authentication.k8s.io
+            resources:
+              - tokenreviews
+            verbs:
+              - create
+          - apiGroups:
+              - authorization.k8s.io
+            resources:
+              - subjectaccessreviews
+            verbs:
+              - create
+          serviceAccountName: default
+      deployments:
+        - name: elastic-phenix-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            template:
+              metadata:
+                labels:
+                  control-plane: controller-manager
+              spec:
+                containers:
+                  - args:
+                      - '--secure-listen-address=0.0.0.0:8443'
+                      - '--upstream=http://127.0.0.1:8080/'
+                      - '--logtostderr=true'
+                      - '--v=10'
+                    image: 'gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0'
+                    name: kube-rbac-proxy
+                    ports:
+                      - containerPort: 8443
+                        name: https
+                  - args:
+                      - '--metrics-addr=127.0.0.1:8080'
+                      - '--enable-leader-election'
+                    command:
+                      - /manager
+                    image: 'docker.io/carrefourphx/elastic-phenix-operator:1.2.0'
+                    name: manager
+                    ports:
+                      - containerPort: 9443
+                        name: webhook-server
+                        protocol: TCP
+                    resources:
+                      limits:
+                        cpu: 100m
+                        memory: 30Mi
+                      requests:
+                        cpu: 100m
+                        memory: 20Mi
+                    volumeMounts:
+                      - mountPath: /tmp/k8s-webhook-server/serving-certs
+                        name: cert
+                        readOnly: true
+                terminationGracePeriodSeconds: 10
+                serviceAccountName: default
+                volumes:
+                  - name: cert
+                    secret:
+                      defaultMode: 420
+                      secretName: webhook-server-cert
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: true
+    - type: AllNamespaces
+      supported: true
+  webhookdefinitions:
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: melasticindex.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - elasticindices
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-elastic-carrefour-com-v1alpha1-elasticindex
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: melastictemplate.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - elastictemplates
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-elastic-carrefour-com-v1alpha1-elastictemplate
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: velasticindex.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          resources:
+            - elasticindices
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-elastic-carrefour-com-v1alpha1-elasticindex
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: velastictemplate.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          resources:
+            - elastictemplates
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-elastic-carrefour-com-v1alpha1-elastictemplate

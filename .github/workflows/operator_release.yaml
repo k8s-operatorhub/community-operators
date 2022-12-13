@@ -211,6 +211,8 @@ jobs:
         env:
 
           OPP_FORCE_OPERATORS: ${{ steps.operators.outputs.opp_uncomplete_operators }}
+          OPP_OP_INFO_PARALLEL: 1
+          OPP_OP_INFO_PARALLEL_BATCH: 20
 
           OPP_AUTO_LABEL: 1
           ANSIBLE_FORCE_COLOR: 1
@@ -220,7 +222,11 @@ jobs:
           OPP_FORCE_OPERATORS=${OPP_FORCE_OPERATORS// /,}
           echo $OPP_FORCE_OPERATORS
           [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
-          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
+          [ "$OPP_OP_INFO_PARALLEL" = '1' ] && ANSIBLE_ARGS="$ANSIBLE_ARGS -e op_info_parallel=true -e op_info_parallel_batch=$OPP_OP_INFO_PARALLEL_BATCH" || ANSIBLE_ARGS="$ANSIBLE_ARGS -e op_info_parallel=false"
+          echo $ANSIBLE_ARGS
+          git clone $OPP_ANSIBLE_PULL_REPO -b $OPP_ANSIBLE_PULL_BRANCH operator-test-playbooks
+          cd operator-test-playbooks
+          ansible-playbook -i localhost, -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
       - name: Upload operator_info
         uses: actions/upload-artifact@v2
         with:
@@ -261,6 +267,7 @@ jobs:
           OPP_IIB_INSTALL: 0
           OPERATOR_INDEX_TAG: latest
           OPP_SKIP_INDEX: 1
+          OPP_SKIP_BUNDLES: 0
           OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
 
         run: |
@@ -307,6 +314,7 @@ jobs:
           OPP_IIB_INSTALL: 1
           #OPP_MIRROR_INDEX_ENABLED: 0
           OPP_FORCE_INDEX_UPDATE: 1
+          OPP_SKIP_BUNDLES: 1
           IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
           OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
           # OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"

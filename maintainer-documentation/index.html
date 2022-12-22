@@ -373,6 +373,25 @@
 <a class="md-nav__link" href="#release-pipeline-maintainer-documentation">
     Release pipeline maintainer documentation
   </a>
+<nav aria-label="Release pipeline maintainer documentation" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#pr-flags">
+    PR flags
+  </a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#operators-not-released-only-merged-because-of-installation_skip">
+    Operators not released, only merged because of installation_skip
+  </a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#placeholders-to-reserve-an-operator-name-for-future-prs">
+    Placeholders to reserve an operator name for future PRs
+  </a>
+</li>
+</ul>
+</nav>
 </li>
 </ul>
 </nav>
@@ -408,6 +427,7 @@
 id7([package-validated])  --&gt; id1(automatc merge is triggered)
 id10([installation-validated]) --&gt; id1(automatc merge is triggered)
 id11([authorized-changes]) --&gt; id1(automatc merge is triggered)</code></pre>
+<p>When a PR is opened, the original title is automatically replaced with a standardized one containing operator versions which were changed. There is also a flag in square braces indicating things like the single version will be overwritten including bundle delete and create and so on. More info in the <a href="#pr-flags">release pipeline section</a>. Don't worry about deleted bundles, there is still a copy available, so existing indexes will work as designed.</p>
 <p>We will go over situations when some label is missing or something went wrong in the following paragraphs.</p>
 <h3 id="the-package-validated-label-is-missing"><strong>The package-validated label is missing</strong></h3>
 <pre class="mermaid"><code>graph LR
@@ -429,8 +449,8 @@ id11(Operator test / orange / Deploy o7t) --&gt; id1([package-validated])</code>
 <h4 id="prow-job">Prow job</h4>
 <p>For every index we support, a dedicated cluster is started and we are testing if operator installation without any problems. If the operator will not be released to some cluster, an installation test is not needed. In this case, a specific installation test passes early without any installation attempt.</p>
 <p>To debug a red prow job go to <code>Details -&gt; Artifacts -&gt; artifacts/deploy-operator-on-openshift/deploy-operator/build-log.txt</code>
-<img alt="PR" src="images/maintainer-prow-details.png"/>
-<img alt="PR" src="images/maintainer-prow-artifacts.png"/></p>
+<img alt="PR" src="../images/maintainer-prow-details.png"/>
+<img alt="PR" src="../images/maintainer-prow-artifacts.png"/></p>
 <p>When all supported OCP clusters are green a label <code>installation-validated</code> is applied.
 <pre class="mermaid"><code>graph LR
 ci/prow/4.8-deploy-operator-on-openshift --&gt; id123([installation-started-4.8]) --&gt; id23([installation-validated-4.8])
@@ -491,6 +511,33 @@ There are a few reasons why the <code>authorized-changes</code> label may be mis
 <h3 id="everything-is-green-but-not-merged"><strong>Everything is green but not merged</strong></h3>
 <p>There can be a case when <code>do-not-merge/hold</code> label is present. If the <code>openshift-robot</code> has added it, please remove it. If a contributor has added it, ask for removal. </p>
 <h2 id="release-pipeline-maintainer-documentation">Release pipeline maintainer documentation</h2>
+<p>When all conditions are met, the operator has merged automatically and a release pipeline is triggered at  <a href="https://github.com/redhat-openshift-ecosystem/community-operators-prod/actions/workflows/operator_release.yaml">https://github.com/redhat-openshift-ecosystem/community-operators-prod/actions/workflows/operator_release.yaml</a>.   </p>
+<p>The release pipeline is not just releasing a single merged operator. Rather it is based on synchronization. So after merging multiple operators at once. Despite the operators being in different PRs, the first release will detect differences and sync every missing operator to related indexes.</p>
+<h3 id="pr-flags">PR flags</h3>
+<p>Every release pipeline run is named by an operator name, the version in brackets and one of the following flags in square brackets:</p>
+<ul>
+<li>[N] - means a new operator, universal sync is executed</li>
+<li>[O] - operator-specific version overwrite, deleting bundles from repositories (copies are not deleted)</li>
+<li>[CI] - ci files changed, merging only</li>
+<li>[R] - operator-specific re-create, deleting all bundles in a package</li>
+<li>no flag - universal sync, restarting will automatically sync missing operators</li>
+</ul>
+<p>In many cases, just a pipeline restart is needed. However, if a sync failed, any sync can be restarted to fix it. If <code>[O]</code> or<code>[R]</code> failed, you need to restart this specific run.</p>
+<p>All releases have the same steps. The only difference for <code>[O]</code> or<code>[R]</code> flagged releases is that in <code>Remove</code> step there is an additional action:</p>
+<ul>
+<li><code>[O]</code> - delete a single bundle image from the registry and preserve copies</li>
+<li><code>[R]</code> - delete all bundle images related to the package and preserve copies</li>
+</ul>
+<pre class="mermaid"><code>graph TD
+id1(PR-traffic-light) --&gt; id2(Remove) --&gt; id3(Index check) --&gt; id4(Bundles) --&gt; id5(Index) --&gt; id6(Index verify) --&gt; id7(Slack notification)</code></pre>
+<h3 id="operators-not-released-only-merged-because-of-installation_skip">Operators not released, only merged because of <code>installation_skip</code></h3>
+<p>If there is some strong reason not to trigger a test and release, an operator is just merged. For example, operators named <code>ack*</code> have around 10 PRs opened at the same time. This merges 10 operators at the same time. In this case, 10 pipeline runs can be ineffective because we need just a single pipeline run to synchronize everything. </p>
+<div class="admonition info">
+<p class="admonition-title">Operator with <code>installation-skipped</code> PR label is just merged and will be released with the next operator.</p>
+</div>
+<p>In rare cases, there is no other pipeline run triggered, please restart some pipeline run with no flag inside square braces.</p>
+<h3 id="placeholders-to-reserve-an-operator-name-for-future-prs">Placeholders to reserve an operator name for future PRs</h3>
+<p>If a contributor needs to reserve an operator name, it is possible to open a PR with just a <code>ci.yaml</code> file in an operator directory. Pipeline supports such functionality and skipping tests and release.</p>
 </article>
 </div>
 </div>

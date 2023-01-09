@@ -87,8 +87,8 @@ metadata:
               "buildDir": "samples-go/helloworld",
               "buildRegistry": {
                 "passwordSecretRef": {
-                    "key": "PASSWORD",
-                    "name": "docker-password"
+                  "key": "PASSWORD",
+                  "name": "docker-password"
                 },
                 "repository": "docker.io",
                 "username": "ktenzer"
@@ -96,7 +96,7 @@ metadata:
               "enabled": false,
               "gitRepository": {
                 "reference": {
-                    "branch": "main"
+                  "branch": "main"
                 },
                 "url": "https://github.com/ktenzer/samples-go.git"
               },
@@ -475,6 +475,10 @@ spec:
                   initialDelaySeconds: 15
                   periodSeconds: 20
                 name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
                 readinessProbe:
                   httpGet:
                     path: /readyz
@@ -490,10 +494,19 @@ spec:
                     memory: 64Mi
                 securityContext:
                   allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
               securityContext:
                 runAsNonRoot: true
               serviceAccountName: temporal-operator-controller-manager
               terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: webhook-server-cert
       permissions:
       - rules:
         - apiGroups:
@@ -558,5 +571,86 @@ spec:
   provider:
     name: Temporal Community
     url: https://temporal.io/
-  version: 0.10.0
   replaces: temporal-operator.v0.9.1
+  version: 0.10.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mtemporalc.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-temporal-io-v1beta1-temporalcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mtemporalworkerprocess.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalworkerprocesses
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-temporal-io-v1beta1-temporalworkerprocess
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vtemporalc.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-temporal-io-v1beta1-temporalcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vtemporalworkerprocess.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalworkerprocesses
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-temporal-io-v1beta1-temporalworkerprocess

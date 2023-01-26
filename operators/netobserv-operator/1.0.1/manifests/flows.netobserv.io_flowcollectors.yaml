@@ -1,0 +1,2141 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: flowcollectors.flows.netobserv.io
+spec:
+  group: flows.netobserv.io
+  names:
+    kind: FlowCollector
+    listKind: FlowCollectorList
+    plural: flowcollectors
+    singular: flowcollector
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.agent.type
+      name: Agent
+      type: string
+    - jsonPath: .spec.agent.ebpf.sampling
+      name: Sampling (EBPF)
+      type: string
+    - jsonPath: .spec.deploymentModel
+      name: Deployment Model
+      type: string
+    - jsonPath: .status.conditions[*].reason
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: FlowCollector is the Schema for the flowcollectors API, which
+          pilots and configures netflow collection.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            properties:
+              name:
+                pattern: ^cluster$
+                type: string
+            type: object
+          spec:
+            description: FlowCollectorSpec defines the desired state of FlowCollector
+            properties:
+              agent:
+                default:
+                  type: EBPF
+                description: agent for flows extraction.
+                properties:
+                  ebpf:
+                    description: ebpf describes the settings related to the eBPF-based
+                      flow reporter when the "agent.type" property is set to "EBPF".
+                    properties:
+                      cacheActiveTimeout:
+                        default: 5s
+                        description: cacheActiveTimeout is the max period during which
+                          the reporter will aggregate flows before sending
+                        pattern: ^\d+(ns|ms|s|m)?$
+                        type: string
+                      cacheMaxFlows:
+                        default: 100000
+                        description: cacheMaxFlows is the max number of flows in an
+                          aggregate; when reached, the reporter sends the flows
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      debug:
+                        description: Debug allows setting some aspects of the internal
+                          configuration of the eBPF agent. This section is aimed exclusively
+                          for debugging and fine-grained performance optimizations
+                          (for example GOGC, GOMAXPROCS env vars). Users setting its
+                          values do it at their own risk.
+                        properties:
+                          env:
+                            additionalProperties:
+                              type: string
+                            description: env allows passing custom environment variables
+                              to the NetObserv Agent. Useful for passing some very
+                              concrete performance-tuning options (such as GOGC, GOMAXPROCS)
+                              that shouldn't be publicly exposed as part of the FlowCollector
+                              descriptor, as they are only useful in edge debug and
+                              support scenarios.
+                            type: object
+                        type: object
+                      excludeInterfaces:
+                        default:
+                        - lo
+                        description: excludeInterfaces contains the interface names
+                          that will be excluded from flow tracing. If an entry is
+                          enclosed by slashes (such as `/br-/`), it will match as
+                          regular expression, otherwise it will be matched as a case-sensitive
+                          string.
+                        items:
+                          type: string
+                        type: array
+                      imagePullPolicy:
+                        default: IfNotPresent
+                        description: imagePullPolicy is the Kubernetes pull policy
+                          for the image defined above
+                        enum:
+                        - IfNotPresent
+                        - Always
+                        - Never
+                        type: string
+                      interfaces:
+                        description: interfaces contains the interface names from
+                          where flows will be collected. If empty, the agent will
+                          fetch all the interfaces in the system, excepting the ones
+                          listed in ExcludeInterfaces. If an entry is enclosed by
+                          slashes (such as `/br-/`), it will match as regular expression,
+                          otherwise it will be matched as a case-sensitive string.
+                        items:
+                          type: string
+                        type: array
+                      kafkaBatchSize:
+                        default: 10485760
+                        description: 'kafkaBatchSize limits the maximum size of a
+                          request in bytes before being sent to a partition. Ignored
+                          when not using Kafka. Default: 10MB.'
+                        type: integer
+                      logLevel:
+                        default: info
+                        description: logLevel defines the log level for the NetObserv
+                          eBPF Agent
+                        enum:
+                        - trace
+                        - debug
+                        - info
+                        - warn
+                        - error
+                        - fatal
+                        - panic
+                        type: string
+                      privileged:
+                        description: 'privileged mode for the eBPF Agent container.
+                          In general this setting can be ignored or set to false:
+                          in that case, the operator will set granular capabilities
+                          (BPF, PERFMON, NET_ADMIN, SYS_RESOURCE) to the container,
+                          to enable its correct operation. If for some reason these
+                          capabilities cannot be set (for example old kernel version
+                          not knowing CAP_BPF) then you can turn on this mode for
+                          more global privileges.'
+                        type: boolean
+                      resources:
+                        default:
+                          limits:
+                            memory: 800Mi
+                          requests:
+                            cpu: 100m
+                            memory: 50Mi
+                        description: 'resources are the compute resources required
+                          by this container. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        properties:
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: 'Limits describes the maximum amount of compute
+                              resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: 'Requests describes the minimum amount of
+                              compute resources required. If Requests is omitted for
+                              a container, it defaults to Limits if that is explicitly
+                              specified, otherwise to an implementation-defined value.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                            type: object
+                        type: object
+                      sampling:
+                        default: 50
+                        description: sampling rate of the flow reporter. 100 means
+                          one flow on 100 is sent. 0 or 1 means all flows are sampled.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                  ipfix:
+                    description: ipfix describes the settings related to the IPFIX-based
+                      flow reporter when the "agent.type" property is set to "IPFIX".
+                    properties:
+                      cacheActiveTimeout:
+                        default: 20s
+                        description: cacheActiveTimeout is the max period during which
+                          the reporter will aggregate flows before sending
+                        pattern: ^\d+(ns|ms|s|m)?$
+                        type: string
+                      cacheMaxFlows:
+                        default: 400
+                        description: cacheMaxFlows is the max number of flows in an
+                          aggregate; when reached, the reporter sends the flows
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      clusterNetworkOperator:
+                        description: clusterNetworkOperator defines the settings related
+                          to the OpenShift Cluster Network Operator, when available.
+                        properties:
+                          namespace:
+                            default: openshift-network-operator
+                            description: namespace  where the config map is going
+                              to be deployed.
+                            type: string
+                        type: object
+                      forceSampleAll:
+                        default: false
+                        description: forceSampleAll allows disabling sampling in the
+                          IPFIX-based flow reporter. It is not recommended to sample
+                          all the traffic with IPFIX, as it might generate cluster
+                          instability. If you REALLY want to do that, set this flag
+                          to true. Use at your own risk. When it is set to true, the
+                          value of "sampling" is ignored.
+                        type: boolean
+                      ovnKubernetes:
+                        description: ovnKubernetes defines the settings of the OVN-Kubernetes
+                          CNI, when available. This configuration is used when using
+                          OVN's IPFIX exports, without OpenShift. When using OpenShift,
+                          refer to the `clusterNetworkOperator` property instead.
+                        properties:
+                          containerName:
+                            default: ovnkube-node
+                            description: containerName defines the name of the container
+                              to configure for IPFIX.
+                            type: string
+                          daemonSetName:
+                            default: ovnkube-node
+                            description: daemonSetName defines the name of the DaemonSet
+                              controlling the OVN-Kubernetes pods.
+                            type: string
+                          namespace:
+                            default: ovn-kubernetes
+                            description: namespace where OVN-Kubernetes pods are deployed.
+                            type: string
+                        type: object
+                      sampling:
+                        default: 400
+                        description: sampling is the sampling rate on the reporter.
+                          100 means one flow on 100 is sent. To ensure cluster stability,
+                          it is not possible to set a value below 2. If you really
+                          want to sample every packet, which might impact the cluster
+                          stability, refer to "forceSampleAll". Alternatively, you
+                          can use the eBPF Agent instead of IPFIX.
+                        format: int32
+                        minimum: 2
+                        type: integer
+                    type: object
+                  type:
+                    default: EBPF
+                    description: type selects the flows tracing agent. Possible values
+                      are "EBPF" (default) to use NetObserv eBPF agent, "IPFIX" to
+                      use the legacy IPFIX collector. "EBPF" is recommended in most
+                      cases as it offers better performances and should work regardless
+                      of the CNI installed on the cluster. "IPFIX" works with OVN-Kubernetes
+                      CNI (other CNIs could work if they support exporting IPFIX,
+                      but they would require manual configuration).
+                    enum:
+                    - EBPF
+                    - IPFIX
+                    type: string
+                required:
+                - type
+                type: object
+              consolePlugin:
+                description: consolePlugin defines the settings related to the OpenShift
+                  Console plugin, when available.
+                properties:
+                  autoscaler:
+                    description: autoscaler spec of a horizontal pod autoscaler to
+                      set up for the plugin Deployment.
+                    properties:
+                      maxReplicas:
+                        default: 3
+                        description: maxReplicas is the upper limit for the number
+                          of pods that can be set by the autoscaler; cannot be smaller
+                          than MinReplicas.
+                        format: int32
+                        type: integer
+                      metrics:
+                        description: metrics used by the pod autoscaler
+                        items:
+                          description: MetricSpec specifies how to scale based on
+                            a single metric (only `type` and one other matching field
+                            should be set at once).
+                          properties:
+                            containerResource:
+                              description: containerResource refers to a resource
+                                metric (such as those specified in requests and limits)
+                                known to Kubernetes describing a single container
+                                in each pod of the current scale target (e.g. CPU
+                                or memory). Such metrics are built in to Kubernetes,
+                                and have special scaling options on top of those available
+                                to normal per-pod metrics using the "pods" source.
+                                This is an alpha feature and can be enabled by the
+                                HPAContainerMetrics feature flag.
+                              properties:
+                                container:
+                                  description: container is the name of the container
+                                    in the pods of the scaling target
+                                  type: string
+                                name:
+                                  description: name is the name of the resource in
+                                    question.
+                                  type: string
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - container
+                              - name
+                              - target
+                              type: object
+                            external:
+                              description: external refers to a global metric that
+                                is not associated with any Kubernetes object. It allows
+                                autoscaling based on information coming from components
+                                running outside of cluster (for example length of
+                                queue in cloud messaging service, or QPS from loadbalancer
+                                running outside of cluster).
+                              properties:
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - metric
+                              - target
+                              type: object
+                            object:
+                              description: object refers to a metric describing a
+                                single kubernetes object (for example, hits-per-second
+                                on an Ingress object).
+                              properties:
+                                describedObject:
+                                  description: describedObject specifies the descriptions
+                                    of a object,such as kind,name apiVersion
+                                  properties:
+                                    apiVersion:
+                                      description: API version of the referent
+                                      type: string
+                                    kind:
+                                      description: 'Kind of the referent; More info:
+                                        https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"'
+                                      type: string
+                                    name:
+                                      description: 'Name of the referent; More info:
+                                        http://kubernetes.io/docs/user-guide/identifiers#names'
+                                      type: string
+                                  required:
+                                  - kind
+                                  - name
+                                  type: object
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - describedObject
+                              - metric
+                              - target
+                              type: object
+                            pods:
+                              description: pods refers to a metric describing each
+                                pod in the current scale target (for example, transactions-processed-per-second).  The
+                                values will be averaged together before being compared
+                                to the target value.
+                              properties:
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - metric
+                              - target
+                              type: object
+                            resource:
+                              description: resource refers to a resource metric (such
+                                as those specified in requests and limits) known to
+                                Kubernetes describing each pod in the current scale
+                                target (e.g. CPU or memory). Such metrics are built
+                                in to Kubernetes, and have special scaling options
+                                on top of those available to normal per-pod metrics
+                                using the "pods" source.
+                              properties:
+                                name:
+                                  description: name is the name of the resource in
+                                    question.
+                                  type: string
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - name
+                              - target
+                              type: object
+                            type:
+                              description: 'type is the type of metric source.  It
+                                should be one of "ContainerResource", "External",
+                                "Object", "Pods" or "Resource", each mapping to a
+                                matching field in the object. Note: "ContainerResource"
+                                type is available on when the feature-gate HPAContainerMetrics
+                                is enabled'
+                              type: string
+                          required:
+                          - type
+                          type: object
+                        type: array
+                      minReplicas:
+                        description: minReplicas is the lower limit for the number
+                          of replicas to which the autoscaler can scale down.  It
+                          defaults to 1 pod.  minReplicas is allowed to be 0 if the
+                          alpha feature gate HPAScaleToZero is enabled and at least
+                          one Object or External metric is configured.  Scaling is
+                          active as long as at least one metric value is available.
+                        format: int32
+                        type: integer
+                      status:
+                        default: DISABLED
+                        description: Status describe the desired status regarding
+                          deploying an horizontal pod autoscaler DISABLED will not
+                          deploy an horizontal pod autoscaler ENABLED will deploy
+                          an horizontal pod autoscaler
+                        enum:
+                        - DISABLED
+                        - ENABLED
+                        type: string
+                    type: object
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: imagePullPolicy is the Kubernetes pull policy for
+                      the image defined above
+                    enum:
+                    - IfNotPresent
+                    - Always
+                    - Never
+                    type: string
+                  logLevel:
+                    default: info
+                    description: logLevel for the console plugin backend
+                    enum:
+                    - trace
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    - fatal
+                    - panic
+                    type: string
+                  port:
+                    default: 9001
+                    description: port is the plugin service port
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  portNaming:
+                    default:
+                      enable: true
+                    description: portNaming defines the configuration of the port-to-service
+                      name translation
+                    properties:
+                      enable:
+                        default: true
+                        description: enable the console plugin port-to-service name
+                          translation
+                        type: boolean
+                      portNames:
+                        additionalProperties:
+                          type: string
+                        description: 'portNames defines additional port names to use
+                          in the console. Example: portNames: {"3100": "loki"}'
+                        type: object
+                    type: object
+                  quickFilters:
+                    default:
+                    - default: true
+                      filter:
+                        dst_namespace!: openshift-,netobserv
+                        src_namespace!: openshift-,netobserv
+                      name: Applications
+                    - filter:
+                        dst_namespace: openshift-,netobserv
+                        src_namespace: openshift-,netobserv
+                      name: Infrastructure
+                    - default: true
+                      filter:
+                        dst_kind: Pod
+                        src_kind: Pod
+                      name: Pods network
+                    - filter:
+                        dst_kind: Service
+                      name: Services network
+                    description: quickFilters configures quick filter presets for
+                      the Console plugin
+                    items:
+                      description: QuickFilter defines preset configuration for Console's
+                        quick filters
+                      properties:
+                        default:
+                          description: default defines whether this filter should
+                            be active by default or not
+                          type: boolean
+                        filter:
+                          additionalProperties:
+                            type: string
+                          description: 'filter is a set of keys and values to be set
+                            when this filter is selected. Each key can relate to a
+                            list of values using a coma-separated string. Example:
+                            filter: {"src_namespace": "namespace1,namespace2"}'
+                          type: object
+                        name:
+                          description: name of the filter, that will be displayed
+                            in Console
+                          type: string
+                      required:
+                      - filter
+                      - name
+                      type: object
+                    type: array
+                  register:
+                    default: true
+                    description: 'register allows, when set to true, to automatically
+                      register the provided console plugin with the OpenShift Console
+                      operator. When set to false, you can still register it manually
+                      by editing console.operator.openshift.io/cluster. E.g: oc patch
+                      console.operator.openshift.io cluster --type=''json'' -p ''[{"op":
+                      "add", "path": "/spec/plugins/-", "value": "netobserv-plugin"}]'''
+                    type: boolean
+                  replicas:
+                    default: 1
+                    description: replicas defines the number of replicas (pods) to
+                      start.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  resources:
+                    default:
+                      limits:
+                        memory: 100Mi
+                      requests:
+                        cpu: 100m
+                        memory: 50Mi
+                    description: 'resources, in terms of compute resources, required
+                      by this container. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                    properties:
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        type: object
+                    type: object
+                required:
+                - register
+                type: object
+              deploymentModel:
+                default: DIRECT
+                description: deploymentModel defines the desired type of deployment
+                  for flow processing. Possible values are "DIRECT" (default) to make
+                  the flow processor listening directly from the agents, or "KAFKA"
+                  to make flows sent to a Kafka pipeline before consumption by the
+                  processor. Kafka can provide better scalability, resiliency and
+                  high availability (for more details, see https://www.redhat.com/en/topics/integration/what-is-apache-kafka).
+                enum:
+                - DIRECT
+                - KAFKA
+                type: string
+              exporters:
+                description: exporters defines additional optional exporters for custom
+                  consumption or storage. This is an experimental feature. Currently,
+                  only KAFKA exporter is available.
+                items:
+                  description: FlowCollectorExporter defines an additional exporter
+                    to send enriched flows to
+                  properties:
+                    kafka:
+                      description: kafka configuration, such as address or topic,
+                        to send enriched flows to.
+                      properties:
+                        address:
+                          default: ""
+                          description: address of the Kafka server
+                          type: string
+                        tls:
+                          description: tls client configuration. When using TLS, verify
+                            that the address matches the Kafka port used for TLS,
+                            generally 9093. Note that, when eBPF agents are used,
+                            Kafka certificate needs to be copied in the agent namespace
+                            (by default it's netobserv-privileged).
+                          properties:
+                            caCert:
+                              description: caCert defines the reference of the certificate
+                                for the Certificate Authority
+                              properties:
+                                certFile:
+                                  description: certFile defines the path to the certificate
+                                    file name within the config map or secret
+                                  type: string
+                                certKey:
+                                  description: certKey defines the path to the certificate
+                                    private key file name within the config map or
+                                    secret. Omit when the key is not necessary.
+                                  type: string
+                                name:
+                                  description: name of the config map or secret containing
+                                    certificates
+                                  type: string
+                                type:
+                                  description: 'type for the certificate reference:
+                                    "configmap" or "secret"'
+                                  enum:
+                                  - configmap
+                                  - secret
+                                  type: string
+                              type: object
+                            enable:
+                              default: false
+                              description: enable TLS
+                              type: boolean
+                            insecureSkipVerify:
+                              default: false
+                              description: insecureSkipVerify allows skipping client-side
+                                verification of the server certificate If set to true,
+                                CACert field will be ignored
+                              type: boolean
+                            userCert:
+                              description: userCert defines the user certificate reference,
+                                used for mTLS (you can ignore it when using regular,
+                                one-way TLS)
+                              properties:
+                                certFile:
+                                  description: certFile defines the path to the certificate
+                                    file name within the config map or secret
+                                  type: string
+                                certKey:
+                                  description: certKey defines the path to the certificate
+                                    private key file name within the config map or
+                                    secret. Omit when the key is not necessary.
+                                  type: string
+                                name:
+                                  description: name of the config map or secret containing
+                                    certificates
+                                  type: string
+                                type:
+                                  description: 'type for the certificate reference:
+                                    "configmap" or "secret"'
+                                  enum:
+                                  - configmap
+                                  - secret
+                                  type: string
+                              type: object
+                          type: object
+                        topic:
+                          default: ""
+                          description: kafka topic to use. It must exist, NetObserv
+                            will not create it.
+                          type: string
+                      required:
+                      - address
+                      - topic
+                      type: object
+                    type:
+                      description: type selects the type of exporters. Only "KAFKA"
+                        is available at the moment.
+                      enum:
+                      - KAFKA
+                      type: string
+                  required:
+                  - type
+                  type: object
+                type: array
+              kafka:
+                description: kafka configuration, allowing to use Kafka as a broker
+                  as part of the flow collection pipeline. Available when the "spec.deploymentModel"
+                  is "KAFKA".
+                properties:
+                  address:
+                    default: ""
+                    description: address of the Kafka server
+                    type: string
+                  tls:
+                    description: tls client configuration. When using TLS, verify
+                      that the address matches the Kafka port used for TLS, generally
+                      9093. Note that, when eBPF agents are used, Kafka certificate
+                      needs to be copied in the agent namespace (by default it's netobserv-privileged).
+                    properties:
+                      caCert:
+                        description: caCert defines the reference of the certificate
+                          for the Certificate Authority
+                        properties:
+                          certFile:
+                            description: certFile defines the path to the certificate
+                              file name within the config map or secret
+                            type: string
+                          certKey:
+                            description: certKey defines the path to the certificate
+                              private key file name within the config map or secret.
+                              Omit when the key is not necessary.
+                            type: string
+                          name:
+                            description: name of the config map or secret containing
+                              certificates
+                            type: string
+                          type:
+                            description: 'type for the certificate reference: "configmap"
+                              or "secret"'
+                            enum:
+                            - configmap
+                            - secret
+                            type: string
+                        type: object
+                      enable:
+                        default: false
+                        description: enable TLS
+                        type: boolean
+                      insecureSkipVerify:
+                        default: false
+                        description: insecureSkipVerify allows skipping client-side
+                          verification of the server certificate If set to true, CACert
+                          field will be ignored
+                        type: boolean
+                      userCert:
+                        description: userCert defines the user certificate reference,
+                          used for mTLS (you can ignore it when using regular, one-way
+                          TLS)
+                        properties:
+                          certFile:
+                            description: certFile defines the path to the certificate
+                              file name within the config map or secret
+                            type: string
+                          certKey:
+                            description: certKey defines the path to the certificate
+                              private key file name within the config map or secret.
+                              Omit when the key is not necessary.
+                            type: string
+                          name:
+                            description: name of the config map or secret containing
+                              certificates
+                            type: string
+                          type:
+                            description: 'type for the certificate reference: "configmap"
+                              or "secret"'
+                            enum:
+                            - configmap
+                            - secret
+                            type: string
+                        type: object
+                    type: object
+                  topic:
+                    default: ""
+                    description: kafka topic to use. It must exist, NetObserv will
+                      not create it.
+                    type: string
+                required:
+                - address
+                - topic
+                type: object
+              loki:
+                description: loki, the flow store, client settings.
+                properties:
+                  authToken:
+                    default: DISABLED
+                    description: AuthToken describe the way to get a token to authenticate
+                      to Loki. DISABLED will not send any token with the request.
+                      HOST will use the local pod service account to authenticate
+                      to Loki. FORWARD will forward user token, in this mode, pod
+                      that are not receiving user request like the processor will
+                      use the local pod service account. Similar to HOST mode. When
+                      using the Loki Operator, set it to `HOST` or `FORWARD`.
+                    enum:
+                    - DISABLED
+                    - HOST
+                    - FORWARD
+                    type: string
+                  batchSize:
+                    default: 102400
+                    description: batchSize is max batch size (in bytes) of logs to
+                      accumulate before sending.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  batchWait:
+                    default: 1s
+                    description: batchWait is max time to wait before sending a batch.
+                    type: string
+                  maxBackoff:
+                    default: 5s
+                    description: maxBackoff is the maximum backoff time for client
+                      connection between retries.
+                    type: string
+                  maxRetries:
+                    default: 2
+                    description: maxRetries is the maximum number of retries for client
+                      connections.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  minBackoff:
+                    default: 1s
+                    description: minBackoff is the initial backoff time for client
+                      connection between retries.
+                    type: string
+                  querierUrl:
+                    description: querierURL specifies the address of the Loki querier
+                      service, in case it is different from the Loki ingester URL.
+                      If empty, the URL value will be used (assuming that the Loki
+                      ingester and querier are in the same server). When using the
+                      Loki Operator, do not set it, since ingestion and queries use
+                      the Loki gateway.
+                    type: string
+                  staticLabels:
+                    additionalProperties:
+                      type: string
+                    default:
+                      app: netobserv-flowcollector
+                    description: staticLabels is a map of common labels to set on
+                      each flow.
+                    type: object
+                  statusUrl:
+                    description: statusURL specifies the address of the Loki /ready
+                      /metrics /config endpoints, in case it is different from the
+                      Loki querier URL. If empty, the QuerierURL value will be used.
+                      This is useful to show error messages and some context in the
+                      frontend. When using the Loki Operator, set it to the Loki HTTP
+                      query frontend service, for example https://loki-query-frontend-http.netobserv.svc:3100/.
+                    type: string
+                  tenantID:
+                    default: netobserv
+                    description: tenantID is the Loki X-Scope-OrgID that identifies
+                      the tenant for each request. When using the Loki Operator, set
+                      it to `network`, which corresponds to a special tenant mode.
+                    type: string
+                  timeout:
+                    default: 10s
+                    description: timeout is the maximum time connection / request
+                      limit. A Timeout of zero means no timeout.
+                    type: string
+                  tls:
+                    description: tls client configuration.
+                    properties:
+                      caCert:
+                        description: caCert defines the reference of the certificate
+                          for the Certificate Authority
+                        properties:
+                          certFile:
+                            description: certFile defines the path to the certificate
+                              file name within the config map or secret
+                            type: string
+                          certKey:
+                            description: certKey defines the path to the certificate
+                              private key file name within the config map or secret.
+                              Omit when the key is not necessary.
+                            type: string
+                          name:
+                            description: name of the config map or secret containing
+                              certificates
+                            type: string
+                          type:
+                            description: 'type for the certificate reference: "configmap"
+                              or "secret"'
+                            enum:
+                            - configmap
+                            - secret
+                            type: string
+                        type: object
+                      enable:
+                        default: false
+                        description: enable TLS
+                        type: boolean
+                      insecureSkipVerify:
+                        default: false
+                        description: insecureSkipVerify allows skipping client-side
+                          verification of the server certificate If set to true, CACert
+                          field will be ignored
+                        type: boolean
+                      userCert:
+                        description: userCert defines the user certificate reference,
+                          used for mTLS (you can ignore it when using regular, one-way
+                          TLS)
+                        properties:
+                          certFile:
+                            description: certFile defines the path to the certificate
+                              file name within the config map or secret
+                            type: string
+                          certKey:
+                            description: certKey defines the path to the certificate
+                              private key file name within the config map or secret.
+                              Omit when the key is not necessary.
+                            type: string
+                          name:
+                            description: name of the config map or secret containing
+                              certificates
+                            type: string
+                          type:
+                            description: 'type for the certificate reference: "configmap"
+                              or "secret"'
+                            enum:
+                            - configmap
+                            - secret
+                            type: string
+                        type: object
+                    type: object
+                  url:
+                    default: http://loki:3100/
+                    description: url is the address of an existing Loki service to
+                      push the flows to. When using the Loki Operator, set it to the
+                      Loki gateway service with the `network` tenant set in path,
+                      for example https://loki-gateway-http.netobserv.svc:8080/api/logs/v1/network.
+                    type: string
+                type: object
+              namespace:
+                description: namespace where NetObserv pods are deployed. If empty,
+                  the namespace of the operator is going to be used.
+                type: string
+              processor:
+                description: processor defines the settings of the component that
+                  receives the flows from the agent, enriches them, and forwards them
+                  to the Loki persistence layer.
+                properties:
+                  debug:
+                    description: Debug allows setting some aspects of the internal
+                      configuration of the flow processor. This section is aimed exclusively
+                      for debugging and fine-grained performance optimizations (for
+                      example GOGC, GOMAXPROCS env vars). Users setting its values
+                      do it at their own risk.
+                    properties:
+                      env:
+                        additionalProperties:
+                          type: string
+                        description: env allows passing custom environment variables
+                          to the NetObserv Agent. Useful for passing some very concrete
+                          performance-tuning options (such as GOGC, GOMAXPROCS) that
+                          shouldn't be publicly exposed as part of the FlowCollector
+                          descriptor, as they are only useful in edge debug and support
+                          scenarios.
+                        type: object
+                    type: object
+                  dropUnusedFields:
+                    default: true
+                    description: dropUnusedFields allows, when set to true, to drop
+                      fields that are known to be unused by OVS, in order to save
+                      storage space.
+                    type: boolean
+                  enableKubeProbes:
+                    default: true
+                    description: enableKubeProbes is a flag to enable or disable Kubernetes
+                      liveness and readiness probes
+                    type: boolean
+                  healthPort:
+                    default: 8080
+                    description: healthPort is a collector HTTP port in the Pod that
+                      exposes the health check API
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: imagePullPolicy is the Kubernetes pull policy for
+                      the image defined above
+                    enum:
+                    - IfNotPresent
+                    - Always
+                    - Never
+                    type: string
+                  kafkaConsumerAutoscaler:
+                    description: kafkaConsumerAutoscaler spec of a horizontal pod
+                      autoscaler to set up for flowlogs-pipeline-transformer, which
+                      consumes Kafka messages. This setting is ignored when Kafka
+                      is disabled.
+                    properties:
+                      maxReplicas:
+                        default: 3
+                        description: maxReplicas is the upper limit for the number
+                          of pods that can be set by the autoscaler; cannot be smaller
+                          than MinReplicas.
+                        format: int32
+                        type: integer
+                      metrics:
+                        description: metrics used by the pod autoscaler
+                        items:
+                          description: MetricSpec specifies how to scale based on
+                            a single metric (only `type` and one other matching field
+                            should be set at once).
+                          properties:
+                            containerResource:
+                              description: containerResource refers to a resource
+                                metric (such as those specified in requests and limits)
+                                known to Kubernetes describing a single container
+                                in each pod of the current scale target (e.g. CPU
+                                or memory). Such metrics are built in to Kubernetes,
+                                and have special scaling options on top of those available
+                                to normal per-pod metrics using the "pods" source.
+                                This is an alpha feature and can be enabled by the
+                                HPAContainerMetrics feature flag.
+                              properties:
+                                container:
+                                  description: container is the name of the container
+                                    in the pods of the scaling target
+                                  type: string
+                                name:
+                                  description: name is the name of the resource in
+                                    question.
+                                  type: string
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - container
+                              - name
+                              - target
+                              type: object
+                            external:
+                              description: external refers to a global metric that
+                                is not associated with any Kubernetes object. It allows
+                                autoscaling based on information coming from components
+                                running outside of cluster (for example length of
+                                queue in cloud messaging service, or QPS from loadbalancer
+                                running outside of cluster).
+                              properties:
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - metric
+                              - target
+                              type: object
+                            object:
+                              description: object refers to a metric describing a
+                                single kubernetes object (for example, hits-per-second
+                                on an Ingress object).
+                              properties:
+                                describedObject:
+                                  description: describedObject specifies the descriptions
+                                    of a object,such as kind,name apiVersion
+                                  properties:
+                                    apiVersion:
+                                      description: API version of the referent
+                                      type: string
+                                    kind:
+                                      description: 'Kind of the referent; More info:
+                                        https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"'
+                                      type: string
+                                    name:
+                                      description: 'Name of the referent; More info:
+                                        http://kubernetes.io/docs/user-guide/identifiers#names'
+                                      type: string
+                                  required:
+                                  - kind
+                                  - name
+                                  type: object
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - describedObject
+                              - metric
+                              - target
+                              type: object
+                            pods:
+                              description: pods refers to a metric describing each
+                                pod in the current scale target (for example, transactions-processed-per-second).  The
+                                values will be averaged together before being compared
+                                to the target value.
+                              properties:
+                                metric:
+                                  description: metric identifies the target metric
+                                    by name and selector
+                                  properties:
+                                    name:
+                                      description: name is the name of the given metric
+                                      type: string
+                                    selector:
+                                      description: selector is the string-encoded
+                                        form of a standard kubernetes label selector
+                                        for the given metric When set, it is passed
+                                        as an additional parameter to the metrics
+                                        server for more specific metrics scoping.
+                                        When unset, just the metricName will be used
+                                        to gather metrics.
+                                      properties:
+                                        matchExpressions:
+                                          description: matchExpressions is a list
+                                            of label selector requirements. The requirements
+                                            are ANDed.
+                                          items:
+                                            description: A label selector requirement
+                                              is a selector that contains values,
+                                              a key, and an operator that relates
+                                              the key and values.
+                                            properties:
+                                              key:
+                                                description: key is the label key
+                                                  that the selector applies to.
+                                                type: string
+                                              operator:
+                                                description: operator represents a
+                                                  key's relationship to a set of values.
+                                                  Valid operators are In, NotIn, Exists
+                                                  and DoesNotExist.
+                                                type: string
+                                              values:
+                                                description: values is an array of
+                                                  string values. If the operator is
+                                                  In or NotIn, the values array must
+                                                  be non-empty. If the operator is
+                                                  Exists or DoesNotExist, the values
+                                                  array must be empty. This array
+                                                  is replaced during a strategic merge
+                                                  patch.
+                                                items:
+                                                  type: string
+                                                type: array
+                                            required:
+                                            - key
+                                            - operator
+                                            type: object
+                                          type: array
+                                        matchLabels:
+                                          additionalProperties:
+                                            type: string
+                                          description: matchLabels is a map of {key,value}
+                                            pairs. A single {key,value} in the matchLabels
+                                            map is equivalent to an element of matchExpressions,
+                                            whose key field is "key", the operator
+                                            is "In", and the values array contains
+                                            only "value". The requirements are ANDed.
+                                          type: object
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - metric
+                              - target
+                              type: object
+                            resource:
+                              description: resource refers to a resource metric (such
+                                as those specified in requests and limits) known to
+                                Kubernetes describing each pod in the current scale
+                                target (e.g. CPU or memory). Such metrics are built
+                                in to Kubernetes, and have special scaling options
+                                on top of those available to normal per-pod metrics
+                                using the "pods" source.
+                              properties:
+                                name:
+                                  description: name is the name of the resource in
+                                    question.
+                                  type: string
+                                target:
+                                  description: target specifies the target value for
+                                    the given metric
+                                  properties:
+                                    averageUtilization:
+                                      description: averageUtilization is the target
+                                        value of the average of the resource metric
+                                        across all relevant pods, represented as a
+                                        percentage of the requested value of the resource
+                                        for the pods. Currently only valid for Resource
+                                        metric source type
+                                      format: int32
+                                      type: integer
+                                    averageValue:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: averageValue is the target value
+                                        of the average of the metric across all relevant
+                                        pods (as a quantity)
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    type:
+                                      description: type represents whether the metric
+                                        type is Utilization, Value, or AverageValue
+                                      type: string
+                                    value:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: value is the target value of the
+                                        metric (as a quantity).
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                  required:
+                                  - type
+                                  type: object
+                              required:
+                              - name
+                              - target
+                              type: object
+                            type:
+                              description: 'type is the type of metric source.  It
+                                should be one of "ContainerResource", "External",
+                                "Object", "Pods" or "Resource", each mapping to a
+                                matching field in the object. Note: "ContainerResource"
+                                type is available on when the feature-gate HPAContainerMetrics
+                                is enabled'
+                              type: string
+                          required:
+                          - type
+                          type: object
+                        type: array
+                      minReplicas:
+                        description: minReplicas is the lower limit for the number
+                          of replicas to which the autoscaler can scale down.  It
+                          defaults to 1 pod.  minReplicas is allowed to be 0 if the
+                          alpha feature gate HPAScaleToZero is enabled and at least
+                          one Object or External metric is configured.  Scaling is
+                          active as long as at least one metric value is available.
+                        format: int32
+                        type: integer
+                      status:
+                        default: DISABLED
+                        description: Status describe the desired status regarding
+                          deploying an horizontal pod autoscaler DISABLED will not
+                          deploy an horizontal pod autoscaler ENABLED will deploy
+                          an horizontal pod autoscaler
+                        enum:
+                        - DISABLED
+                        - ENABLED
+                        type: string
+                    type: object
+                  kafkaConsumerBatchSize:
+                    default: 10485760
+                    description: 'kafkaConsumerBatchSize indicates to the broker the
+                      maximum batch size, in bytes, that the consumer will accept.
+                      Ignored when not using Kafka. Default: 10MB.'
+                    type: integer
+                  kafkaConsumerQueueCapacity:
+                    default: 1000
+                    description: kafkaConsumerQueueCapacity defines the capacity of
+                      the internal message queue used in the Kafka consumer client.
+                      Ignored when not using Kafka.
+                    type: integer
+                  kafkaConsumerReplicas:
+                    default: 3
+                    description: kafkaConsumerReplicas defines the number of replicas
+                      (pods) to start for flowlogs-pipeline-transformer, which consumes
+                      Kafka messages. This setting is ignored when Kafka is disabled.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  logLevel:
+                    default: info
+                    description: logLevel of the collector runtime
+                    enum:
+                    - trace
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    - fatal
+                    - panic
+                    type: string
+                  metrics:
+                    description: Metrics define the processor configuration regarding
+                      metrics
+                    properties:
+                      ignoreTags:
+                        default:
+                        - egress
+                        - packets
+                        description: ignoreTags is a list of tags to specify which
+                          metrics to ignore
+                        items:
+                          type: string
+                        type: array
+                      server:
+                        description: metricsServer endpoint configuration for Prometheus
+                          scraper
+                        properties:
+                          port:
+                            default: 9102
+                            description: the prometheus HTTP port
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          tls:
+                            description: TLS configuration.
+                            properties:
+                              provided:
+                                description: TLS configuration.
+                                properties:
+                                  certFile:
+                                    description: certFile defines the path to the
+                                      certificate file name within the config map
+                                      or secret
+                                    type: string
+                                  certKey:
+                                    description: certKey defines the path to the certificate
+                                      private key file name within the config map
+                                      or secret. Omit when the key is not necessary.
+                                    type: string
+                                  name:
+                                    description: name of the config map or secret
+                                      containing certificates
+                                    type: string
+                                  type:
+                                    description: 'type for the certificate reference:
+                                      "configmap" or "secret"'
+                                    enum:
+                                    - configmap
+                                    - secret
+                                    type: string
+                                type: object
+                              type:
+                                default: DISABLED
+                                description: Select the type of TLS configuration
+                                  "DISABLED" (default) to not configure TLS for the
+                                  endpoint, "PROVIDED" to manually provide cert file
+                                  and a key file, and "AUTO" to use OpenShift auto
+                                  generated certificate using annotations
+                                enum:
+                                - DISABLED
+                                - PROVIDED
+                                - AUTO
+                                type: string
+                            type: object
+                        type: object
+                    type: object
+                  port:
+                    default: 2055
+                    description: 'port of the flow collector (host port) By conventions,
+                      some value are not authorized port must not be below 1024 and
+                      must not equal this values: 4789,6081,500, and 4500'
+                    format: int32
+                    maximum: 65535
+                    minimum: 1025
+                    type: integer
+                  profilePort:
+                    description: profilePort allows setting up a Go pprof profiler
+                      listening to this port
+                    format: int32
+                    maximum: 65535
+                    minimum: 0
+                    type: integer
+                  resources:
+                    default:
+                      limits:
+                        memory: 800Mi
+                      requests:
+                        cpu: 100m
+                        memory: 100Mi
+                    description: 'resources are the compute resources required by
+                      this container. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                    properties:
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        type: object
+                    type: object
+                type: object
+            required:
+            - agent
+            - deploymentModel
+            type: object
+          status:
+            description: FlowCollectorStatus defines the observed state of FlowCollector
+            properties:
+              conditions:
+                description: conditions represent the latest available observations
+                  of an object's state
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{     // Represents the observations of a
+                    foo's current state.     // Known .status.conditions.type are:
+                    \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type
+                    \    // +patchStrategy=merge     // +listType=map     // +listMapKey=type
+                    \    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`
+                    \n     // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              namespace:
+                description: namespace where console plugin and flowlogs-pipeline
+                  have been deployed.
+                type: string
+            required:
+            - conditions
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

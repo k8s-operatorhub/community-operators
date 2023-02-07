@@ -1,0 +1,311 @@
+kind: CustomResourceDefinition
+apiVersion: apiextensions.k8s.io/v1
+metadata:
+  creationTimestamp: null
+  name: modelservers.intel.com
+spec:
+  group: intel.com
+  names:
+    kind: ModelServer
+    listKind: ModelServerList
+    plural: modelservers
+    singular: modelserver
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: >-
+            ModelServer is the Schema for the modelserver API representing
+            OpenVINO Model Server instances
+          type: object
+          properties:
+            apiVersion:
+              description: >-
+                APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the
+                latest internal value, and may reject unrecognized values. More
+                info:
+                https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: >-
+                Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the
+                client submits requests to. Cannot be updated. In CamelCase.
+                More info:
+                https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: Spec defines the desired state of the Model Server
+              type: object
+              required:
+                - image_name
+              properties:
+                image_name:
+                  description: Model Server docker image to be used
+                  type: string
+                  default: >-
+                    openvino/model_server:2022.1
+                deployment_parameters:
+                  description: Cluster deployment parameters to be applied to the Model Server
+                  type: object
+                  properties:
+                    replicas:
+                      type: integer
+                      default: 1
+                    node_affinity:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    pod_affinity:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    pod_antiaffinity:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    update_strategy:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    openshift_service_mesh:
+                      description: If selected deployed pods will get annotations for integration with Red Hat Service Mesh
+                      type: boolean
+                      default: false
+                    resources:
+                      description: Resources for Model Serving server
+                      type: object
+                      properties:
+                        limits:
+                          type: object
+                          properties:
+                            cpu:
+                              description: >-
+                                Example values: "1", "4", "12"
+                              type: string
+                            memory:
+                              description: >-
+                                Example values "500M", "1.5Gi", "12Gi"
+                              type: string
+                            xpu_device:
+                              description: >-
+                                The device must be supported by the device plugin. Learn more on https://github.com/intel/intel-device-plugins-for-kubernetes. Only integer values are allowed.
+                              type: string
+                            xpu_device_quantity:
+                              type: string
+                              default: "1"
+                        requests:
+                          type: object
+                          properties:
+                            cpu:
+                              description: >-
+                                Example values: "1", "4", "12"
+                              type: string
+                            memory:
+                              description: >-
+                                Example values "500M", "1.5Gi", "12Gi"
+                              type: string
+                            xpu_device:
+                              description: >-
+                                The device must be supported by the device plugin. Learn more on https://github.com/intel/intel-device-plugins-for-kubernetes. Only integer values are allowed.
+                              type: string
+                            xpu_device_quantity:
+                              type: string
+                              default: "1"
+                service_parameters:
+                  type: object
+                  description: Fill service settings
+                  properties:
+                    grpc_port:
+                      description: gRPC service port
+                      type: integer
+                      format: int32
+                      default: 8080
+                    rest_port:
+                      description: REST service port
+                      type: integer
+                      format: int32
+                      default: 8081
+                    service_type:
+                      description: Service type
+                      type: string
+                      default: ClusterIP
+                      enum:
+                        - ClusterIP
+                        - NodePort
+                        - LoadBalancer
+                models_settings:
+                  type: object
+                  description: Fill model settings if model config is not used
+                  properties:
+                    single_model_mode:
+                      description: >-
+                        Select this option for serving a single model.
+                        For multi model and DAG deployments, a configuration file `config.json` should be added to a config_map resource
+                      type: boolean
+                      default: true
+                    config_configmap_name:
+                      type: string
+                    config_path:
+                      type: string
+                    model_name:
+                      description: Name of the model loaded to Model Server
+                      type: string
+                      default: resnet
+                    model_path:
+                      description: Path to the model files
+                      type: string
+                      default: 'gs://<bucket_name>/<model_dir>'
+                    shape:
+                      description: Resets models shape (model must support reshaping). If set, batch_size parameter is ignored
+                      type: string
+                    batch_size:
+                      description: Resets models batchsize, int value or auto. This parameter will be ignored if shape is set
+                      type: string
+                    target_device:
+                      description: Target device to run the inference
+                      type: string
+                    plugin_config:
+                      description: A dictionary of plugin configuration keys and their values
+                      type: string
+                      default: '{"PERFORMANCE_HINT":"LATENCY"}'
+                    model_version_policy:
+                      description: Model version policy
+                      type: string
+                      default: '{"latest": { "num_versions":1 }}'
+                    layout:
+                      description: Defines model input/output layouts
+                      type: string
+                    nireq:
+                      description: Size of inference request queue for model executions
+                      type: integer
+                      format: int32
+                    is_stateful:
+                      type: boolean
+                      default: false
+                    idle_sequence_cleanup:
+                      description: Flag indicating if model is subject to sequence cleaner scans
+                      type: boolean
+                      default: true
+                    low_latency_transformation:
+                      description: Flag indicating that Model Server should perform low latency transformation on that model
+                      type: boolean
+                      default: false
+                    max_sequence_number:
+                      description: Determines how many sequences can be processed concurrently by one model instance. When that value is reached, attempt to start a new sequence will result in error.
+                      type: integer
+                      format: int32
+                server_settings:
+                  type: object
+                  properties:
+                    file_system_poll_wait_seconds:
+                      description: Time interval between config and model versions changes detections
+                      type: integer
+                      format: int32
+                      default: 1
+                    log_level:
+                      description: Serving log level
+                      type: string
+                      default: INFO
+                      enum:
+                        - TRACE
+                        - DEBUG
+                        - INFO
+                        - WARNING
+                        - ERROR
+                    grpc_workers:
+                      description: Number of gRPC servers. Default 1. Increase for multi client, high throughput scenarios
+                      type: integer
+                      format: int32
+                      default: 1
+                    rest_workers:
+                      description: Number of worker threads in REST server - has no effect if rest_port is not set. Default value depends on number of CPUs.
+                      type: integer
+                      format: int32
+                    sequence_cleaner_poll_wait_minutes:
+                      description: Time interval between two consecutive sequence cleaner scans. Default is 5. Zero value disables sequence cleaner.
+                      type: integer
+                      format: int32
+                      default: 5
+                models_repository:
+                  type: object
+                  description: Access definition for model storage
+                  properties:
+                    storage_type:
+                      type: string
+                      default: google
+                      enum:
+                        - S3
+                        - google
+                        - azure
+                        - cluster
+                    models_host_path:
+                      type: string
+                      description: Host path to be mounted inside the containers as /models dir
+                    models_volume_claim:
+                      type: string
+                      description: Persistent volume claim to be mounted as /models dir
+                    runAsUser:
+                      description: >-
+                        Set the account ID if access to the model repository is restricted. Model server will start with this security context.
+                        In openshift, you might need to create Security Context Constraints to allow grant permissions for changing the context.
+                      type: string
+                    runAsGroup:
+                      type: string
+                      description: >-
+                         Set the group ID if access to the model repository is restricted. Model server will start with this security context.
+                         In openshift, you might need to create Security Context Constraints to allow grant permissions for changing the context.
+                    aws_secret_access_key:
+                      type: string
+                    aws_access_key_id:
+                      type: string
+                    aws_region:
+                      type: string
+                    s3_compat_api_endpoint:
+                      type: string
+                      description: Optional for AWS s3 storage and mandatory for Minio and other s3 compatible storage types
+                    gcp_creds_secret_name:
+                      type: string
+                      description: Secret name including Google Cloud Storage access token
+                    azure_storage_connection_string:
+                      type: string
+                      description: Connection string to download the models from Azure Storage blob containers
+                    https_proxy:
+                      description: https proxy to connect to the cloud storage
+                      type: string
+                    http_proxy:
+                      description: http proxy to connect to the cloud storage
+                      type: string
+                monitoring:
+                  type: object
+                  description: Configuration of service and model monitoring. This works only for single model mode. For serving multiple models, metrics are enabled via configuration file.
+                  properties:
+                    metrics_enable:
+                      type: boolean
+                      default: false
+                    metrics_list:
+                      type: string
+                      description: Comma-separated list of metrics to be enabled
+                      default: ""
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              description: Status defines the observed state of Ovms
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}
+        scale:
+          specReplicasPath: .spec.deployment_parameters.replicas
+          statusReplicasPath: .status.replicas
+          labelSelectorPath: .status.labelSelector
+  conversion:
+    strategy: None
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null
+

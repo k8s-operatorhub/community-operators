@@ -1,0 +1,495 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "gingersnap-project.io/v1alpha1",
+          "kind": "Cache",
+          "metadata": {
+            "name": "cache-sample"
+          },
+          "spec": {
+            "dataSource": {
+              "dbType": "MYSQL_8",
+              "secretRef": {
+                "name": "db-credential-secret"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "gingersnap-project.io/v1alpha1",
+          "kind": "EagerCacheRule",
+          "metadata": {
+            "name": "eagercacherule-sample"
+          },
+          "spec": {
+            "cacheRef": {
+              "name": "cache-sample",
+              "namespace": "default"
+            },
+            "key": {
+              "keyColumns": [
+                "col1"
+              ]
+            },
+            "tableName": "table"
+          }
+        },
+        {
+          "apiVersion": "gingersnap-project.io/v1alpha1",
+          "kind": "LazyCacheRule",
+          "metadata": {
+            "name": "lazycacherule-sample"
+          },
+          "spec": {
+            "cacheRef": {
+              "name": "cache-sample",
+              "namespace": "default"
+            },
+            "query": "Select * FROM table"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Database
+    certified: "false"
+    containerImage: quay.io/gingersnap/operator:0.0.1
+    operators.operatorframework.io/builder: operator-sdk-v1.22.2
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/gingersnap-project/operator
+  name: gingersnap.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Cache is the Schema for the caches API
+      displayName: Cache
+      kind: Cache
+      name: caches.gingersnap-project.io
+      version: v1alpha1
+    - description: EagerCacheRule is the Schema for the eagercacherules API
+      displayName: Eager Cache Rule
+      kind: EagerCacheRule
+      name: eagercacherules.gingersnap-project.io
+      version: v1alpha1
+    - description: LazyCacheRule is the Schema for the lazycacherules API
+      displayName: Lazy Cache Rule
+      kind: LazyCacheRule
+      name: lazycacherules.gingersnap-project.io
+      version: v1alpha1
+  description: Memory Service
+  displayName: gingersnap Operator
+  install:
+    spec:
+      deployments:
+      - label:
+          app.kubernetes.io/name: gingersnap-operator
+          control-plane: controller-manager
+        name: gingersnap-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: gingersnap-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: gingersnap-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --leader-elect
+                env:
+                - name: RELATED_IMAGE_CACHE_MANAGER_MYSQL
+                  value: quay.io/gingersnap/cache-manager-mysql
+                - name: RELATED_IMAGE_CACHE_MANAGER_MSSQL
+                  value: quay.io/gingersnap/cache-manager-mssql
+                - name: RELATED_IMAGE_CACHE_MANAGER_POSTGRES
+                  value: quay.io/gingersnap/cache-manager-postgres
+                - name: RELATED_IMAGE_DB_SYNCER
+                  value: quay.io/gingersnap/db-syncer
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                image: quay.io/gingersnap/operator:0.0.1
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              serviceAccountName: gingersnap-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - secrets
+          - services
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - caches
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - caches/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - caches/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - eagercacherules
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - eagercacherules/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - eagercacherules/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - lazycacherules
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - lazycacherules/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - gingersnap-project.io
+          resources:
+          - lazycacherules/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - servicebinding.io
+          resources:
+          - servicebindings
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - watch
+        serviceAccountName: gingersnap-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - cache
+  - caching
+  links:
+  - name: Gingersnap Operator
+    url: https://gingersnap-project.io
+  maintainers:
+  - email: infinispan-dev@lists.jboss.org
+    name: Infinispan Community
+  maturity: alpha
+  minKubeVersion: 1.23.5
+  provider:
+    name: Gingersnap
+  relatedImages:
+  - image: quay.io/gingersnap/cache-manager-mysql
+    name: cache-manager-mysql
+  - image: quay.io/gingersnap/cache-manager-mssql
+    name: cache-manager-mssql
+  - image: quay.io/gingersnap/cache-manager-postgres
+    name: cache-manager-postgres
+  - image: quay.io/gingersnap/db-syncer
+    name: db-syncer
+  version: 0.0.1
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mcache.kb.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - caches
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-gingersnap-project-io-v1alpha1-cache
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: meagercacherule.kb.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - eagercacherules
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-gingersnap-project-io-v1alpha1-eagercacherule
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mlazycacherule.gingersnap-project.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - lazycacherules
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-gingersnap-project-io-v1alpha1-lazycacherule
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vcache.kb.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - caches
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-gingersnap-project-io-v1alpha1-cache
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: veagercacherule.kb.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - eagercacherules
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-gingersnap-project-io-v1alpha1-eagercacherule
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: gingersnap-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vlazycacherule.gingersnap-project.io
+    rules:
+    - apiGroups:
+      - gingersnap-project.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - lazycacherules
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-gingersnap-project-io-v1alpha1-lazycacherule

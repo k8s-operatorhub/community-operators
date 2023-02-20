@@ -40,15 +40,15 @@ jobs:
         id: pr-number
         run: |
           PR=$(cat ./NR)
-          echo "::set-output name=pr::${PR}"
+          echo "name=pr=${PR}" >> $GITHUB_OUTPUT
 
-      - uses: actions/github-script@v4
+      - uses: actions/github-script@v6
         id: pr-labels
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: | 
-            const labels = await github.issues.listLabelsOnIssue({
+            const labels = await github.rest.issues.listLabelsOnIssue({
               issue_number: ${{ steps.pr-number.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo
@@ -60,7 +60,7 @@ jobs:
       #   run: |
       #     curl -L --header "Authorization: token ${{secrets.GITHUB_TOKEN}}" https://api.github.com/repos/operator-framework/community-operators/issues/${{ steps.pr-number.outputs.pr }}/labels -o /tmp/labels.json
       #     LABELS=$(cat /tmp/labels.json)
-      #     echo "::set-output name=labels::${LABELS//'%'/'%25'}"
+      #     echo "labels=${LABELS//'%'/'%25'}" >> $GITHUB_OUTPUT
     outputs:
       pr: "${{ steps.pr-number.outputs.pr }}"
 
@@ -70,13 +70,13 @@ jobs:
     needs: [pr]
     steps:
 
-      - uses: actions/github-script@v4
+      - uses: actions/github-script@v6
         id: pr-labels
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: | 
-            const labels = await github.issues.listLabelsOnIssue({
+            const labels = await github.rest.issues.listLabelsOnIssue({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo
@@ -84,18 +84,18 @@ jobs:
             return labels.data
 
       - name: "Setting package-validated label"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['package-validated']
             })
-      - uses: actions/github-script@v3
+      - uses: actions/github-script@v6
         if: |
           (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/work-in-progress')) &&
           (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/hold'))
@@ -103,7 +103,7 @@ jobs:
         with:
           github-token: ${{ secrets.FRAMEWORK_MERGE }}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -111,18 +111,18 @@ jobs:
             })
 
       - name: "Set installation-validated"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['installation-validated']
             })
-      - uses: actions/github-script@v3
+      - uses: actions/github-script@v6
         if: |
           (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/work-in-progress')) &&
           (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/hold'))
@@ -130,7 +130,7 @@ jobs:
         with:
           github-token: ${{ secrets.FRAMEWORK_MERGE }}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -144,12 +144,12 @@ jobs:
     steps:
       - name: "Removing package-validated label"
         if: needs.pr.outputs.pr != '0'
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -157,12 +157,12 @@ jobs:
             })
       - name: "Removing installation-validated label"
         if: needs.pr.outputs.pr != '0'
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,

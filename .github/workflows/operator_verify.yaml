@@ -1,0 +1,73 @@
+
+name: Operator Index Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_base:
+        description: 'Base image'
+        required: true
+        default: 'quay.io/operatorhubio/catalog_tmp'   
+
+      tags:
+        description: 'List of tags'
+        required: true
+        default: 'latest latests'
+
+      image_prod_base:
+        description: 'Base production image'
+        required: false
+        default: 'quay.io/operatorhubio/catalog'   
+
+      tags_prod:
+        required: false
+        default: ''
+        description: 'List of prod tags (eg. latest)'
+
+      repo:
+        description: 'Source repsitory'     
+        required: true
+        default: 'https://github.com/redhat-openshift-ecosystem/operator-test-playbooks'
+      branch:
+        description: 'Source branch'     
+        required: true
+        default: 'upstream-community'
+env:
+  OPP_CONTAINER_TOOL: podman
+  OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
+  OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
+  OPP_MIRROR_INDEX_REGISTRY: "quay.io"
+  OPP_REGISTRY_MIRROR_USER: "mavala"
+
+  REGISTRY_MIRROR_PW: ${{ secrets.REGISTRY_MIRROR_PW }}
+  ANSIBLE_FORCE_COLOR: 1
+  ANSIBLE_DISPLAY_SKIPPED_HOSTS: 0
+  ANSIBLE_STDOUT_CALLBACK: "yaml"
+
+jobs:
+  index-verify:
+    name: "Index Verify"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+      - name: Index verify
+        id: op-traffic-light
+        run: |
+          [ -n "${{ github.event.inputs.repo }}" ] && OPP_ANSIBLE_PULL_REPO="${{ github.event.inputs.repo }}" || true
+          [ -n "${{ github.event.inputs.branch }}" ] && OPP_ANSIBLE_PULL_BRANCH="${{ github.event.inputs.branch }}" || true
+          MY_INDEXES=
+          for t in ${{ github.event.inputs.tags }}; do
+            MY_INDEXES="$MY_INDEXES,${{ github.event.inputs.image_base }}:$t"
+          done
+          for t in ${{ github.event.inputs.tags_prod }}; do
+            MY_INDEXES="$MY_INDEXES,${{ github.event.inputs.image_prod_base }}:$t"
+          done
+          MY_INDEXES=${MY_INDEXES:1}
+          echo "MY_INDEXES=$MY_INDEXES"
+          echo "$REGISTRY_MIRROR_PW" | $OPP_CONTAINER_TOOL login $OPP_MIRROR_INDEX_REGISTRY -u $OPP_REGISTRY_MIRROR_USER --password-stdin || { echo "Problem to login to '$OPP_MIRROR_INDEX_REGISTRY' !!!"; exit 1; }
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e container_tool=$OPP_CONTAINER_TOOL upstream/local.yml --tags reset_tools,index_verify  -e iv_indexes="$MY_INDEXES"

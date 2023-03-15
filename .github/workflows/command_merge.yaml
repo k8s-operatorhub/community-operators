@@ -3,6 +3,8 @@ on: issue_comment
 name: Issue Comments - merge
 env:
   OPP_PRODUCTION_TYPE: "k8s"
+  OPP_THIS_REPO_NAME: "community-operators"
+  OPP_THIS_REPO_ORG: "k8s-operatorhub"
 
 jobs:
   handle_comments:
@@ -12,28 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - uses: actions/github-script@v4
+      - uses: actions/github-script@v6
         id: labels
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: | 
-            const labels = await github.issues.listLabelsOnIssue({
+            const labels = await github.rest.issues.listLabelsOnIssue({
               issue_number: context.payload.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo
             })
             console.log(labels.data)
             return labels.data
-
-      # - name: Print info about event
-      #   id: info
-      #   continue-on-error: true
-      #   uses: actions/github-script@v3
-      #   with:
-      #     github-token: ${{secrets.GITHUB_TOKEN}}
-      #     script: |
-      #       console.log(context)
-      #       console.log(`::set-output name=xxx::${context.payload.issue.labels}`)
 
       - name: Merge command handler
         id: command
@@ -47,7 +39,7 @@ jobs:
           permission-level: write
 
       - name: Merge message when not able to merge and inform user about authorized_changes
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: |
           steps.command.outputs.command-name == 'merge' &&
           steps.command.outputs.command-arguments == 'possible' &&
@@ -60,15 +52,15 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'Current PR can be merged automatically, but there is missing `authorized-changes` label. One can find out more info [here](https://operator-framework.github.io/community-operators/operator-ci-yaml/#reviewers).'
+              body: 'Current PR can be merged automatically, but there is missing `authorized-changes` label. One can find out more info [here](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/operator-ci-yaml/#reviewers).'
             })
 
       - name: Message when automerge is disabled
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: |
           steps.command.outputs.command-name == 'merge' &&
           steps.command.outputs.command-arguments == 'possible' &&
@@ -76,7 +68,7 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -84,7 +76,7 @@ jobs:
             })
 
       - name: Message when dco-failed is missing
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: |
           steps.command.outputs.command-name == 'merge' &&
           steps.command.outputs.command-arguments == 'possible' &&
@@ -92,7 +84,7 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,

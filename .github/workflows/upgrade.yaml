@@ -24,10 +24,13 @@ on:
         required: true
         default: 'k8s'
 
-
+      index_from:
+        description: 'From index (quay.io/operator_testing/index_empty:latest)'     
+        default: ''
 env:
   OPP_INPUT_REPO: "${{ github.event.inputs.repo }}"
   OPP_INPUT_BRANCH: "${{ github.event.inputs.branch }}"
+  INDEX_FROM: ${{ github.event.inputs.index_from }}
   OPP_ANSIBLE_PULL_BRANCH: "${{ github.event.inputs.playbook_branch }}"
   OPP_SCRIPT_UPGRADE_URL: "https://raw.githubusercontent.com/redhat-openshift-ecosystem/community-operators-pipeline/ci/latest/ci/scripts/opp-update.sh"
 
@@ -51,13 +54,24 @@ jobs:
       - name: Create local changes
         env:
           CLUSTER_TYPE: ${{ github.event.inputs.cluster }}
+          REGISTRY_RELEASE_API_TOKEN: ${{ secrets.REGISTRY_RELEASE_API_TOKEN }}
         run: |
           echo "$OPP_INPUT_REPO $OPP_INPUT_BRANCH"
-          bash <(curl -sL $OPP_SCRIPT_UPGRADE_URL) $CLUSTER_TYPE
+          echo "index_from=$INDEX_FROM" >> $GITHUB_OUTPUT
+          bash <(curl -sL $OPP_SCRIPT_UPGRADE_URL) $CLUSTER_TYPE $INDEX_FROM
+
+          if [ -f "/tmp/operators_to_recreate.yaml" ];then
+            echo 'Operators to be receated by manual release' > $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "operators: $(cat /tmp/operators_to_recreate.yaml)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
       - name: Commit files
         run: |
-          git config --local user.email "41898282+framework-automation[bot]@users.noreply.github.com"
-          git config --local user.name "framework-automation"
-          git add .
-          git commit -m "${{ github.event.inputs.commit-message }} ($(date +"%d %b %Y %T"))" -a
-          git push
+          FAKE_RC=false
+          [ -n "$INDEX_FROM" ] && FAKE_RC=true || true
+          git config --local user.email "41898282+framework-automation[bot]@users.noreply.github.com" || $FAKE_RC
+          git config --local user.name "framework-automation" || $FAKE_RC
+          git add . || $FAKE_RC
+          git commit -m "${{ github.event.inputs.commit-message }} ($(date +"%d %b %Y %T"))" -a || $FAKE_RC
+          git push || $FAKE_RC

@@ -19,6 +19,8 @@ env:
   OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_THIS_REPO_BASE: "https://github.com"
   OPP_THIS_REPO: "k8s-operatorhub/community-operators"
+  OPP_THIS_REPO_NAME: "community-operators"
+  OPP_THIS_REPO_ORG: "k8s-operatorhub"
   OPP_THIS_BRANCH: "main"
   OPP_RELEASE_BUNDLE_REGISTRY: "quay.io"
   OPP_RELEASE_BUNDLE_ORGANIZATION: "operatorhubio"
@@ -69,15 +71,15 @@ jobs:
         id: op-traffic-light-result
         if: always() && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' )
         run: |
-          echo "::set-output name=git_rebase_conflict::0"
-          echo "::set-output name=git_rebase_conflict_comment::"
-          [ -f /tmp/pr_rebase.txt ] && echo "::set-output name=git_rebase_conflict::1" || true
+          echo "git_rebase_conflict=0" >> $GITHUB_OUTPUT
+          echo "git_rebase_conflict_comment=" >> $GITHUB_OUTPUT
+          [ -f /tmp/pr_rebase.txt ] && echo "git_rebase_conflict=1" >> $GITHUB_OUTPUT || true
 
           [ -f /tmp/pr_rebase.txt ] &&  OPP_GIT_REBASE_CONFLICT_FILE=$(cat /tmp/pr_rebase.txt)
           OPP_GIT_REBASE_CONFLICT_FILE="${OPP_GIT_REBASE_CONFLICT_FILE//'%'/'%25'}"
           OPP_GIT_REBASE_CONFLICT_FILE="${OPP_GIT_REBASE_CONFLICT_FILE//$'\n'/'%0A'}"
           OPP_GIT_REBASE_CONFLICT_FILE="${OPP_GIT_REBASE_CONFLICT_FILE//$'\r'/'%0D'}"
-          [ -f /tmp/pr_rebase.txt ] && echo "::set-output name=git_rebase_conflict_comment::$OPP_GIT_REBASE_CONFLICT_FILE" || true
+          [ -f /tmp/pr_rebase.txt ] && echo "git_rebase_conflict_comment=$OPP_GIT_REBASE_CONFLICT_FILE" >> $GITHUB_OUTPUT || true
 
       - name: Operator traffic light (comment)
         id: op-traffic-light-comment
@@ -121,10 +123,10 @@ jobs:
         id: op-info-result
         if: always() && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' ) && (steps.op-traffic-light.outputs.opp_ci_yaml_only == '0')
         run: |
-          echo "::set-output name=opp_check_err_k8s_bundles::0"
-          echo "::set-output name=opp_check_err_k8s_bundles_value::"
-          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "::set-output name=opp_check_err_k8s_bundles::1" || true
-          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "::set-output name=opp_check_err_k8s_bundles_value::$(cat /tmp/operator-test/op_failed_k8s_bundles.yaml | yq -r '.operators | @csv' | tr -d '"')" || true
+          echo "opp_check_err_k8s_bundles=0" >> $GITHUB_OUTPUT
+          echo "opp_check_err_k8s_bundles_value=" >> $GITHUB_OUTPUT
+          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "opp_check_err_k8s_bundles=1" >> $GITHUB_OUTPUT || true
+          [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "opp_check_err_k8s_bundles_value=$(cat /tmp/operator-test/op_failed_k8s_bundles.yaml | yq -r '.operators | @csv' | tr -d '"')" >> $GITHUB_OUTPUT || true
       - name: Operator info (comment)
         id: op-info-comment
         if: always() && steps.op-info-result.outputs.opp_check_err_k8s_bundles == '1' && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' ) && (steps.op-traffic-light.outputs.opp_ci_yaml_only == '0')
@@ -136,7 +138,7 @@ jobs:
             
             Affected versions : `${{ steps.op-info-result.outputs.opp_check_err_k8s_bundles_value }}`
             
-            More info in 'Kubernetes max version in CSV' section [here](https://redhat-openshift-ecosystem.github.io/community-operators-pipeline/operator-ci-yaml/#kubernetes-max-version-in-csv).
+            More info in 'Kubernetes max version in CSV' section [here](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/operator-ci-yaml/#kubernetes-max-version-in-csv).
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: true
@@ -225,9 +227,9 @@ jobs:
         id: op-kiwi-test-err-bundle-validate
         if: always()
         run: |
-          echo "::set-output name=opp_check_err_bundle_validate::"
-          echo "::set-output name=operator_sdk_version::n/a"
-          echo "::set-output name=operator_sdk_args::n/a"
+          echo "opp_check_err_bundle_validate=" >> $GITHUB_OUTPUT
+          echo "operator_sdk_version=na" >> $GITHUB_OUTPUT
+          echo "operator_sdk_args=na" >> $GITHUB_OUTPUT
 
           OPP_BUNDLE_VALIDATE_FILE=/tmp/operator_sdk_bundle_validate_warnings_and_errors.txt
           if [ -f $OPP_BUNDLE_VALIDATE_FILE ] ;then
@@ -237,13 +239,13 @@ jobs:
             OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//'%'/'%25'}"
             OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//$'\n'/'%0A'}"
             OPP_BUNDLE_VALIDATE_FILE_OUTPUT="${OPP_BUNDLE_VALIDATE_FILE_OUTPUT//$'\r'/'%0D'}"
-            echo "::set-output name=opp_check_err_bundle_validate::$OPP_BUNDLE_VALIDATE_FILE_OUTPUT"
+            echo "opp_check_err_bundle_validate=$OPP_BUNDLE_VALIDATE_FILE_OUTPUT" >> $GITHUB_OUTPUT
           fi
 
           OPP_BUNDLE_VALIDATE_INFO_FILE=/tmp/operator_sdk_bundle_validate_info.txt
           if [ -f $OPP_BUNDLE_VALIDATE_INFO_FILE ] ;then
-            echo "::set-output name=operator_sdk_version::$(sed '1q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)"
-            echo "::set-output name=operator_sdk_args::$(sed '2q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)"
+            echo "operator_sdk_version=$(sed '1q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)" >> $GITHUB_OUTPUT
+            echo "operator_sdk_args=$(sed '2q;d' $OPP_BUNDLE_VALIDATE_INFO_FILE)" >> $GITHUB_OUTPUT
           fi
 
       - name: "Comment operator_sdk_bundle_validate_warnings_and_errors if exists"
@@ -268,7 +270,7 @@ jobs:
         run: |
           ERR_LINES=$(cat /tmp/op-test/log.out | grep 'not specified olm.maxOpenShiftVersion' | wc -l)
           echo "opp_check_err_maxOpenShiftVersion=$ERR_LINES"
-          echo "::set-output name=opp_check_err_maxOpenShiftVersion::$ERR_LINES"
+          echo "opp_check_err_maxOpenShiftVersion=$ERR_LINES" >> $GITHUB_OUTPUT
 
       - name: "Comment operator test error olm.maxOpenShiftVersion"
         if: always() && steps.op-kiwi-test-err-maxOpenShiftVersion.outputs.opp_check_err_maxOpenShiftVersion != '0'
@@ -375,12 +377,12 @@ jobs:
 
       - name: "Setting package-validated label"
         if: needs.pr-check.outputs.opp_ci_yaml_only == '1'
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: ${{ needs.pr.outputs.pr }},
               owner: context.repo.owner,
               repo: context.repo.repo,

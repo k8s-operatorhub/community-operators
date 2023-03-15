@@ -18,6 +18,8 @@ env:
   OPP_ANSIBLE_PULL_REPO: "https://github.com/redhat-openshift-ecosystem/operator-test-playbooks"
   OPP_ANSIBLE_PULL_BRANCH: "upstream-community"
   OPP_REVIEWERS_ENABLED: 1
+  OPP_THIS_REPO_NAME: "community-operators"
+  OPP_THIS_REPO_ORG: "k8s-operatorhub"
 
   
 jobs:
@@ -27,25 +29,25 @@ jobs:
     steps:
       - name: Remove automerge-disabled when needed
         if: ${{ env.AUTOMERGE_ENABLED == '1' }}
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'automerge-disabled'
             })
       - name: Add automerge-disabled when needed
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: ${{ env.AUTOMERGE_ENABLED == '0' }}
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -63,13 +65,13 @@ jobs:
       #     repo-token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: "Remove package-validated"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: (!contains(github.event.pull_request.labels.*.name, 'do-not-merge/hold'))
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -77,17 +79,18 @@ jobs:
             })
 
       - name: "Add Assignees"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: github.event.action == 'opened' || github.event.action == 'reopened'
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addAssignees({
+            github.rest.issues.addAssignees({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              assignees: [ "J0zi", "mvalarh" ]
+              assignees: ['mporrato', 'Allda']
+
             });
 
       - name: Set up Python
@@ -111,7 +114,7 @@ jobs:
           bash <(curl -sL $OPP_SCRIPT_ENV_OPRT_URL)
 
       - name: "Remove installation-validated"
-        uses: actions/github-script@v4
+        uses: actions/github-script@v6
         if: (github.event.action != 'unlabeled')
         continue-on-error: true
         with:
@@ -120,7 +123,7 @@ jobs:
             const arr = ['installation-validated', 'installation-validated-atest', ];
 
             for (let label of arr) {
-              github.issues.removeLabel({
+              github.rest.issues.removeLabel({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -135,8 +138,8 @@ jobs:
           message: |
             ${{ steps.op-traffic-light.outputs.opp_pr_revievers }}, please approve as you are original reviewer(s).
             
-            - To add more contributors to `ci.yaml` follow instruction [here](https://operator-framework.github.io/community-operators/operator-ci-yaml). 
-            - To approve follow instruction [here](https://redhat-openshift-ecosystem.github.io/community-operators-prod/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
+            - To add more contributors to `ci.yaml` follow instruction [here](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/operator-ci-yaml).
+            - To approve follow instruction [here](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: false
@@ -150,7 +153,7 @@ jobs:
             
             ${{ steps.op-traffic-light.outputs.opp_pr_revievers }}, Please note that ci.yml was changed. 
 
-            - To approve follow instruction [here](https://redhat-openshift-ecosystem.github.io/community-operators-prod/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
+            - To approve follow instruction [here](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/self-merge-updates/#how-can-i-approve-a-pr-against-my-operator)
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: false
@@ -199,7 +202,7 @@ jobs:
           message: |
             /hold
             
-            File `${{ steps.op-traffic-light.outputs.opp_production_type }}/${{ steps.op-traffic-light.outputs.opp_name }}/ci.yaml` is missing or not valid. More details in failed test `Operator CI / operator-ci` logs. Documentation how to setup valid `ci.yaml` file can be found at https://operator-framework.github.io/community-operators/operator-ci-yaml."
+            File `${{ steps.op-traffic-light.outputs.opp_production_type }}/${{ steps.op-traffic-light.outputs.opp_name }}/ci.yaml` is missing or not valid. More details in failed test `Operator CI / operator-ci` logs. Documentation how to setup valid `ci.yaml` file can be found at https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/operator-ci-yaml."
 
             Note: Only single file modification on `ci.yaml` is allowed. Please make separate PR to apply `ci.yaml` file updates and get it merged before current PR.
 
@@ -261,13 +264,13 @@ jobs:
           allow-repeats: true
 
       - name: Update title
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         continue-on-error: true
         if: always() && steps.op-traffic-light.outputs.opp_pr_title != ''
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.update({
+            github.rest.issues.update({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -275,13 +278,13 @@ jobs:
             })
 
       - name: Handle new operator
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_is_new_operatror == '1'
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -295,11 +298,11 @@ jobs:
           OPP_MODIFIED_CSVS: "${{ steps.op-traffic-light.outputs.opp_modified_csvs }}"
           OPP_MODIFIED_CSVS_OTHERS: "${{ steps.op-traffic-light.outputs.opp_modified_others }}"
         run: |
-          echo "::set-output name=opp_check_cosmetic::0"
+          echo "opp_check_cosmetic=0" >> $GITHUB_OUTPUT
           [[ $OPP_RECREATE -eq 1 ]] && { echo "Recreating operator. Exiting with '0' ..."; exit 0; } || true
           [[ $OPP_ALLOW_SERIOUS_CHANGES -eq 1 ]] && { echo "Allowing serious changes. Exiting with '0' ..."; exit 0; } || true
-          [ -n "$OPP_MODIFIED_CSVS" ] && echo "::set-output name=opp_check_cosmetic::1" || true
-          [ -n "$OPP_MODIFIED_CSVS_OTHERS" ] && { echo -e "Error:\n    Modifying exiting operator version !!!\n    Only cosmetic changes are allowed !!! Please ask maintainers to set 'allow/serious-changes-to-existing' label.\n    Files that cannot be changed : '$OPP_MODIFIED_CSVS_OTHERS'"; echo "::set-output name=opp_check_cosmetic::2"; exit 20; } || true
+          [ -n "$OPP_MODIFIED_CSVS" ] && echo "opp_check_cosmetic=1" >> $GITHUB_OUTPUT || true
+          [ -n "$OPP_MODIFIED_CSVS_OTHERS" ] && { echo -e "Error:\n    Modifying exiting operator version !!!\n    Only cosmetic changes are allowed !!! Please ask maintainers to set 'allow/serious-changes-to-existing' label.\n    Files that cannot be changed : '$OPP_MODIFIED_CSVS_OTHERS'"; echo "opp_check_cosmetic=2" >> $GITHUB_OUTPUT; exit 20; } || true
 
       - name: "Comment for cosmetics change error when csv is changed"
         if: failure() && steps.op-verify-modifications.outputs.opp_check_cosmetic == '2'
@@ -312,7 +315,7 @@ jobs:
             
             <details>
             Reason: Non CSV files were changed in existing operator !!!
-            More info about allowed changes can be found in [documetnation](https://operator-framework.github.io/community-operators/operator-version-update/#minor-cosmetics-changes).
+            More info about allowed changes can be found in [documetnation](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/operator-version-update/#minor-cosmetics-changes).
             </details>
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
@@ -343,55 +346,55 @@ jobs:
             
             <details>
 
-            More info about allowed changes can be found in [documetnation](https://operator-framework.github.io/community-operators/troubleshooting/#minor-changes).
+            More info about allowed changes can be found in [documetnation](https://${OPP_THIS_REPO_ORG}.github.io/${OPP_THIS_REPO_NAME}/troubleshooting/#minor-changes).
             </details>
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
           allow-repeats: true
 
       - name: "Removing Operator recreate label when exists"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_set_label_operator_version_overwrite == '1' && contains(github.event.pull_request.labels.*.name, 'allow/operator-recreate')
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'allow/operator-recreate'
             })
       - name: "Setting Operator version overwrite label"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_set_label_operator_version_overwrite == '1'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: [ 'allow/operator-version-overwrite' ]
             })
       - name: "Removing Operator version overwrite label when exists"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_set_label_operator_recreate == '1' && contains(github.event.pull_request.labels.*.name, 'allow/operator-version-overwrite')
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'allow/operator-version-overwrite'
             })
       - name: "Setting Operator recreate label"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_set_label_operator_recreate == '1'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -415,12 +418,12 @@ jobs:
       #     configuration-path: "${{steps.op-traffic-light.outputs.opp_production_type }}/${{ steps.op-traffic-light.outputs.opp_name }}/ci.yaml"
 
       - name: "Setting authorized-changes label"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: steps.op-traffic-light.outputs.opp_authorized_changes == '1'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -467,13 +470,13 @@ jobs:
     steps:
 
       - name: "Remove needs-ok-to-test"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: always()
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.removeLabel({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -486,12 +489,12 @@ jobs:
           echo "needs.operator-ci.outputs.opp_installation_skipped: ${{ needs.operator-ci.outputs.opp_installation_skipped }}"
 
       - name: "Setting ok-to-test label"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only != '1' && (!contains(github.event.pull_request.labels.*.name, 'allow/ci-changes')) && needs.operator-ci.outputs.opp_installation_skipped == '0'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -499,12 +502,12 @@ jobs:
             })
 
       - name: "Setting installation-validated label (opensift+ci_yaml_only)"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only == '1'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -512,13 +515,13 @@ jobs:
             })
 
       - name: "Setting installation-validated label (when installation_skipped)"
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: needs.operator-ci.outputs.opp_installation_skipped == '1'
         continue-on-error: true
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            github.issues.addLabels({
+            github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -526,13 +529,13 @@ jobs:
             })
 
       - name: Try to automerge
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         if: needs.operator-ci.outputs.opp_production_type != 'k8s' && needs.operator-ci.outputs.opp_ci_yaml_only == '1'
         continue-on-error: true
         with:
           github-token: ${{ secrets.FRAMEWORK_MERGE }}
           script: |
-            github.issues.createComment({
+            github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,

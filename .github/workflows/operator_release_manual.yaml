@@ -55,8 +55,8 @@ env:
   OPP_MIRROR_INDEX_MULTIARCH_BASE: "quay.io/operator-framework/opm"
   OPP_MULTIARCH_SUPPORTED_VERSIONS: "latest"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
-  IIB_INPUT_REGISTRY_USER: "mavala"
-  OPP_REGISTRY_MIRROR_USER: "mavala"
+  IIB_INPUT_REGISTRY_USER: "framework_automation"
+  OPP_REGISTRY_MIRROR_USER: "framework_automation"
   OPP_THIS_REPO_BASE: "https://github.com"
   OPP_THIS_REPO: "k8s-operatorhub/community-operators"
   OPP_THIS_BRANCH: "main"
@@ -83,16 +83,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - id: files
-        uses: jitterbit/get-changed-files@v1
+        uses: masesgroup/retrieve-changed-files@v2
         continue-on-error: true
       - id: prinfo
         uses: actions-ecosystem/action-get-merged-pull-request@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - name: Install dependencies
@@ -190,7 +190,6 @@ jobs:
           echo "OPP_LABELS=$OPP_LABELS"
           FAKE_RC=false
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
-          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
 
           echo "op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) op_delete_${OPERATOR_INDEX_TAG} operators/${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }} $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
@@ -217,8 +216,8 @@ jobs:
           TARGET_INDEX_RAW=${{ github.event.inputs.index }}
           TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
           TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
-          echo "::set-output name=opp_uncomplete_operators::${{ github.event.inputs.list_of_operators }}"
-          echo "::set-output name=opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE::${{ github.event.inputs.list_of_operators }}"
+          echo "opp_uncomplete_operators=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT 
+          echo "opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT
 
       - name: Index check
         run: |
@@ -230,6 +229,8 @@ jobs:
         env:
 
           OPP_FORCE_OPERATORS: "${{ github.event.inputs.list_of_operators }}"
+          OPP_OP_INFO_PARALLEL: 1
+          OPP_OP_INFO_PARALLEL_BATCH: 20
 
           OPP_AUTO_LABEL: 1
           ANSIBLE_FORCE_COLOR: 1
@@ -239,7 +240,11 @@ jobs:
           OPP_FORCE_OPERATORS=${OPP_FORCE_OPERATORS// /,}
           echo $OPP_FORCE_OPERATORS
           [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
-          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
+          [ "$OPP_OP_INFO_PARALLEL" = '1' ] && ANSIBLE_ARGS="$ANSIBLE_ARGS -e op_info_parallel=true -e op_info_parallel_batch=$OPP_OP_INFO_PARALLEL_BATCH" || ANSIBLE_ARGS="$ANSIBLE_ARGS -e op_info_parallel=false"
+          echo $ANSIBLE_ARGS
+          git clone $OPP_ANSIBLE_PULL_REPO -b $OPP_ANSIBLE_PULL_BRANCH operator-test-playbooks
+          cd operator-test-playbooks
+          ansible-playbook -i localhost, -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
       - name: Upload operator_info
         uses: actions/upload-artifact@v2
         with:
@@ -252,7 +257,7 @@ jobs:
           path: "/tmp/operator-test/operators"
       - shell: bash
         run: |
-          [ -f /tmp/operator-test/op_info.yaml ] && cat /tmp/operator-test/op_info.yaml || echo "::set-output name=opp_uncomplete_operators::"          
+          [ -f /tmp/operator-test/op_info.yaml ] && cat /tmp/operator-test/op_info.yaml || echo "opp_uncomplete_operators=" >> $GITHUB_OUTPUT         
     outputs:
       opp_uncomplete_operators: "${{ steps.operators.outputs.opp_uncomplete_operators }}"
       opp_uncomplete_operators_latest: "${{ steps.operators.outputs.opp_uncomplete_operators_latest }}"
@@ -280,6 +285,7 @@ jobs:
           OPP_IIB_INSTALL: 0
           OPERATOR_INDEX_TAG: latest
           OPP_SKIP_INDEX: 1
+          OPP_SKIP_BUNDLES: 0
           OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
 
         run: |
@@ -287,7 +293,7 @@ jobs:
           echo "OPP_FORCE_OPERATORS=$OPP_FORCE_OPERATORS"
           FAKE_RC=false
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
-          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
+
           echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
 
@@ -324,9 +330,10 @@ jobs:
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
-          OPP_IIB_INSTALL: 1
+          OPP_IIB_INSTALL: 0
           #OPP_MIRROR_INDEX_ENABLED: 0
           OPP_FORCE_INDEX_UPDATE: 1
+          OPP_SKIP_BUNDLES: 1
           IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
           OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
           # OPP_FORCE_OPERATORS: "${{ needs.operators-k8s.outputs.opp_uncomplete_operators }}"
@@ -336,7 +343,7 @@ jobs:
           echo "OPP_LABELS=$OPP_LABELS"
           FAKE_RC=false
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
-          [[ $FAKE_TYPE == *rc* ]] && FAKE_RC=true || true
+
 
           TARGET_INDEX_RAW=${{ github.event.inputs.index }}
           TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
@@ -352,8 +359,39 @@ jobs:
           docker exec -t op-test /bin/bash -c "podman images ; df -h" || true
           echo "local df:"
           df -h
-          
+  index-verify-k8s:
+    name: "Index Verify / k8s"
+    needs: [ pr-check, operators-k8s, bundles-k8s, release-k8s]
+    if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
 
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+
+        index-tag: ['${{ github.event.inputs.index }}']
+
+      fail-fast: false
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip yq
+      - name: Index verify
+        id: index-verify
+        env:
+          OPP_CONTAINER_TOOL: podman
+        run: |
+          MY_TAG=${{ matrix.index-tag }}
+          MY_TAG=$(echo $MY_TAG | cut -d '-' -f 1)
+          MY_INDEXES="quay.io/operatorhubio/catalog_tmp:${MY_TAG}"
+          MY_INDEXES="$MY_INDEXES,quay.io/operatorhubio/catalog_tmp:${MY_TAG}s"
+          MY_INDEXES="$MY_INDEXES,quay.io/operatorhubio/catalog:${MY_TAG}"
+
+          echo "MY_INDEXES=$MY_INDEXES"
+          echo "$REGISTRY_MIRROR_PW" | $OPP_CONTAINER_TOOL login $OPP_MIRROR_INDEX_REGISTRY -u $OPP_REGISTRY_MIRROR_USER --password-stdin || { echo "Problem to login to '$OPP_MIRROR_INDEX_REGISTRY' !!!"; exit 1; }
+          ansible-pull -U $OPP_ANSIBLE_PULL_REPO -C $OPP_ANSIBLE_PULL_BRANCH -i localhost, -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e container_tool=$OPP_CONTAINER_TOOL upstream/local.yml --tags reset_tools,index_verify  -e iv_indexes="$MY_INDEXES"
 
 
   ohio-image-k8s:
@@ -388,21 +426,26 @@ jobs:
           bash <(curl -sL $OPP_SCRIPT_TRIGGER_OHIO_URL) ${CI_OHIO_BRANCH}
 
   slack-notification:
-    name: "Slack notification"
-    needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, ohio-image-k8s, ohio-page-k8s ]
+    name: "Monitoring notification"
+    needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, index-verify-k8s, ohio-image-k8s, ohio-page-k8s ]
 
 
     if: failure()
     runs-on: ubuntu-latest
     steps:
-      - name: Report Status
-        uses: ravsamhq/notify-slack-action@master
-        with:
-          notification_title: 'Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}'
-          footer: 'monitoring'
-#          status: ${{ needs.pr-check.result }}
-          status: 'failure'
-          notify_when: 'failure'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
-        continue-on-error: true
+      - name: Google Chat Notification
+        run: |
+          echo "title: Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}"
+          echo "subtitle: failure"
+          curl --location --request POST '${{ secrets.GCHAT_WEBHOOK }}' \
+          --header 'Content-Type: application/json' \
+          --data-raw '{
+              "cards": [
+                  {
+                      "header": {
+                          "title": "Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}",
+                          "subtitle": "failure"
+                      }
+                  }
+              ]
+          }'

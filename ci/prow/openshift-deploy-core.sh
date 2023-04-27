@@ -24,7 +24,7 @@ case $PIPELINE_BRAND in
 esac
 
 
-declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 [4.10]=v1.23 [4.11]=v1.24 [4.12]=v1.25 )
+declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 [4.10]=v1.23 [4.11]=v1.24 [4.12]=v1.25 [4.13]=v1.26 )
 PLAYBOOK_REPO=https://github.com/redhat-openshift-ecosystem/operator-test-playbooks
 PLAYBOOK_REPO_BRANCH=upstream-community
 echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"

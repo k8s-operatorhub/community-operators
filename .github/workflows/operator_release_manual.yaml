@@ -19,9 +19,9 @@ on:
 
 
       index:
-        description: 'Target index (e.g. latest or latest-db)'
+        description: 'Target index (as a JSON list, e.g. ["latest", "latest-db"])'
         required: true
-        default: 'latest'
+        default: '["latest"]'
 
       list_of_operators:
         description: 'List of operators to be synced in the index, list has to be devided by spaces (e.g. aqua ripsaw)'
@@ -154,7 +154,7 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:
@@ -208,11 +208,13 @@ jobs:
           OPP_INDEX_CHECK_ONLY: 1
         run: |
  
-          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
-          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
-          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
+          for index in $(echo '${{ github.event.inputs.index }}' | jq -r .[]); do
+              TARGET_INDEX_RAW=$(echo $index|cut -d '-' -f1)
+              TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_')
+              export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+              echo "opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT
+          done
           echo "opp_uncomplete_operators=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT 
-          echo "opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT
 
       - name: Index check
         run: |
@@ -301,7 +303,7 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:
@@ -340,10 +342,11 @@ jobs:
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
 
 
-          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
-          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
-          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
-          export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+          for index in $(echo '${{ github.event.inputs.index }}' | jq -r .[]); do
+              TARGET_INDEX_RAW=$(echo $index|cut -d '-' -f1)
+              TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_')
+              export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+          done
 
           echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
@@ -363,7 +366,7 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:

@@ -29,7 +29,6 @@ metadata:
       ]
     operatorframework.io/suggested-namespace: windup
 spec:
-  apiservicedefinitions: { }
   customresourcedefinitions:
     owned:
       - name: windups.windup.jboss.org
@@ -83,7 +82,7 @@ spec:
                     image: quay.io/windupeng/windup-operator-native:0.0.17
                     imagePullPolicy: Always
                     env:
-                      - name: WATCH_NAMESPACE
+                      - name: KUBERNETES_NAMESPACE
                         valueFrom:
                           fieldRef:
                             fieldPath: metadata.namespace
@@ -93,13 +92,37 @@ spec:
                         value: quay.io/windupeng/windup-web-openshift-messaging-executor:6.3.0.Final
                       - name: RELATED_IMAGE_POSTGRESQL
                         value: registry.access.redhat.com/rhscl/postgresql-10-rhel7:1
+                    ports:
+                      - containerPort: 8080
+                        name: http
+                        protocol: TCP
+                    livenessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /q/health/live
+                        port: 8080
+                        scheme: HTTP
+                      initialDelaySeconds: 0
+                      periodSeconds: 30
+                      successThreshold: 1
+                      timeoutSeconds: 10
+                    readinessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /q/health/ready
+                        port: 8080
+                        scheme: HTTP
+                      initialDelaySeconds: 0
+                      periodSeconds: 30
+                      successThreshold: 1
+                      timeoutSeconds: 10
                     resources:
                       limits:
                         cpu: 1
-                        memory: 200Mi
+                        memory: 256Mi
                       requests:
                         cpu: 100m
-                        memory: 50Mi
+                        memory: 64Mi
             strategy:
               type: Recreate
       permissions:
@@ -111,13 +134,7 @@ spec:
               resources:
                 - deployments
               verbs:
-                - create
-                - delete
-                - get
-                - list
-                - patch
-                - update
-                - watch
+                - "*"
             - apiGroups:
                 - ""
               resources:
@@ -127,50 +144,29 @@ spec:
                 - configmaps
                 - secrets
               verbs:
-                - create
-                - delete
-                - get
-                - list
-                - patch
-                - update
-                - watch
+                - "*"
             - apiGroups:
                 - networking.k8s.io
               resources:
                 - ingresses
               verbs:
-                - create
-                - delete
-                - get
-                - list
-                - patch
-                - update
-                - watch
+                - "*"
             - apiGroups:
                 - route.openshift.io
               resources:
                 - routes
               verbs:
-                - create
-                - delete
-                - get
-                - list
-                - patch
-                - update
-                - watch
+                - "*"
+        - serviceAccountName: windup-operator
+          rules:
             - apiGroups:
                 - windup.jboss.org
               resources:
                 - windups
                 - windups/status
+                - windups/finalizers
               verbs:
-                - create
-                - list
-                - watch
-                - get
-                - update
-                - delete
-                - patch
+                - "*"
       clusterPermissions:
         - serviceAccountName: windup-operator
           rules:
@@ -178,6 +174,13 @@ spec:
                 - config.openshift.io
               resources:
                 - ingresses
+              verbs:
+                - get
+                - list
+            - apiGroups:
+                - apiextensions.k8s.io
+              resources:
+                - customresourcedefinitions
               verbs:
                 - get
                 - list

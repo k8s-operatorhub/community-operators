@@ -19,9 +19,9 @@ on:
 
 
       index:
-        description: 'Target index (e.g. latest or latest-db)'
+        description: 'Target index (as a JSON list, e.g. ["latest", "latest-db"])'
         required: true
-        default: 'latest'
+        default: '["latest"]'
 
       list_of_operators:
         description: 'List of operators to be synced in the index, list has to be devided by spaces (e.g. aqua ripsaw)'
@@ -55,8 +55,8 @@ env:
   OPP_MIRROR_INDEX_MULTIARCH_BASE: "quay.io/operator-framework/opm"
   OPP_MULTIARCH_SUPPORTED_VERSIONS: "latest"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
-  IIB_INPUT_REGISTRY_USER: "mavala"
-  OPP_REGISTRY_MIRROR_USER: "mavala"
+  IIB_INPUT_REGISTRY_USER: "framework_automation"
+  OPP_REGISTRY_MIRROR_USER: "framework_automation"
   OPP_THIS_REPO_BASE: "https://github.com"
   OPP_THIS_REPO: "k8s-operatorhub/community-operators"
   OPP_THIS_BRANCH: "main"
@@ -83,16 +83,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - id: files
-        uses: jitterbit/get-changed-files@v1
+        uses: masesgroup/retrieve-changed-files@v2
         continue-on-error: true
-      - id: prinfo
-        uses: actions-ecosystem/action-get-merged-pull-request@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - name: Install dependencies
@@ -104,7 +101,7 @@ jobs:
           OPP_MODIFIED_FILES: "${{ steps.files.outputs.modified }}"
           OPP_RENAMED_FILES: "${{ steps.files.outputs.renamed }}"
           OPP_REMOVED_FILES: "${{ steps.files.outputs.removed }}"
-          OPP_LABELS: "${{ steps.prinfo.outputs.labels }}"
+
         run: |
           if [ -z "${{ github.event.inputs.list_of_operators }}" ]
           then
@@ -125,8 +122,6 @@ jobs:
           fi
           echo "OPP_MODIFIED_FILES=$OPP_MODIFIED_FILES"
 
-          echo "PR : ${{ steps.prinfo.outputs.number }}"
-          echo "labels : ${{ steps.prinfo.outputs.labels }}"
           echo "OPP_LABELS=$OPP_LABELS"
           echo "Using script '$OPP_SCRIPT_ENV_URL' ..."
           bash <(curl -sL $OPP_SCRIPT_ENV_URL)
@@ -136,7 +131,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
-      opp_labels: "${{ steps.prinfo.outputs.labels }}"
+
       opp_test_ready: "${{ steps.op-traffic-light.outputs.opp_test_ready }}"
       opp_release_ready: "${{ steps.op-traffic-light.outputs.opp_release_ready }}"
       opp_stream: "${{ steps.op-traffic-light.outputs.opp_stream }}"
@@ -159,7 +154,7 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:
@@ -213,11 +208,13 @@ jobs:
           OPP_INDEX_CHECK_ONLY: 1
         run: |
  
-          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
-          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
-          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
+          for index in $(echo '${{ github.event.inputs.index }}' | jq -r .[]); do
+              TARGET_INDEX_RAW=$(echo $index|cut -d '-' -f1)
+              TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_')
+              export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+              echo "opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT
+          done
           echo "opp_uncomplete_operators=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT 
-          echo "opp_uncomplete_operators_$TARGET_INDEX_UNDERLINE=${{ github.event.inputs.list_of_operators }}" >> $GITHUB_OUTPUT
 
       - name: Index check
         run: |
@@ -306,7 +303,7 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:
@@ -330,7 +327,7 @@ jobs:
         env:
           OPP_LABELS: "${{ needs.pr-check.outputs.opp_labels }}"
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
-          OPP_IIB_INSTALL: 1
+          OPP_IIB_INSTALL: 0
           #OPP_MIRROR_INDEX_ENABLED: 0
           OPP_FORCE_INDEX_UPDATE: 1
           OPP_SKIP_BUNDLES: 1
@@ -345,11 +342,13 @@ jobs:
           FAKE_TYPE=$(echo $OPERATOR_INDEX_TAG | cut -d '-' -f 2)
 
 
-          TARGET_INDEX_RAW=${{ github.event.inputs.index }}
-          TARGET_INDEX_RAW=$(echo $TARGET_INDEX_RAW|cut -d '-' -f1)
-          TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_') 
-          export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+          for index in $(echo '${{ github.event.inputs.index }}' | jq -r .[]); do
+              TARGET_INDEX_RAW=$(echo $index|cut -d '-' -f1)
+              TARGET_INDEX_UNDERLINE=$(echo $TARGET_INDEX_RAW|tr '.' '_')
+              export OPP_FORCE_OPERATORS_$TARGET_INDEX_UNDERLINE="${{ github.event.inputs.list_of_operators }}"
+          done
 
+          bash <(curl -sL $OPP_SCRIPT_CLEANUP_URL)
           echo "orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_URL) orange_${OPERATOR_INDEX_TAG} operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH || $FAKE_RC
       - name: Print space info (after)
@@ -368,12 +367,12 @@ jobs:
     strategy:
       matrix:
 
-        index-tag: ['${{ github.event.inputs.index }}']
+        index-tag: ${{ fromJson(github.event.inputs.index) }}
 
       fail-fast: false
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - name: Install dependencies
@@ -426,21 +425,46 @@ jobs:
           bash <(curl -sL $OPP_SCRIPT_TRIGGER_OHIO_URL) ${CI_OHIO_BRANCH}
 
   slack-notification:
-    name: "Slack notification"
+    name: "Monitoring notification"
     needs: [ pr-check, remove-k8s, operators-k8s, release-k8s, index-verify-k8s, ohio-image-k8s, ohio-page-k8s ]
 
 
     if: failure()
     runs-on: ubuntu-latest
     steps:
-      - name: Report Status
-        uses: ravsamhq/notify-slack-action@master
-        with:
-          notification_title: 'Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}'
-          footer: 'monitoring'
-#          status: ${{ needs.pr-check.result }}
-          status: 'failure'
-          notify_when: 'failure'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
-        continue-on-error: true
+      - name: Google Chat Notification
+        run: |
+          echo "title: Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}"
+          echo "subtitle: failure"
+          curl --location --request POST '${{ secrets.GCHAT_WEBHOOK }}' \
+          --header 'Content-Type: application/json' \
+          --data-raw '{
+              "cards": [
+                  {
+                      "header": {
+                          "title": "Release pipeline failed: ${{ needs.pr-check.outputs.opp_pr_title }}",
+                          "subtitle": "failure"
+                      },
+                      "sections": [
+                          {
+                              "widgets": [
+                                  {
+                                      "buttons": [
+                                          {
+                                              "textButton": {
+                                                  "text": "Open the release queue",
+                                                  "onClick": {
+                                                      "openLink": {
+                                                          "url": "https://github.com/${{ github.repository }}/actions/workflows/operator_release.yaml"
+                                                      }
+                                                  }
+                                              }
+                                          }
+                                      ]
+                                  }
+                              ]
+                          }
+                      ]
+                  }
+              ]
+          }'

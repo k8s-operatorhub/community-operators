@@ -24,7 +24,7 @@ case $PIPELINE_BRAND in
 esac
 
 
-declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 [4.10]=v1.23 [4.11]=v1.24 [4.12]=v1.25 )
+declare -A OCP2K8S=( [4.6]=v1.19 [4.7]=v1.20 [4.8]=v1.21 [4.9]=v1.22 [4.10]=v1.23 [4.11]=v1.24 [4.12]=v1.25 [4.13]=v1.26 [4.14]=v1.27 [4.15]=v1.28 )
 PLAYBOOK_REPO=https://github.com/redhat-openshift-ecosystem/operator-test-playbooks
 PLAYBOOK_REPO_BRANCH=upstream-community
 echo "OCP_CLUSTER_VERSION_SUFFIX=$OCP_CLUSTER_VERSION_SUFFIX"
@@ -32,7 +32,7 @@ EXIT_NEEDED=0
 SDK_BIN_PATH='/tmp/operator-sdk'
 
 OPM_VERSION='v1.21.0'
-OPERATOR_SDK_VERSION='v1.25.0'
+OPERATOR_SDK_VERSION='v1.26.1'
 JQ_VERSION='1.6'
 MAX_LIMIT_FOR_INDEX_WAIT=20
 EXTRA_ARGS=''

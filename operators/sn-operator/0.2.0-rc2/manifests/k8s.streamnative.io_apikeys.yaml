@@ -4,20 +4,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.10.0
   creationTimestamp: null
-  name: pfsqlclusters.k8s.streamnative.io
+  name: apikeys.k8s.streamnative.io
 spec:
   group: k8s.streamnative.io
   names:
-    kind: PFSQLCluster
-    listKind: PFSQLClusterList
-    plural: pfsqlclusters
-    singular: pfsqlcluster
+    kind: ApiKeys
+    listKind: ApiKeysList
+    plural: apikeys
+    singular: apikeys
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PFSQLCluster is the Schema for the pfsqlclusters API
+        description: ApiKeys is the Schema for the apikeys API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -32,57 +32,105 @@ spec:
           metadata:
             type: object
           spec:
-            description: PFSQLClusterSpec defines the desired state of PFSQLCluster
+            description: ApiKeysSpec defines the desired state of ApiKeys
             properties:
-              gateway:
+              brokerServiceUrl:
+                description: brokerServiceUrl defines the service url of pulsar cluster.
+                type: string
+              config:
+                description: Config is the configuration of the api keys svc
                 properties:
-                  auth:
+                  authenticator:
+                    description: Authenticator is the configuration of the api keys
+                      authenticator
                     properties:
-                      oauth2:
-                        properties:
-                          audience:
-                            type: string
-                          authURL:
-                            type: string
-                          issuerUrl:
-                            type: string
-                          subjectClaim:
-                            type: string
-                        required:
-                        - audience
-                        - authURL
-                        - issuerUrl
-                        - subjectClaim
-                        type: object
-                      provider:
+                      acceptedAudience:
+                        description: AcceptedAudience Only tokens with aud to this
+                          value would be authenticated to this service.
                         type: string
-                    required:
-                    - provider
+                      enabled:
+                        description: Enabled is the enable of the authenticator.
+                        type: boolean
+                      issuers:
+                        description: Issuers only tokens with such issuers will be
+                          authenticated to this service.
+                        items:
+                          type: string
+                        type: array
+                      jwksFetchInterval:
+                        description: JwksFetchInterval is the interval of the jwks
+                          fetch, unit is second.
+                        format: int64
+                        type: integer
                     type: object
-                  image:
-                    type: string
-                  imagePullPolicy:
-                    type: string
+                  backend:
+                    description: Backend is the configuration of the api keys backend
+                    properties:
+                      pulsarClient:
+                        additionalProperties:
+                          type: string
+                        description: PulsarClient is the client of the pulsar.
+                        type: object
+                      pulsarTopic:
+                        default: api_keys_api.example
+                        description: PulsarTopic is the topic of the pulsar.
+                        type: string
+                      retryInterval:
+                        description: RetryInterval is the retry interval of the backend,
+                          unit is second.
+                        format: int64
+                        type: integer
+                    type: object
+                  server:
+                    description: Server is the configuration of the api keys server
+                    properties:
+                      audience:
+                        description: Audience aud the token issued for. Should be
+                          the pulsar instance id.
+                        type: string
+                      claimsToCopy:
+                        description: ClaimsToCopy These claims from the request token
+                          would be copied to the issued tokens.
+                        items:
+                          type: string
+                        type: array
+                      currentKid:
+                        description: CurrentKid is the current kid of the server.
+                        type: string
+                      logLevel:
+                        description: LogLevel is the log level of the server.
+                        enum:
+                        - panic
+                        - fatal
+                        - error
+                        - warn
+                        - info
+                        - debug
+                        - trace
+                        type: string
+                      maxKeys:
+                        default: 10000
+                        description: MaxKeys is the max keys of the server.
+                        type: integer
+                      maxRevoked:
+                        default: 10000
+                        description: MaxRevoked is the max revoked of the server.
+                        type: integer
+                    type: object
                 type: object
               hostname:
                 description: The external host exposed by istio or ingress
                 type: string
-              ingressConfig:
-                properties:
-                  path:
-                    type: string
-                  tls:
-                    properties:
-                      enabled:
-                        type: boolean
-                      secretName:
-                        type: string
-                    required:
-                    - enabled
-                    - secretName
-                    type: object
-                type: object
+              image:
+                description: Image is the container image used to run api keys pods.
+                  default is docker.cloudsmith.io/streamnative/sn-api-keys-svc:latest
+                type: string
+              imagePullPolicy:
+                description: Image pull policy, one of Always, Never, IfNotPresent,
+                  default to Always.
+                type: string
               istio:
+                description: Istio defines Istio configuration of components
                 properties:
                   authRules:
                     description: AuthRules define the AuthorzationPolicies
@@ -164,108 +212,55 @@ spec:
                       and is part of a workload identity
                     type: string
                 type: object
-              labels:
-                additionalProperties:
-                  type: string
-                type: object
-              pulsarClusterConfig:
+              pod:
+                description: Pod defines the policy for creating api key pod for the
+                  cluster
                 properties:
-                  auth:
+                  resources:
+                    description: Resources is the resource requirement of api key
+                      service
                     properties:
-                      oauth2:
-                        properties:
-                          audience:
-                            type: string
-                          issuerUrl:
-                            type: string
-                          keySecretName:
-                            type: string
-                          scope:
-                            type: string
-                        required:
-                        - audience
-                        - issuerUrl
-                        - keySecretName
-                        - scope
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
-                      provider:
-                        type: string
-                    required:
-                    - provider
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        type: object
                     type: object
-                  builtinFunctions:
-                    items:
-                      properties:
-                        bindStatements:
-                          items:
-                            type: string
-                          type: array
-                        className:
-                          type: string
-                        customRuntimeOptions:
-                          additionalProperties:
-                            type: string
-                          type: object
-                        description:
-                          type: string
-                        filename:
-                          type: string
-                        managed:
-                          type: boolean
-                        name:
-                          type: string
-                        packageFileUrl:
-                          type: string
-                        packageUrl:
-                          type: string
-                      required:
-                      - bindStatements
-                      - className
-                      - filename
-                      - name
-                      - packageUrl
-                      type: object
-                    type: array
-                  metadataTopic:
-                    type: string
-                  serviceUrl:
-                    type: string
-                  tls:
-                    properties:
-                      tlsAllowInsecureConnection:
-                        type: boolean
-                      tlsCertificateFilePath:
-                        type: string
-                      tlsEnableHostnameVerification:
-                        type: boolean
-                      tlsKeyFilePath:
-                        type: string
-                      tlsRequireTrustedClientCertOnConnect:
-                        type: boolean
-                    type: object
-                  webServiceUrl:
-                    type: string
                 required:
-                - serviceUrl
-                - webServiceUrl
+                - resources
                 type: object
               replicas:
-                default: 1
+                default: 2
+                description: Replicas is the expected size of the api keys svc If
+                  unspecified, defaults to 2.
                 format: int32
+                minimum: 0
                 type: integer
-              serviceAccountName:
-                description: ServiceAccountName The service account assigned to Gateway
-                  Pod. If empty, the default service account in the namespace will
-                  be used.
-                type: string
+            required:
+            - brokerServiceUrl
             type: object
           status:
-            description: PFSQLClusterStatus defines the observed state of PFSQLCluster
+            description: ApiKeysStatus defines the observed state of ApiKeys
             properties:
               conditions:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to reSqlGatewayComponentgenerate
-                  code after modifying this file'
+                description: Conditions is an array of current observed conditions.
                 items:
                   description: "Condition contains details for one aspect of the current
                     state of this API Resource. --- This struct is intended for direct
@@ -333,11 +328,14 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  for this api keys service.
                 format: int64
                 type: integer
-            required:
-            - observedGeneration
             type: object
         type: object
     served: true

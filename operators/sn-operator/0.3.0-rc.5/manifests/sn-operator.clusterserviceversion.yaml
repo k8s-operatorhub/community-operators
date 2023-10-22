@@ -132,13 +132,15 @@ metadata:
           "apiVersion": "k8s.streamnative.io/v1alpha1",
           "kind": "Console",
           "metadata": {
-            "name": "ra-sn-platform",
-            "namespace": "nsa"
+            "name": "console",
+            "namespace": "pulsar",
+            "labels": {
+              "k8s.streamnative.io/coordinator-name": "private-cloud"
+            }
           },
           "spec": {
-            "image": "streamnative/sn-platform-console:v1.14.3",
-            "imagePullPolicy": "IfNotPresent",
-            "webServiceUrl": "http://ra-sn-platform-broker.nsa.svc.cluster.local:8080"
+            "image": "streamnative/private-cloud-console:v2.3.3",
+            "webServiceUrl": "http://brokers-broker:8080"
           }
         },
         {
@@ -157,13 +159,151 @@ metadata:
           "spec": null
         },
         {
+          "apiVersion": "zookeeper.streamnative.io/v1alpha1",
+          "kind": "ZooKeeperCluster",
+          "metadata": {
+            "labels": {
+              "k8s.streamnative.io/coordinator-name": "private-cloud"
+            },
+            "name": "zookeepers",
+            "namespace": "pulsar"
+          },
+          "spec": {
+            "image": "streamnative/private-cloud:3.0.1.4",
+            "replicas": 3,
+            "pod": {
+              "resources": {
+                "requests": {
+                  "cpu": "50m",
+                  "memory": "256Mi"
+                }
+              },
+              "securityContext": {
+                "runAsNonRoot": true
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "bookkeeper.streamnative.io/v1alpha1",
+          "kind": "BookKeeperCluster",
+          "metadata": {
+            "labels": {
+              "k8s.streamnative.io/coordinator-name": "private-cloud"
+            },
+            "name": "bookies",
+            "namespace": "pulsar"
+          },
+          "spec": {
+            "image": "streamnative/private-cloud:3.0.1.4",
+            "replicas": 3,
+            "zkServers": "zookeepers-zk:2181",
+            "pod": {
+              "resources": {
+                "requests": {
+                  "cpu": "200m",
+                  "memory": "512Mi"
+                }
+              },
+              "securityContext": {
+                "runAsNonRoot": true
+              }
+            },
+            "storage": {
+              "journal": {
+                "numDirsPerVolume": 1,
+                "numVolumes": 1,
+                "volumeClaimTemplate": {
+                  "accessModes": [
+                    "ReadWriteOnce"
+                  ],
+                  "resources": {
+                    "requests": {
+                      "storage": "8Gi"
+                    }
+                  }
+                }
+              },
+              "ledger": {
+                "numDirsPerVolume": 1,
+                "numVolumes": 1,
+                "volumeClaimTemplate": {
+                  "accessModes": [
+                    "ReadWriteOnce"
+                  ],
+                  "resources": {
+                    "requests": {
+                      "storage": "16Gi"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "pulsar.streamnative.io/v1alpha1",
+          "kind": "PulsarBroker",
+          "metadata": {
+            "labels": {
+              "k8s.streamnative.io/coordinator-name": "private-cloud"
+            },
+            "name": "brokers",
+            "namespace": "pulsar"
+          },
+          "spec": {
+            "image": "streamnative/private-cloud:3.0.1.4",
+            "replicas": 2,
+            "zkServers": "zookeepers-zk:2181",
+            "pod": {
+              "resources": {
+                "requests": {
+                  "cpu": "200m",
+                  "memory": "512Mi"
+                }
+              },
+              "securityContext": {
+                "runAsNonRoot": true
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "pulsar.streamnative.io/v1alpha1",
+          "kind": "PulsarProxy",
+          "metadata": {
+            "labels": {
+              "k8s.streamnative.io/coordinator-name": "private-cloud"
+            },
+            "name": "proxys",
+            "namespace": "pulsar"
+          },
+          "spec": {
+            "image": "streamnative/private-cloud:3.0.1.4",
+            "brokerAddress": "brokers-broker",
+            "replicas": 2,
+            "pod": {
+              "resources": {
+                "requests": {
+                  "cpu": "200m",
+                  "memory": "512Mi"
+                }
+              },
+              "securityContext": {
+                "runAsNonRoot": true
+              }
+            }
+          }
+        },
+        {
           "apiVersion": "k8s.streamnative.io/v1alpha1",
           "kind": "PulsarCoordinator",
           "metadata": {
-            "name": "pulsarcoordinator-sample"
+            "name": "private-cloud",
+            "namespace": "pulsar"
           },
           "spec": {
-            "foo": "bar"
+            "image": "streamnative/private-cloud:3.0.1.4"
           }
         }
       ]
@@ -183,7 +323,7 @@ spec:
   customresourcedefinitions:
     owned:
     - description: ApiKeys is the Schema for the apikeys API
-      displayName: Api Keys
+      displayName: ApiKeys
       kind: ApiKeys
       name: apikeys.k8s.streamnative.io
       version: v1alpha1
@@ -192,7 +332,9 @@ spec:
       kind: BookKeeperCluster
       name: bookkeeperclusters.bookkeeper.streamnative.io
       version: v1alpha1
-    - kind: ConnectorCatalog
+    - description: ConnectorCatalog is the Schema for the connectorcatalog API
+      displayName: ConnectorCatalog
+      kind: ConnectorCatalog
       name: connectorcatalogs.k8s.streamnative.io
       version: v1alpha1
     - description: Console is the Schema for the consoles API
@@ -210,22 +352,23 @@ spec:
       kind: PFSQLCluster
       name: pfsqlclusters.k8s.streamnative.io
       version: v1alpha1
-    - displayName: Pulsar Broker
+    - description: PulsarBroker is the Schema for the pulsarbrokers API
+      displayName: PulsarBroker
       kind: PulsarBroker
       name: pulsarbrokers.pulsar.streamnative.io
       version: v1alpha1
     - description: PulsarCoordinator is the Schema for the pulsarcoordinators API
-      displayName: Pulsar Coordinator
+      displayName: PulsarCoordinator
       kind: PulsarCoordinator
       name: pulsarcoordinators.k8s.streamnative.io
       version: v1alpha1
     - description: PulsarProxy is the Schema for the pulsarproxies API
-      displayName: Pulsar Proxy
+      displayName: PulsarProxy
       kind: PulsarProxy
       name: pulsarproxies.pulsar.streamnative.io
       version: v1alpha1
     - description: ZooKeeperCluster is the Schema for the zookeeperclusters API
-      displayName: ZooKeeper Cluster
+      displayName: ZooKeeperCluster
       kind: ZooKeeperCluster
       name: zookeeperclusters.zookeeper.streamnative.io
       version: v1alpha1

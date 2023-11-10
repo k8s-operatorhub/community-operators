@@ -1,0 +1,700 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: integration-operator.v1.0.0
+  namespace: placeholder
+  annotations:
+    alm-examples: >-
+      [{"apiVersion":"integration.rock8s.com/v1beta1","kind":"Plug","metadata":{"name":"postgres","namespace":"app"},"spec":{"socket":{"name":"postgres","namespace":"postgres-namespace"},"config":{"database":"app"}}},{"apiVersion":"integration.rock8s.com/v1beta1","kind":"Socket","metadata":{"name":"postgres","namespace":"postgres-namespace"},"spec":{"interface":{"config":{"socket":{"protocol":{"required":true},"username":{"required":true},"password":{"required":true},"hostname":{"required":true},"port":{"required":true}},"plug":{"database":{"required":true}}}},"config":{"protocol":"psql","username":"postgres","hostname":"postgres-service.postgres-namespace.svc.cluster.local","port":"5432"},"configSecretName":"postgres-secret","resources":[{"when":["coupled","updated"],"do":"recreate","template":{"apiVersion":"batch/v1","kind":"Job","metadata":{"name":"postgres-coupled-or-updated-{% .plug.metadata.namespace %}"},"spec":{"template":{"spec":{"containers":[{"name":"psql","image":"registry.gitlab.com/bitspur/rock8s/images/kube-commands-psql:0.0.1","env":[{"name":"POSTGRES_PROTOCOL","value":"{% .socketConfig.protocol %}"},{"name":"POSTGRES_USERNAME","value":"{% .socketConfig.username %}"},{"name":"POSTGRES_HOSTNAME","value":"{% .socketConfig.hostname %}"},{"name":"POSTGRES_PORT","value":"{% .socketConfig.port %}"},{"name":"POSTGRES_DATABASE","value":"{% .plugConfig.database %}"},{"name":"POSTGRES_PASSWORD","value":"{% .socketConfig.password %}"}],"command":["sh","-c","export PGPASSFILE=\"/tmp/.pgpass\"\nexport STDOUT=\"/tmp/createdb.out\"\necho \"*:*:*:*:$POSTGRES_PASSWORD\" > $PGPASSFILE\nchmod 600 $PGPASSFILE\ncreatedb -h $POSTGRES_HOSTNAME -U $POSTGRES_USERNAME -p $POSTGRES_PORT -w $POSTGRES_DATABASE || true\n"]}]}}}}}]}}]
+    k8sMinVersion: ""
+    k8sMaxVersion: ""
+    categories: Integration & Delivery
+    certified: "false"
+    createdAt: ""
+    description: kubernetes operator to integrate deployments
+    containerImage: registry.gitlab.com/bitspur/rock8s/integration-operator:1.0.0
+    support: ""
+    capabilities: Full Lifecycle
+    repository: "https://gitlab.com/bitspur/rock8s/integration-operator"
+spec:
+  displayName: Integration Operator
+  description: >
+    This operator takes inspiration from [Juju](https://juju.is) [Charm](https://juju.is/docs/sdk)
+    [Relations](https://juju.is/docs/sdk/relations) by [Canonical](https://canonical.com).
+
+    ## Terminology
+
+    <table>
+      <tr>
+        <th>Term</th>
+        <th>Juju Equivalent</th>
+        <th>Definition</th>
+      </tr>
+      <tr>
+        <td>Integration</td>
+        <td>Relation</td>
+        <td>unite and connect applications through mutual communication and shared configuration</td>
+      </tr>
+      <tr>
+        <td>Plug</td>
+        <td>Requires</td>
+        <td>request from an application to integrate with another application</td>
+      </tr>
+      <tr>
+        <td>Socket</td>
+        <td>Provides</td>
+        <td>fulfils requests from applications trying to integrate</td>
+      </tr>
+      <tr>
+        <td>Interface</td>
+        <td>Interface</td>
+        <td>plug and socket schema required to connect</td>
+      </tr>
+      <tr>
+        <td>Created Event</td>
+        <td>Created Event</td>
+        <td>event triggered when plug or socket created</td>
+      </tr>
+      <tr>
+        <td>Updated Event</td>
+        <td>Changed Event</td>
+        <td>event triggered when plug or socket updated</td>
+      </tr>
+      <tr>
+        <td>Coupled Event</td>
+        <td>Joined Event</td>
+        <td>event triggered when applications connected</td>
+      </tr>
+      <tr>
+        <td>Decoupled Event</td>
+        <td>Detached Event</td>
+        <td>event triggered when applications disconnected</td>
+      </tr>
+    </table>
+
+    ## Architecture
+
+    ### A simple analogy
+
+    The best way to explain the architecture is to think about how plugs and sockets work in the real world.
+
+
+    Let's say I have a laptop purchased in the United States. In order to power my laptop, I need to **integrate** it with the power grid.
+    Since the laptop was purchased in the United States, the **interface** of the **plug** is Type A.
+
+
+    This means the **socket** I connect to must be also be Type A.
+
+
+    Now, let's say I travel to India and the only **socket** available to me is Type D.
+
+
+    Since the **socket** interface does not match the **plug** interface, I cannot integrate my laptop with the power grid in India. Of course
+    this can be overcome with converters, but that is beyond the scope of this analogy.
+
+    ### A real example
+
+    Let's say I have an express application that needs to **integrate** with a mongo database. The express deployment will have a **plug** with
+    a mongo **interface** and the mongo deployment will have a **socket** with a mongo **interface**. If the **interface** of the **socket** is
+    a postgres **interface** then the integration will fail. In other words, you cannot connect a mongo **plug** to a postgres **socket**. That
+    would be like trying to plug a US Type A **plug** into an Indian Type D **socket**. You can only connect a mongo **plug** to a mongo **socket**.
+
+    ## Concepts
+
+    ### Socket
+
+    A socket is a custom kubernetes resource that fulfills integration requests from other applications.
+    It carries out the following tasks:
+
+    - defines the interface for the configuration and result of the plug and socket
+
+    - provides the configuration for the socket
+
+    - provides the result for the socket
+
+    - templates any resources within the socket's namespace
+
+    - executes any apparatuses within the socket's namespace
+
+    - templates result resources within the socket's namespace
+
+
+    **Example:**
+
+    <pre>apiVersion: v1
+
+    kind: Socket
+
+    metadata:
+      name: foo
+      namespace: foo-namespace
+    spec:
+      config:
+        hello: world
+    </pre>
+
+    ### Plug
+
+    A plug is a custom kubernetes resource that initiates an integration request with another application.
+    It does not define its own interface as it utilizes the interface defined by the socket.
+    The plug carries out the following tasks:
+
+    - couples to a socket
+
+    - provides the configuration for the plug
+
+    - provides the result for the plug
+
+    - templates any resources within the plug's namespace
+
+    - executes any apparatuses within the plug's namespace
+
+    - templates result resources within the plug's namespace
+
+
+    **Example:**
+
+    <pre>apiVersion: v1
+
+    kind: Plug
+
+    metadata:
+      name: bar
+      namespace: bar-namespace
+    spec:
+      socket:
+        name: foo
+        namespace: foo-namespace
+      configSecretName: my-secret
+    </pre>
+
+    ### Data
+
+    The _data_ in the plug or socket is a flexible and unstructured form of information exchange. It is
+    used during the preliminary stages of the integration process, before the final _config_ is established.
+    Unlike _config_ and _result_, _data_ is not bound by an interface. It is used for exchanging or simplifying
+    preliminary details or any other information that might be necessary for generating the final _config_.
+
+
+    The _data_ can be supplied directly through the `data` field, and indirectly through the `dataConfigMapName` field
+    and `dataSecretName` field. The `data` field is a key-value pair that can be defined directly within the plug or
+    socket. If the `dataConfigMapName` or `dataSecretName` field is used, the _data_ will be retrieved from a ConfigMap
+    or Secret respectively.
+
+
+    It is important to know that _data_ is utilized exclusively by the `configTemplate` field, `resultTemplate` field, and
+    the `/config` endpoint of an apparatus. It enables the exchange of information between plugs and sockets before the
+    final _config_ is established. This process prevents potential recursive issues that could arise if the _config_ of
+    the plug and socket were interdependent. As such, _data_ serves as an initial medium for information exchange,
+    facilitating the creation of the final _config_ for the integration process.
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      dataConfigMapName: my-configmap
+      dataSecretName: my-secret
+      data:
+        username: admin
+        password: secret
+    </pre>
+
+    ### Vars
+
+    The _vars_ allows the capture and insertion of values from one resource's field to another, functioning
+    similarly to vars in Kustomize. It is defined by the `vars` field. Like _data_, _vars_ can only be used
+    by the `configTemplate` field and the `/config` endpoint of an apparatus. Since _vars_ is used by _config_, the
+    lookup occurs before the _config_ is finalized.
+
+
+    In addition to the `vars` field, there is a separate field, known as `resultVars`, which is used by
+    the `resultTemplate` field. Since _resultVars_ is used by _result_, the lookup occurs after the integration has
+    been established or updated. This allows for the creation of _resultVars_ based on the results of the integration.
+
+
+    For more detailed information, please refer to the
+    [Kustomize Vars Documentation](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/vars/).
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      vars:
+        - name: serviceAccountName
+          objref:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: my-deployment
+            namespace: default
+          fieldref:
+            fieldPath: spec.template.spec.serviceAccountName
+      resultVars:
+        - name: jobSuccessful
+          objref:
+            apiVersion: batch/v1
+            kind: Job
+            name: my-job
+            namespace: default
+          fieldref:
+            fieldPath: status.successful
+    </pre>
+
+    ### Config
+
+    The _config_ is the most fundamental concept of the integrations, serving as a key-value data pair that enables secure
+    information exchange between the plug and socket. It contains essential details and information necessary for the
+    integration.
+
+
+    The _config_ can be supplied directly through the `config` field, or indirectly through the `configConfigMapName` field,
+    `configSecretName` field, `configTemplate` field and the `/config` endpoint of an apparatus. The `config` field is a
+    key-value pair that can be defined directly within the plug or socket. If the `configConfigMapName` or `configSecretName`
+    field is used, the _config_ will be retrieved from a ConfigMap or Secret respectively. If the `configTemplate` field is
+    used, the _config_ will be templated, allowing the composition of values from `vars`, `plugData`, `socketData`, `plug`
+    and `socket`. If the `/config` endpoint of an apparatus is used, the _config_ will come from the response payload. The
+    request body will contain `vars`, `plugData` and `socketData`. Please note that `plugConfig` and `socketConfig` will not
+    be available to the `configTemplate` field or the `/config` endpoint of an apparatus. All of these strategies for creating
+    the _config_ can be used in combination.
+
+
+    The _config_ is validated against the _config interface_ before the integration process begins. This ensures that the
+    _config_ contains all the necessary information, adheres to the correct format and enforces a contract between the
+    plug and socket integration
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      config:
+        protocol: http
+        port: "8080"
+      configTemplate:
+        hostname: "{% .vars.ingressHost %}"
+      configConfigMapName: my-configmap
+      configSecretName: my-secret
+    </pre>
+
+    ### Results
+
+    The _result_ serves as a key-value data pair that contains essential details and information after an integration
+    has been coupled or updated. It can be used in the `resultResources` field.
+
+
+    The _result_ can be supplied directly through the `result` field, or indirectly through the `resultConfigMapName`
+    or `resultSecretName` field. If the `resultConfigMapName` or `resultSecretName` field is used, the _result_ will be
+    retrieved from a ConfigMap or Secret respectively. If the `resultTemplate` field is used, the _result_ will be templated,
+    allowing the composition of values from `resultVars`, `plugData`, `socketData`, `plugConfig`, `socketConfig`, `plug`,
+    and `socket`. All of these strategies for creating the _result_ can be used in combination.
+
+
+    The _result_ is validated against the _result interface_ after the integration is coupled or updated. This ensures that
+    the _result_ contains all the necessary information, adheres to the correct format and enforces a contract between the
+    plug and socket integration.
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      result:
+        hello: world
+      resultTemplate:
+        foo: "{% .plugConfig.foo %}"
+      resultConfigMapName: my-configmap
+      resultSecretName: my-secret
+    </pre>
+
+    ### Interface
+
+    The _interface_ validates the _config_ and _result_ against a defined schema, ensuring they contain all necessary
+    properties. The integration fails if the _interface_ requires a _config_ or _result_ that is missing. Any _config_
+    or _result_ provided that isn't defined in the _interface_ will be ignored. This guarantees that only properties
+    defined in the _interface_ are used during integration, preserving integrity and consistency. If no _interface_ is
+    provided, the _config_ and _result_ are not validated and can be any value. However, this is discouraged as it may
+    lead to inconsistencies and unexpected behavior during the integration process.
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>kind: Socket
+
+    spec:
+      interface:
+        config:
+          plug:
+            hello:
+              default: world
+          socket:
+            howdy:
+              required: true
+        result:
+          socket:
+            foo:
+              required: true
+          plug:
+            bar: {}
+    </pre>
+
+    ### Resources
+
+    Resources are utilized during the integration process to template kubernetes resources. They are defined within the plug or
+    socket and can encompass any valid Kubernetes resource such as Jobs, Pods, Services, and more. These resources play a
+    pivotal role in executing the integration process.
+
+
+    Resource templates are defined using the `template` and `templates` fields. The `template` field is used for a single
+    resource template, while the `templates` field is used for multiple resource templates. These templates are defined in YAML
+    format.
+
+
+    The `stringTemplate` and `stringTemplates` fields are analogous to `template` and `templates`, but they accept resource
+    templates in string format. This is particularly useful when dealing with complex resource templates that require
+    conditional templating, such as wrapping a resource in an if statement.
+
+
+    The `do` field specifies the action to be performed on the resource. It can be `delete`, `apply`, or `recreate`.
+
+
+    The `when` field specifies the stage of the integration process when the resource action should be performed. It can
+    be `updated`, `coupled`, `decoupled`, `created`, or `deleted`.
+
+
+    The `preserveWhenDecoupled` field is a boolean that determines whether the resource should be preserved when the
+    integration is decoupled. If `true`, the resource will not be deleted during decoupling. If `false` or omitted, the
+    resource will be deleted unless the `when` field contains `decoupled`.
+
+
+    A unique field, `resultResources`, is used to create resources after the integration has been coupled or updated. The
+    templating of `resultResources` takes place after the integration process has been coupled or updated. This allows for
+    the creation of resources based on the results of the integration process.
+
+
+    The `resultResources` field is used to create resources after the integration has been coupled or updated. The templating
+    of `resultResources` takes place after the integration process has been coupled or updated. This allows for the creation
+    of resources based on the results of the integration process.
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      resources:
+        - when: [coupled, updated]
+          do: apply
+          template:
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: my-job
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: my-job
+                      image: my-job-image
+                      env:
+                        - name: HELLO
+                          value: "{% .plugConfig.hello %}"
+      resultResources:
+        - when: [coupled, updated]
+          do: apply
+          stringTemplate: |
+            {%- if (eq .result.resultJob "1") %}
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: my-result-job
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: my-result-job
+                      image: my-result-job-image
+            {%- endif %}
+    </pre>
+
+    ### Apparatus
+
+    The apparatus is a unique component that offers a unique approach to executing the integration process. Unlike resources,
+    which are primarily used for templating Kubernetes resources, the apparatus is a pod that operates a REST API. These APIs
+    are invoked at different stages of the integration process, passing data such as the `plug`, `socket`, `plugConfig`, and
+    `socketConfig` in the request body.
+
+
+    It's important to note that an apparatus and resources can be used together during the integration process. This
+    combination provides a flexible and robust integration process capable of handling a wide range of scenarios.
+
+
+    The apparatus pod is automatically cleaned up when it's not in use and will be created automatically when integrations
+    require it. The apparatus schema is the same as the schema used to define a pod.
+
+
+    An good example of an apparatus use case is the
+    [Keycloak Integration Apparatus](https://gitlab.com/bitspur/rock8s/keycloak-integration-apparatus). This apparatus is
+    necessary because the Keycloak integration involves interacting with the Keycloak API
+    via a TypeScript client, which would be challenging to accomplish using only resources. By constructing it
+    as an apparatus, we can leverage a NodeJS REST API to effectively communicate with Keycloak.
+
+
+    The apparatus controller, which can be programmed in any language due to its REST architecture, should implement the following endpoints:
+
+    <table>
+      <tr>
+        <th>Method</th>
+        <th>Endpoint</th>
+        <th>Description</th>
+        <th>Request Body</th>
+      </tr>
+      <tr>
+        <td>GET</td>
+        <td>/ping</td>
+        <td>checks the health</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/config</td>
+        <td>retrieves the config</td>
+        <td>vars, plug, socket, plugData, socketData</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/created</td>
+        <td>invoked when created</td>
+        <td>plug, socket, plugConfig, socketConfig</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/coupled</td>
+        <td>invoked when coupled</td>
+        <td>plug, socket, plugConfig, socketConfig</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/updated</td>
+        <td>invoked when updated</td>
+        <td>plug, socket, plugConfig, socketConfig</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/decoupled</td>
+        <td>invoked when decoupled</td>
+        <td>plug, socket, plugConfig, socketConfig</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>/deleted</td>
+        <td>invoked when deleted</td>
+        <td>plug, socket, plugConfig, socketConfig</td>
+      </tr>
+    </table>
+
+
+    **Example:**
+
+
+    _this is a simplified incomplete example, only including necessary fields_
+
+    <pre>spec:
+      apparatus:
+        endpoint: /socket
+        containers:
+          - name: my-apparatus
+            image: my-apparatus-image
+            ports:
+              - containerPort: 3000
+                name: container
+                protocol: TCP
+    </pre>
+  maturity: stable
+  version: 1.0.0
+  minKubeVersion: 1.26.0
+  keywords:
+    - integration
+    - plug
+    - socket
+  maintainers:
+    - name: Clay Risser
+      email: email@clayrisser.com
+  provider:
+    name: BitSpur
+  labels: {}
+  selector:
+    matchLabels: {}
+  links:
+    - name: Inspired by Juju Charms
+      url: "https://juju.is"
+  icon:
+    - base64data: >-
+        PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhLS0gQ3JlYXRlZCB3aXRoIElua3NjYXBlIChodHRwOi8vd3d3Lmlua3NjYXBlLm9yZy8pIC0tPgoKPHN2ZwogICB2ZXJzaW9uPSIxLjEiCiAgIGlkPSJzdmcxIgogICB3aWR0aD0iMTk4LjY0NDgxIgogICBoZWlnaHQ9IjE5OC42NDQ4MiIKICAgdmlld0JveD0iMCAwIDE5OC42NDQ4MSAxOTguNjQ0ODIiCiAgIHNvZGlwb2RpOmRvY25hbWU9ImNsYXlyaXNzZXJfYV9taW5pbWFsaXN0XzItY29sb3JfbG9nb19vZl9hX3BsdWdfYW5kX3NvY2tldF81YmM0MDc3YS1hZDQ5LTRmMjYtOTZjMi1iNDEyOTY5ZTA1OGEuc3ZnIgogICBpbmtzY2FwZTpleHBvcnQtZmlsZW5hbWU9Imljb24uc3ZnIgogICBpbmtzY2FwZTpleHBvcnQteGRwaT0iNzMxLjUxNzciCiAgIGlua3NjYXBlOmV4cG9ydC15ZHBpPSI3MzEuNTE3NyIKICAgaW5rc2NhcGU6dmVyc2lvbj0iMS4zICgwZTE1MGVkLCAyMDIzLTA3LTIxKSIKICAgeG1sbnM6aW5rc2NhcGU9Imh0dHA6Ly93d3cuaW5rc2NhcGUub3JnL25hbWVzcGFjZXMvaW5rc2NhcGUiCiAgIHhtbG5zOnNvZGlwb2RpPSJodHRwOi8vc29kaXBvZGkuc291cmNlZm9yZ2UubmV0L0RURC9zb2RpcG9kaS0wLmR0ZCIKICAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogICB4bWxuczpzdmc9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcwogICAgIGlkPSJkZWZzMSIgLz4KICA8c29kaXBvZGk6bmFtZWR2aWV3CiAgICAgaWQ9Im5hbWVkdmlldzEiCiAgICAgcGFnZWNvbG9yPSIjZmZmZmZmIgogICAgIGJvcmRlcmNvbG9yPSIjMDAwMDAwIgogICAgIGJvcmRlcm9wYWNpdHk9IjAuMjUiCiAgICAgaW5rc2NhcGU6c2hvd3BhZ2VzaGFkb3c9IjIiCiAgICAgaW5rc2NhcGU6cGFnZW9wYWNpdHk9IjAuMCIKICAgICBpbmtzY2FwZTpwYWdlY2hlY2tlcmJvYXJkPSIwIgogICAgIGlua3NjYXBlOmRlc2tjb2xvcj0iI2QxZDFkMSIKICAgICBzaG93Z3JpZD0iZmFsc2UiCiAgICAgaW5rc2NhcGU6em9vbT0iMC43MTQ4NDM3NSIKICAgICBpbmtzY2FwZTpjeD0iMjAwLjc0MzE3IgogICAgIGlua3NjYXBlOmN5PSIyMzkuMjEzMTEiCiAgICAgaW5rc2NhcGU6d2luZG93LXdpZHRoPSIxNTEyIgogICAgIGlua3NjYXBlOndpbmRvdy1oZWlnaHQ9Ijk0NSIKICAgICBpbmtzY2FwZTp3aW5kb3cteD0iMCIKICAgICBpbmtzY2FwZTp3aW5kb3cteT0iMzciCiAgICAgaW5rc2NhcGU6d2luZG93LW1heGltaXplZD0iMCIKICAgICBpbmtzY2FwZTpjdXJyZW50LWxheWVyPSJnMSIgLz4KICA8ZwogICAgIGlua3NjYXBlOmdyb3VwbW9kZT0ibGF5ZXIiCiAgICAgaW5rc2NhcGU6bGFiZWw9IkltYWdlIgogICAgIGlkPSJnMSIKICAgICB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMzM4LjE0NjM2LC0zMDMuODIyNTEpIj4KICAgIDxyZWN0CiAgICAgICBzdHlsZT0iZmlsbDojZmY5NjIwO2ZpbGwtb3BhY2l0eToxO3N0cm9rZS13aWR0aDoxLjA0MTtzdHJva2UtZGFzaGFycmF5Om5vbmUiCiAgICAgICBpZD0icmVjdDEiCiAgICAgICB3aWR0aD0iMTk4LjY0NDgxIgogICAgICAgaGVpZ2h0PSIxOTguNjQ0ODIiCiAgICAgICB4PSIzMzguMTQ2MzYiCiAgICAgICB5PSIzMDMuODIyNTEiCiAgICAgICBpbmtzY2FwZTpsYWJlbD0icmVjdDEiCiAgICAgICByeT0iNDguMjYyMjY0IiAvPgogICAgPHBhdGgKICAgICAgIHN0eWxlPSJmaWxsOiMwMDAwMDAiCiAgICAgICBkPSJtIDQxMi42ODgzMSw0NjguMjU1NDYgYyAtMC4wOTAzLC0xLjUxMjUgLTAuMDQ5MywtNSAwLjA5MTEsLTcuNzUgMS4wODgxOSwtMjEuMzE5NzEgMjYuMjM1NjQsLTMxLjQzMjY5IDQxLjEyODU5LC0xNi41Mzk3NCA1LjUzMzYzLDUuNTMzNjMgNy45NDQ1LDExLjk3MzUxIDcuOTQ0NSwyMS4yMjEyNCB2IDUuODE4NSBoIC0yNC41MDAwNCAtMjQuNSB6IG0gLTIxLjgzNTg1LC0xMDEuNzUgdiAtMjkuNSBoIDkgOSB2IDI5LjUgMjkuNSBoIC05IC05IHogbSA3NC42NDE4NSwyNS43NSBjIC0wLjM0MDkxLC0yLjA2MjUgLTAuNjI0NzksLTE1LjMzNzUgLTAuNjMwODQsLTI5LjUgbCAtMC4wMTEsLTI1Ljc1IGggOSA5IHYgMjkuNSAyOS41IGggLTguMzY5MTYgLTguMzY5MTYgeiIKICAgICAgIGlkPSJwYXRoMSIKICAgICAgIHNvZGlwb2RpOm5vZGV0eXBlcz0ic2Nzc2NjY3NjY2NjY2NjY2Nzc2NjY2NjY2NzIgogICAgICAgaW5rc2NhcGU6bGFiZWw9InBhdGgxIiAvPgogIDwvZz4KPC9zdmc+Cg==
+      mediatype: image/svg+xml
+  customresourcedefinitions:
+    owned:
+      - name: plugs.integration.rock8s.com
+        displayName: Plug
+        kind: Plug
+        version: v1beta1
+        description: Plug
+        resources: []
+        specDescriptors: []
+        statusDescriptors: []
+      - name: sockets.integration.rock8s.com
+        displayName: Socket
+        kind: Socket
+        version: v1beta1
+        description: Socket
+        resources: []
+        specDescriptors: []
+        statusDescriptors: []
+    required: []
+  install:
+    strategy: deployment
+    spec:
+      permissions:
+        - serviceAccountName: integration-operator
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - serviceaccounts
+              verbs:
+                - impersonate
+            - apiGroups:
+                - integration.rock8s.com
+              resources:
+                - plugs
+                - sockets
+              verbs:
+                - "*"
+            - apiGroups:
+                - integration.rock8s.com
+              resources:
+                - plugs/status
+                - sockets/status
+              verbs:
+                - get
+                - update
+                - patch
+            - apiGroups:
+                - integration.rock8s.com
+              resources:
+                - plugs/finalizers
+                - sockets/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+      clusterPermissions: []
+      deployments:
+        - name: add-deployment
+          spec:
+            replicas: 1
+            strategy:
+              type: RollingUpdate
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: integration-operator
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: integration-operator
+              spec:
+                affinity:
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: kubernetes.io/arch
+                              operator: In
+                              values:
+                                - amd64
+                serviceAccountName: integration-operator
+                containers:
+                  - image: registry.gitlab.com/bitspur/rock8s/integration-operator:1.0.0
+                    imagePullPolicy: Always
+                    name: integration-operator
+                    args:
+                      - "--leader-elect"
+                      - "--health-probe-bind-address=:8081"
+                      - "--zap-devel=false"
+                    resources:
+                      limits:
+                        cpu: 200m
+                        memory: 100Mi
+                      requests:
+                        cpu: 100m
+                        memory: 50Mi
+                    env:
+                      - name: WATCH_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: "metadata.annotations['olm.targetNamespaces']"
+                      - name: POD_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.name
+                      - name: OPERATOR_NAME
+                        value: integration-operator
+                      - name: MAX_CONCURRENT_RECONCILES
+                        value: "3"
+                    nodeSelector:
+                      beta.kubernetes.io/os: linux
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: true
+    - type: AllNamespaces
+      supported: true

@@ -33,6 +33,8 @@ OPERATORS_DIR="operators"
 PRECURSOR_FILE="basic-catalog-template.yaml"
 # the name of the CI integration file for the operator
 CI_FILE="ci.yaml"
+# the full path for the Makefile template that we'll set up for onboarding operators to use a basic catalog template
+MAKEFILE_TEMPLATE="$CWD/scripts/Makefile.template"
 
 function usage() {
     echo "usage: $0 [options] [operator-name1..operator-nameN]"
@@ -66,6 +68,11 @@ function cache_catalog() {
     fi
 }
 
+function generate_makefile() {
+    OPNAME="$1"
+    sed -e "s/%%OPERATOR_NAME%%/$OPNAME/" $MAKEFILE_TEMPLATE > $OPERATORS_DIR/$OPNAME/Makefile
+}
+
 function mark_fbc() {
     OPNAME="$1"
     yq -i ".updateGraph = \"FBC\"" $OPERATORS_DIR/$OPNAME/$CI_FILE
@@ -89,6 +96,7 @@ function convert_operator() {
     set +x
 
     mark_fbc $OPNAME
+    generate_makefile $OPNAME
 }
 
 function main() {

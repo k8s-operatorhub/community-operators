@@ -35,6 +35,7 @@ PRECURSOR_FILE="basic-catalog-template.yaml"
 CI_FILE="ci.yaml"
 # the full path for the Makefile template that we'll set up for onboarding operators to use a basic catalog template
 MAKEFILE_TEMPLATE="$CWD/scripts/Makefile.template"
+CONTRIBUTIONS_TEMPLATE="$CWD/scripts/contributions.yaml.template"
 
 function usage() {
     echo "usage: $0 [options] [operator-name1..operator-nameN]"
@@ -68,9 +69,11 @@ function cache_catalog() {
     fi
 }
 
-function generate_makefile() {
+function scaffold_make() {
     OPNAME="$1"
     sed -e "s/%%OPERATOR_NAME%%/$OPNAME/" $MAKEFILE_TEMPLATE > $OPERATORS_DIR/$OPNAME/Makefile
+    sed -e "s/%%OPERATOR_NAME%%/$OPNAME/" $CONTRIBUTIONS_TEMPLATE> $OPERATORS_DIR/$OPNAME/$CATALOG_PRECURSOR_DIR/contributions.yaml
+
 }
 
 function mark_fbc() {
@@ -96,7 +99,7 @@ function convert_operator() {
     set +x
 
     mark_fbc $OPNAME
-    generate_makefile $OPNAME
+    scaffold_make $OPNAME
 }
 
 function main() {

@@ -1,0 +1,109 @@
+
+TOPDIR=$(abspath $(dir $(MAKEFILE_LIST))/../../)
+BINDIR=${TOPDIR}/bin
+SCRIPTDIR=${TOPDIR}/scripts
+OPERATOR_NAME = %%OPERATOR_NAME%%
+OPERATOR_CATALOG_DIR = ${TOPDIR}/catalog/${OPERATOR_NAME}
+OPERATOR_CATALOG_CONTRIBUTION = ${OPERATOR_CATALOG_DIR}/catalog.yaml
+OPERATOR_CATALOG_PRECURSOR_DIR = catalog-data
+YQ = bin/yq
+
+
+# the catalog contribution target will enforce that the user selected an FBC build approach and generated the catalog
+${OPERATOR_CATALOG_CONTRIBUTION}:
+	@echo "${OPERATOR_CATALOG_CONTRIBUTION} does not exist"; \
+         echo ">>> you must first customize and execute 'make catalog' to generate the catalog contribution"; \
+         false;
+
+.PHONY: catalog
+# replace this stub with one customized to serve your needs ... some examples below
+#catalog: ${OPERATOR_CATALOG_CONTRIBUTION}
+#
+# in order to have a deliverable target, the CI workflow executes the target "catalog" and wraps the resulting catalog contribution in
+# a PR to the modeled catalog repo
+#
+# here are a few examples of different approaches to fulfilling this target
+# comment out / customize the one that makes the most sense, or use them as examples in defining your own
+#
+# --- BASIC TEMPLATE ---
+#catalog: basic
+#
+# --- SEMVER TEMPLATE ---
+#catalog: semver framework
+#
+# --- COMPOSITE TEMPLATE ---
+catalog: composite
+#
+#  --- POST-PROCESS CUSTOM BUILDER ---
+#  this case is for when a single template cannot support the use-case, and automated changes to the generated FBC need to be made before it is complete
+#  this example models the need to set the v0.2.1 of the operator with the `olm.deprecated` property, to prevent installation
+#
+#catalog: $(YQ) semver framework
+#	$(YQ) eval 'select(.name == "testoperator.v0.2.1" and .schema == "olm.bundle").properties += [{"type" : "olm.deprecated", "value" : "true"}]' -i  $(OPERATOR_CATALOG_CONTRIBUTION)
+
+# framework target provides two pieces that are helpful for any template approach:  
+#  - an OWNERS file to provide default contribution control
+#  - an .indexignore file to illustrate how to add content to the FBC contribution which should be 
+#    excluded from validation via `opm validate`
+.PHONY: framework
+framework: CATALOG_OWNERS
+	cp CATALOG_OWNERS $(OPERATOR_CATALOG_DIR)/OWNERS && \
+         echo "OWNERS" > $(OPERATOR_CATALOG_DIR)/.indexignore
+
+
+# basic target provides an example FBC generation from a `basic` template type.  
+# this example takes a single file as input and generates a well-formed FBC operator contribution as an output
+# the 'validate' target should be used next to validate the output
+.PHONY: basic
+basic: ${BINDIR}/opm ${OPERATOR_CATALOG_PRECURSOR_DIR}/basic-catalog-template.yaml clean
+	mkdir -p $(OPERATOR_CATALOG_DIR) && ${BINDIR}/opm alpha render-template basic -o yaml ${OPERATOR_CATALOG_PRECURSOR_DIR}/basic-catalog-template.yaml > $(OPERATOR_CATALOG_CONTRIBUTION)
+
+
+# semver target provides an example FBC generation from a `semver` template type.  
+# this example takes a single file as input and generates a well-formed FBC operator contribution as an output
+# the 'validate' target should be used next to validate the output
+.PHONY: semver
+semver: ${BINDIR}/opm ${OPERATOR_CATALOG_PRECURSOR_DIR}/semver-template.yaml clean
+	mkdir -p $(OPERATOR_CATALOG_DIR) && ${BINDIR}/opm alpha render-template semver -o yaml ${OPERATOR_CATALOG_PRECURSOR_DIR}/semver-template.yaml > $(OPERATOR_CATALOG_CONTRIBUTION)
+
+# composite target processes a composite template to generate the FBC contributions
+# `render-template composite` has `--validate` option enabled by default, 
+# so no subsequent validation is required
+.PHONY: composite
+composite: ${BINDIR}/opm
+	${BINDIR}/opm alpha render-template composite -f ${TOPDIR}/catalog-definitions.yaml -c ${OPERATOR_CATALOG_PRECURSOR_DIR}/contributions.yaml
+
+#
+# validate target illustrates FBC validation
+# all FBC must pass opm validation in order to be able to be used in a catalog
+.PHONY: validate
+validate: ${BINDIR}/opm $(OPERATOR_CATALOG_CONTRIBUTION) preverify
+	${BINDIR}/opm validate catalog && echo "catalog validation passed" || echo "catalog validation failed"
+
+
+# preverify target ensures that the operator name is consistent between the destination directory and the generated catalog
+# since the template will be modified outside the build process but needs to be consistent with the directory name
+.PHONY: preverify
+preverify: ${BINDIR}/$(YQ) $(OPERATOR_CATALOG_CONTRIBUTION)
+	./validate.sh -n $(OPERATOR_NAME) -f $(OPERATOR_CATALOG_CONTRIBUTION)
+
+
+.PHONY: clean
+clean:
+	rm -rf catalog
+
+
+OS=$(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(shell uname -m | sed 's/x86_64/amd64/')
+
+OPM_VERSION ?= v1.36.0
+${BINDIR}/opm:
+	if [ ! -d ${BINDIR} ]; then mkdir -p ${BINDIR}; fi
+	curl -sLO https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS)-$(ARCH)-opm && chmod +x $(OS)-$(ARCH)-opm && mv $(OS)-$(ARCH)-opm ${BINDIR}/opm
+
+YQ_VERSION=v4.22.1
+YQ_BINARY=yq_$(OS)_$(ARCH)
+${BINDIR}/$(YQ):
+	if [ ! -d ${BINDIR} ]; then mkdir -p ${BINDIR}; fi
+	wget  https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY} -O ${BINDIR}/${YQ_BINARY} && chmod +x ${BINDIR}/${YQ_BINARY}
+

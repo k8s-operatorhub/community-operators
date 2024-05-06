@@ -16,7 +16,7 @@ LABEL operators.operatorframework.io.test.mediatype.v1=scorecard+v1
 LABEL operators.operatorframework.io.test.config.v1=tests/scorecard/
 
 # Copy files to locations specified by labels.
-COPY ./bundle/1.99.0//manifests /manifests/
-COPY ./bundle/1.99.0//metadata /metadata/
-COPY ./bundle/1.99.0//tests/scorecard /tests/scorecard/
+COPY ./bundle/1.25.0//manifests /manifests/
+COPY ./bundle/1.25.0//metadata /metadata/
+COPY ./bundle/1.25.0//tests/scorecard /tests/scorecard/
 LABEL com.redhat.openshift.versions="v4.6"

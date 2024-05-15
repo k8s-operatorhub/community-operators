@@ -1,0 +1,2900 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "vertica.com/v1",
+          "kind": "VerticaDB",
+          "metadata": {
+            "name": "verticadb-sample"
+          },
+          "spec": {
+            "communal": {
+              "endpoint": "https://s3.amazonaws.com"
+            },
+            "image": "opentext/vertica-k8s:24.1.0-0-minimal",
+            "subclusters": [
+              {
+                "name": "default_subcluster",
+                "size": 3
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "vertica.com/v1beta1",
+          "kind": "EventTrigger",
+          "metadata": {
+            "name": "eventtrigger-sample"
+          },
+          "spec": {
+            "matches": [
+              {
+                "condition": {
+                  "status": "True",
+                  "type": "DBInitialized"
+                }
+              }
+            ],
+            "references": [
+              {
+                "object": {
+                  "apiVersion": "vertica.com/v1beta1",
+                  "kind": "VerticaDB",
+                  "name": "verticadb-sample"
+                }
+              }
+            ],
+            "template": {
+              "metadata": {
+                "generateName": "create-user-table-"
+              },
+              "spec": {
+                "template": {
+                  "spec": {
+                    "containers": [
+                      {
+                        "command": [
+                          "/opt/vertica/bin/vsql",
+                          "-h",
+                          "verticadb-sample-defaultsubcluster",
+                          "-c",
+                          "CREATE TABLE T1 (C1 INT);"
+                        ],
+                        "image": "opentext/vertica-k8s:23.4.0-0-minimal",
+                        "name": "main"
+                      }
+                    ],
+                    "restartPolicy": "OnFailure"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "vertica.com/v1beta1",
+          "kind": "VerticaAutoscaler",
+          "metadata": {
+            "name": "verticaautoscaler-sample"
+          },
+          "spec": {
+            "serviceName": "defaultsubcluster",
+            "verticaDBName": "verticadb-sample"
+          }
+        },
+        {
+          "apiVersion": "vertica.com/v1beta1",
+          "kind": "VerticaDB",
+          "metadata": {
+            "name": "verticadb-sample"
+          },
+          "spec": {
+            "communal": {
+              "endpoint": "https://s3.amazonaws.com"
+            },
+            "image": "opentext/vertica-k8s:23.3.0-0-minimal",
+            "subclusters": [
+              {
+                "name": "default_subcluster",
+                "size": 3
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "vertica.com/v1beta1",
+          "kind": "VerticaRestorePointsQuery",
+          "metadata": {
+            "name": "verticarestorepointsquery-sample"
+          },
+          "spec": {
+            "verticaDBName": "verticadb-sample"
+          }
+        },
+        {
+          "apiVersion": "vertica.com/v1beta1",
+          "kind": "VerticaScrutinize",
+          "metadata": {
+            "name": "verticascrutinize-sample"
+          },
+          "spec": {
+            "verticaDBName": "verticadb-sample"
+          }
+        }
+      ]
+    capabilities: Auto Pilot
+    categories: Database
+    containerImage: docker.io/opentext/verticadb-operator:2.1.3
+    createdAt: "2024-05-14T11:26:32Z"
+    description: Operator that manages a Vertica Eon Mode database.
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operators.operatorframework.io/builder: operator-sdk-v1.28.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/vertica/vertica-kubernetes
+    support: Vertica
+  name: verticadb-operator.v2.1.3
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: EventTrigger is the Schema for the eventtriggers API
+      displayName: Event Trigger
+      kind: EventTrigger
+      name: eventtriggers.vertica.com
+      resources:
+      - kind: Job
+        name: ""
+        version: batch/v1
+      specDescriptors:
+      - description: List of things that must be matched in order for the Job to be
+          created. Multiple matches are combined with AND logic.
+        displayName: Matches
+        path: matches
+      - description: Details about a status condition that must match.
+        displayName: Condition
+        path: matches[0].condition
+      - description: The expected value of the status condition when a match occurs.
+        displayName: Status
+        path: matches[0].condition.status
+      - description: The name of the status condition to check.
+        displayName: Type
+        path: matches[0].condition.type
+      - description: Objects that this event trigger will apply too.
+        displayName: References
+        path: references
+      - description: A single object, given by GVK + namespace + name, that this event
+          trigger will apply too.
+        displayName: Object
+        path: references[0].object
+      - description: The API version of the reference object
+        displayName: APIVersion
+        path: references[0].object.apiVersion
+      - description: The kind of the reference object
+        displayName: Kind
+        path: references[0].object.kind
+      - description: The name of the reference object. This doesn't have to exist
+          prior to creating the CR.
+        displayName: Name
+        path: references[0].object.name
+      - description: The namespace that the reference object exists in.
+        displayName: Namespace
+        path: references[0].object.namespace
+      - description: A template of a Job that will get created when the conditions
+          are met for any reference object.
+        displayName: Template
+        path: template
+      - description: The job's object meta data. At a minimum, the name or generateName
+          must be set.
+        displayName: Metadata
+        path: template.metadata
+      - description: Annotations is an unstructured key value map stored with a resource
+          that may be set by external tools to store and retrieve arbitrary metadata.
+          They are not queryable and should be preserved when modifying objects.
+        displayName: Annotations
+        path: template.metadata.annotations
+      - description: GenerateName is an optional prefix, used by the server, to generate
+          a unique name ONLY IF the Name field has not been provided.
+        displayName: Generate Name
+        path: template.metadata.generateName
+      - description: Map of string keys and values that can be used to organize and
+          categorize (scope and select) objects.
+        displayName: Labels
+        path: template.metadata.labels
+      - description: Name must be unique within a namespace. Can be omitted if GenerateName
+          is provided.
+        displayName: Name
+        path: template.metadata.name
+      - description: Specification of the desired behavior of the job.
+        displayName: Spec
+        path: template.spec
+      statusDescriptors:
+      - description: Status about each of the reference objects
+        displayName: References
+        path: references
+      - description: The API version of the reference object
+        displayName: APIVersion
+        path: references[0].apiVersion
+      - description: If a job was created because a match was found for this reference
+          object, this is the name of the last job that was created. This pairs with
+          the jobNamespace parameter to uniquely identify the job.
+        displayName: Job Name
+        path: references[0].jobName
+      - description: If a job was created because a match was found for this reference
+          object, this is the namespace the job is found in. This pairs with the jobName
+          parameter to uniquely identify the job.
+        displayName: Job Namespace
+        path: references[0].jobNamespace
+      - description: The number of jobs that have been created for this reference
+          object.
+        displayName: Jobs Created
+        path: references[0].jobsCreated
+      - description: The kind of the reference object
+        displayName: Kind
+        path: references[0].kind
+      - description: The name of the reference object. This doesn't have to exist
+          prior to creating the CR.
+        displayName: Name
+        path: references[0].name
+      - description: The namespace that the reference object exists in.
+        displayName: Namespace
+        path: references[0].namespace
+      - description: The last known resource version of the reference object
+        displayName: Resource Version
+        path: references[0].resourceVersion
+      - description: The uid of the reference object
+        displayName: UID
+        path: references[0].uid
+      version: v1beta1
+    - description: VerticaAutoscaler is a CR that allows you to autoscale one or more
+        subclusters in a VerticaDB.
+      displayName: Vertica Autoscaler
+      kind: VerticaAutoscaler
+      name: verticaautoscalers.vertica.com
+      resources:
+      - kind: VerticaDB
+        name: ""
+        version: vertica.com/v1beta1
+      specDescriptors:
+      - description: 'This defines how the scaling will happen.  This can be one of
+          the following: - Subcluster: Scaling will be achieved by creating or deleting
+          entire subclusters. The template for new subclusters are either the template
+          if filled out or an existing subcluster that matches the service name. -
+          Pod: Only increase or decrease the size of an existing subcluster. If multiple
+          subclusters are selected by the serviceName, this will grow the last subcluster
+          only.'
+        displayName: Scaling Granularity
+        path: scalingGranularity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Pod
+        - urn:alm:descriptor:com.tectonic.ui:select:Subcluster
+      - description: This acts as a selector for the subclusters that are being scaled
+          together. Each subcluster has a service name field, which if omitted is
+          the same name as the subcluster name.  Multiple subclusters that have the
+          same service name use the same service object.
+        displayName: Service Name
+        path: serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: This is the total pod count for all subclusters that match the
+          serviceName.  Changing this value may trigger a change in the VerticaDB
+          that is associated with this object.  This value is generally left as zero.  It
+          will get initialized in the operator and then modified via the /scale subresource.
+        displayName: Target Size
+        path: targetSize
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: When the scaling granularity is Subcluster, this field defines
+          a template to use for when a new subcluster needs to be created.  If size
+          is 0, then the operator will use an existing subcluster to use as the template.  If
+          size is > 0, the service name must match the serviceName parameter.  The
+          name of the new subcluster is always auto generated.  If the name is set
+          here it will be used as a prefix for the new subcluster.  Otherwise, we
+          use the name of this VerticaAutoscaler object as a prefix for all subclusters.
+        displayName: Template
+        path: template
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: template.affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: template.affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: template.affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: template.affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: 'Allows the service object to be attached to a list of external
+          IPs that you specify. If not set, the external IP list is left empty in
+          the service object. More info: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips'
+        displayName: External IPs
+        path: template.externalIPs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: This allows a different image to be used for the subcluster than
+          the one in VerticaDB.  This is intended to be used internally by the online
+          image change process.
+        displayName: Image Override
+        path: template.imageOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Indicates whether the subcluster is a primary or secondary. You
+          must have at least one primary subcluster in the database.
+        displayName: Is Primary
+        path: template.isPrimary
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Internal state that indicates whether this is a transient read-only
+          subcluster used for online upgrade.  A subcluster that exists temporarily
+          to serve traffic for subclusters that are restarting with the new image.
+        displayName: Is Transient
+        path: template.isTransient
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'Specify IP address of LoadBalancer service for this subcluster.
+          This field is ignored when serviceType != "LoadBalancer". More info: https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer'
+        displayName: Load Balancer IP
+        path: template.loadBalancerIP
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the subcluster. This is a required parameter. This
+          cannot change after CRD creation.
+        displayName: Name
+        path: template.name
+      - description: When setting serviceType to NodePort, this parameter allows you
+          to define the port that is opened at each node for Vertica client connections.
+          If using NodePort and this is omitted, Kubernetes will choose the port automatically.
+          This port must be from within the defined range allocated by the control
+          plane (default is 30000-32767).
+        displayName: Node Port
+        path: template.nodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'A map of label keys and values to restrict Vertica node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: template.nodeSelector
+      - description: 'The priority class name given to pods in this subcluster. This
+          affects where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: template.priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for pods in the
+          subcluster. It is advisable that the request and limits match as this ensures
+          the pods are assigned to the guaranteed QoS class. This will reduces the
+          chance that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: template.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: A map of key/value pairs appended to service metadata.annotations.
+        displayName: Service Annotations
+        path: template.serviceAnnotations
+      - description: Identifies the name of the service object that will serve this
+          subcluster.  If multiple subclusters share the same service name then they
+          all share the same service object.  This allows for a single service object
+          to round robin between multiple subclusters.  If this is left blank, a service
+          object matching the subcluster name is used.  The actual name of the service
+          object is always prefixed with the name of the owning VerticaDB.
+        displayName: Service Name
+        path: template.serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Identifies the type of Kubernetes service to use for external
+          client connectivity. The default is to use a ClusterIP, which sets a stable
+          IP and port to use that is accessible only from within Kubernetes itself.
+          Depending on the service type chosen the user may need to set other config
+          knobs to further config it. These other knobs follow this one. More info:
+          https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
+        displayName: Service Type
+        path: template.serviceType
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:ClusterIP
+        - urn:alm:descriptor:com.tectonic.ui:select:NodePort
+        - urn:alm:descriptor:com.tectonic.ui:select:LoadBalancer
+      - description: "The number of pods that the subcluster will have. This determines
+          the number of Vertica nodes that it will have. Changing this number will
+          either delete or schedule new pods. \n The database has a k-safety of 1.
+          So, if this is a primary subcluster, the minimum value is 3. If this is
+          a secondary subcluster, the minimum is 0. \n Note, you must have a valid
+          license to pick a value larger than 3. The default license that comes in
+          the vertica container is for the community edition, which can only have
+          3 nodes. The license can be set with the db.licenseSecret parameter."
+        displayName: Size
+        path: template.size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: template.tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Like the nodePort parameter, except this controls the node port
+          to use for the http endpoint in the Vertica server.  The same rules apply:
+          it must be defined within the range allocated by the control plane, if omitted
+          Kubernetes will choose the port automatically.'
+        displayName: Vertica HTTPNode Port
+        path: template.verticaHTTPNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the VerticaDB CR that this autoscaler is defined
+          for.  The VerticaDB object must exist in the same namespace as this object.
+        displayName: Vertica DBName
+        path: verticaDBName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      statusDescriptors:
+      - description: Conditions for VerticaAutoscaler
+        displayName: Conditions
+        path: conditions
+      - description: Last time the condition transitioned from one status to another.
+        displayName: Last Transition Time
+        path: conditions[0].lastTransitionTime
+      - description: Status is the status of the condition can be True, False or Unknown
+        displayName: Status
+        path: conditions[0].status
+      - description: Type is the type of the condition
+        displayName: Type
+        path: conditions[0].type
+      - description: The observed size of all pods that are routed through the service
+          name.
+        displayName: Current Size
+        path: currentSize
+      - description: The total number of times the operator has scaled up/down the
+          VerticaDB.
+        displayName: Scaling Count
+        path: scalingCount
+      - description: The selector used to find all of the pods for this autoscaler.
+        displayName: Selector
+        path: selector
+      version: v1beta1
+    - description: VerticaDB is the CR that defines a Vertica Eon mode cluster that
+        is managed by the verticadb-operator.
+      displayName: Vertica DB
+      kind: VerticaDB
+      name: verticadbs.vertica.com
+      resources:
+      - kind: Pod
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: Statefulset
+        name: ""
+        version: apps/v1
+      specDescriptors:
+      - description: Custom annotations that will be added to all of the objects that
+          the operator will create.
+        displayName: Annotations
+        path: annotations
+      - description: State to indicate whether the operator will restart Vertica if
+          the process is not running. Under normal cicumstances this is set to true.
+          The purpose of this is to allow a maintenance window, such as a manual upgrade,
+          without the operator interfering.
+        displayName: Auto Restart Vertica
+        path: autoRestartVertica
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Secrets that will be mounted in the vertica container.  The
+          purpose of this is to allow custom certs to be available.  The full path
+          is: /certs/<secretName>/<key_i> Where <secretName> is the name provided
+          in the secret and <key_i> is one of the keys in the secret.'
+        displayName: Cert Secrets
+        path: certSecrets
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+        displayName: Name
+        path: certSecrets[0].name
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: Contains details about the communal storage.
+        displayName: Communal
+        path: communal
+      - description: Contains a map of server configuration parameters. To avoid duplicate
+          values, if a parameter is already set through another CR field, (like S3ServerSideEncryption
+          through communal.s3ServerSideEncryption), the corresponding key/value pair
+          is skipped. If a config value is set that isn't supported by the server
+          version you are running, the server will fail to start. These are set only
+          during initial bootstrap. After the database has been initialized, changing
+          the options in the CR will have no affect in the server.
+        displayName: Additional Config
+        path: communal.additionalConfig
+      - description: The absolute path to a certificate bundle of trusted CAs. This
+          CA bundle is used when establishing TLS connections to external services
+          such as AWS, Azure or swebhdf:// scheme.  Typically this would refer to
+          a path to one of the certSecrets.
+        displayName: Ca File
+        path: communal.caFile
+      - description: 'The name of an optional secret that contains the credentials
+          to connect to the communal endpoint. This can be omitted if the communal
+          storage uses some other form of authentication such as an attached IAM profile
+          in AWS. Certain keys need to be set, depending on the endpoint type. If
+          the communal storage starts with s3:// or gs://, the secret must have the
+          following keys set: accesskey and secretkey. If the communal storage starts
+          with azb://, the secret can have the following keys: accountName, blobEndpoint,
+          accountKey, or sharedAccessSignature. To store this secret outside of Kubernetes,
+          you can use a secret path reference prefix, such as gsm://. Everything after
+          the prefix is the name of the secret in the service you are storing.'
+        displayName: Credential Secret
+        path: communal.credentialSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The URL to the communal endpoint. The endpoint must be prefaced
+          with http:// or https:// to know what protocol to connect with. If using
+          S3 or Google Cloud Storage as communal storage and initPolicy is Create
+          or Revive, this field is required and cannot change after creation.
+        displayName: Endpoint
+        path: communal.endpoint
+      - description: The path to the communal storage. We support S3, Google Cloud
+          Storage, and HDFS paths.  The protocol in the path (e.g. s3:// or webhdfs://)
+          dictates the type of storage.  The path, whether it be a S3 bucket or HDFS
+          path, must exist prior to creating the VerticaDB.  When initPolicy is Create,
+          this field is required and the path must be empty.  When initPolicy is Revive,
+          this field is required and must be non-empty.
+        displayName: Path
+        path: communal.path
+      - description: The region containing the bucket.  If you do not set the correct
+          region, you might experience a delay before the bootstrap fails because
+          Vertica retries several times before giving up.
+        displayName: Region
+        path: communal.region
+      - description: 'The server-side encryption type Vertica will use to read/write
+          from encrypted S3 communal storage. Available values are: SSE-S3, SSE-KMS,
+          SSE-C and empty string (""). - SSE-S3: the S3 service manages encryption
+          keys. - SSE-KMS: encryption keys are managed by the Key Management Service
+          (KMS). KMS key identifier must be supplied through communal.additionalConfig
+          map. - SSE-C: the client manages encryption keys and provides them to S3
+          for each operation. The client key must be supplied through communal.s3SseCustomerKeySecret.
+          - Empty string (""): No encryption. This is the default value. This value
+          cannot change after the initial creation of the VerticaDB.'
+        displayName: S3 Server Side Encryption
+        path: communal.s3ServerSideEncryption
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-S3
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-KMS
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-C
+      - description: The name of a secret that contains the key to use for the S3SseCustomerKey
+          config option in the server. It is required when S3ServerSideEncryption
+          is SSE-C. When set, the secret must have a key named clientKey.
+        displayName: S3 Sse Customer Key Secret
+        path: communal.s3SseCustomerKeySecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The name of the database.  This cannot be updated once the CRD
+          is created.
+        displayName: DBName
+        path: dbName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Controls if the spread communication between pods is encrypted.  Valid
+          values are 'vertica', 'disabled', or an empty string.  By default, the value
+          is set to 'vertica' unless the user explicitly set it to 'disabled'.  When
+          set to 'vertica' or an empty string, Vertica generates the spread encryption
+          key for the cluster when the database starts up. This can only be set during
+          initial creation of the CR.  If set for initPolicy other than Create, then
+          it has no effect.
+        displayName: Encrypt Spread Comm
+        path: encryptSpreadComm
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: A config map that contains the contents of the /etc/hadoop directory.
+          This gets mounted in the container and is used to configure connections
+          to an HDFS communal path
+        displayName: Hadoop Config
+        path: hadoopConfig
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:ConfigMap
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The docker image name that contains the Vertica server.  Whenever
+          this changes, the operator treats this as an upgrade.  The upgrade can be
+          done either in an online or offline fashion.  See the upgradePolicy to understand
+          how to control the behavior.
+        displayName: Image
+        path: image
+      - description: This dictates the image pull policy to use
+        displayName: Image Pull Policy
+        path: imagePullPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy
+      - description: 'ImagePullSecrets is an optional list of references to secrets
+          in the same namespace to use for pulling the image. If specified, these
+          secrets will be passed to individual puller implementations for them to
+          use. For example, in the case of docker, only DockerConfig type secrets
+          are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod'
+        displayName: Image Pull Secrets
+        path: imagePullSecrets
+      - description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+        displayName: Name
+        path: imagePullSecrets[0].name
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The initialization policy defines how to setup the database.  Available
+          options are to create a new database or revive an existing one.
+        displayName: Init Policy
+        path: initPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Create
+        - urn:alm:descriptor:com.tectonic.ui:select:Revive
+        - urn:alm:descriptor:com.tectonic.ui:select:ScheduleOnly
+      - description: 'A secret that contains files required for Kereberos setup.  The
+          secret must have the following keys: - krb5.conf: The contents of the Kerberos
+          config file - krb5.keytab: The keytab file that stores credentials for each
+          Vertica principal. These files will be mounted in /etc.  We use the same
+          keytab file on each host, so it must contain all of the Vertica principals.'
+        displayName: Kerberos Secret
+        path: kerberosSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Custom labels that will be added to all of the objects that the
+          operator will create.
+        displayName: Labels
+        path: labels
+      - description: The name of a secret that contains the contents of license files.
+          The secret must be in the same namespace as the CRD. Each of the keys in
+          the secret will be mounted as files in /home/dbadmin/licensing/mnt. If this
+          is set prior to creating a database, it will include one of the licenses
+          from the secret -- if there are multiple licenses it will pick one by selecting
+          the first one alphabetically.  The user is responsible for installing any
+          additional licenses or if the license was added to the secret after DB creation.
+        displayName: License Secret
+        path: licenseSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: Allows tuning of the Vertica pods liveness probe. Each of the
+          values here are applied to the default liveness probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Liveness Probe Override
+        path: livenessProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Contain details about the local storage
+        displayName: Local
+        path: local
+      - description: The path in the container to the catalog.  When initializing
+          the database with revive, this path must match the catalog path used when
+          the database was first created. For backwards compatibility, if this is
+          omitted, then it shares the same path as the dataPath.
+        displayName: Catalog Path
+        path: local.catalogPath
+      - description: The path in the container to the local directory for the 'DATA,TEMP'
+          storage location usage. When initializing the database with revive, the
+          local path here must match the path that was used when the database was
+          first created.
+        displayName: Data Path
+        path: local.dataPath
+      - description: The path in the container to the depot -- 'DEPOT' storage location
+          usage. When initializing the database with revive, this path must match
+          the depot path used when the database was first created.
+        displayName: Depot Path
+        path: local.depotPath
+      - description: 'The type of volume to use for the depot. Allowable values will
+          be: EmptyDir and PersistentVolume or an empty string. An empty string currently
+          defaults to PersistentVolume.'
+        displayName: Depot Volume
+        path: local.depotVolume
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:PersistentVolume
+        - urn:alm:descriptor:com.tectonic.ui:select:EmptyDir
+      - description: The minimum size of the local data volume when picking a PV.  If
+          changing this after the PV have been created, two things may happen. First,
+          it will cause a resize of the PV to the new size. And, if depot is stored
+          in the PV, a resize of the depot happens too.
+        displayName: Request Size
+        path: local.requestSize
+      - description: The local data stores the local catalog, depot and config files.
+          Portions of the local data are persisted with a persistent volume (PV) using
+          a persistent volume claim (PVC). The catalog and config files are always
+          stored in the PV. The depot may be include too if depotVolume is set to
+          'PersistentVolume'. This field is used to define the name of the storage
+          class to use for the PV. This will be set when creating the PVC. By default,
+          it is not set. This means that that the PVC we create will have the default
+          storage class set in Kubernetes.
+        displayName: Storage Class
+        path: local.storageClass
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:StorageClass
+      - description: 'A secret that contains the TLS credentials to use for Vertica''s
+          node management agent (NMA). If this is empty, the operator will create
+          a secret to use and add the name of the generate secret in this field. When
+          set, the secret must have the following keys defined: tls.key, tls.crt and
+          ca.crt.  To store this secret outside of Kubernetes, you can use a secret
+          path reference prefix, such as gsm://. Everything after the prefix is the
+          name of the secret in the service you are storing.'
+        displayName: NMATLSSecret
+        path: nmaTLSSecret
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: An optional name for a secret that contains the password for
+          the database's superuser. If this is not set, then we assume no such password
+          is set for the database. If this is set, it is up the user to create this
+          secret before deployment. The secret must have a key named password. To
+          store this secret outside of Kubernetes, you can use a secret path reference
+          prefix, such as gsm://. Everything after the prefix is the name of the secret
+          in the service you are storing.
+        displayName: Password Secret
+        path: passwordSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: This can be used to override any pod-level securityContext for
+          the Vertica pod. It will be merged with the default context. If omitted,
+          then the default context is used.
+        displayName: Pod Security Context
+        path: podSecurityContext
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Allows tuning of the Vertica pods readiness probe. Each of the
+          values here are applied to the default readiness probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Readiness Probe Override
+        path: readinessProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Specifies the restore point details to use with this instance
+          of the VerticaDB.
+        displayName: Restore Point
+        path: restorePoint
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:initPolicy:Revive
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Name of the restore archive to use for bootstrapping. This name
+          refers to an object in the database. This must be specified if initPolicy
+          is Revive and a restore is intended.
+        displayName: Archive
+        path: restorePoint.archive
+      - description: The identifier of the restore point in the restore archive to
+          restore from. Specify either index or id exclusively; one of these fields
+          is mandatory, but both cannot be used concurrently.
+        displayName: ID
+        path: restorePoint.id
+      - description: The (1-based) index of the restore point in the restore archive
+          to restore from. Specify either index or id exclusively; one of these fields
+          is mandatory, but both cannot be used concurrently.
+        displayName: Index
+        path: restorePoint.index
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: "This specifies the order of nodes when doing a revive.  Each
+          entry contains an index to a subcluster, which is an index in Subclusters[],
+          and a pod count of the number of pods include from the subcluster. \n For
+          example, suppose the database you want to revive has the following setup:
+          v_db_node0001: subcluster A v_db_node0002: subcluster A v_db_node0003: subcluster
+          B v_db_node0004: subcluster A v_db_node0005: subcluster B v_db_node0006:
+          subcluster B \n And the Subcluster[] array is defined as {'A', 'B'}.  The
+          revive order would be: - {subclusterIndex:0, podCount:2}  # 2 pods from
+          subcluster A - {subclusterIndex:1, podCount:1}  # 1 pod from subcluster
+          B - {subclusterIndex:0, podCount:1}  # 1 pod from subcluster A - {subclusterIndex:1,
+          podCount:2}  # 2 pods from subcluster B \n If InitPolicy is not Revive,
+          this field can be ignored."
+        displayName: Revive Order
+        path: reviveOrder
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:initPolicy:Revive
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The number of pods paired with this subcluster.  If this is omitted
+          then, all remaining pods in the subcluster will be used.
+        displayName: Pod Count
+        path: reviveOrder[0].podCount
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: The index of the subcluster.  This is an index into Subclusters[]
+        displayName: Subcluster Index
+        path: reviveOrder[0].subclusterIndex
+      - description: Allows you to set any additional securityContext for the Vertica
+          server container.  We merge the values with the securityContext generated
+          by the operator.  The operator adds its own capabilities to this.  If you
+          want those capabilities to be removed you must explicitly include them in
+          the drop list.
+        displayName: Security Context
+        path: securityContext
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: The name of a serviceAccount to use to run the Vertica pods.
+          If the service account is not specified or does not exist, the operator
+          will create one, using the specified name if provided, along with a Role
+          and RoleBinding.
+        displayName: Service Account Name
+        path: serviceAccountName
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:ServiceAccount
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'The number of shards to create in the database. This cannot
+          be updated once the CRD is created.  Refer to this page to determine an
+          optimal size: https://www.vertica.com/docs/latest/HTML/Content/Authoring/Eon/SizingEonCluster.htm
+          The default was chosen using this link and the default subcluster size of
+          3.'
+        displayName: Shard Count
+        path: shardCount
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: Optional sidecar containers that run along side the vertica server.  The
+          operator adds the same volume mounts that are in the vertica server container
+          to each sidecar container.
+        displayName: Sidecars
+        path: sidecars
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Allows tuning of the Vertica pods startup probe. Each of the
+          values here are applied to the default startup probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Startup Probe Override
+        path: startupProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Subclusters
+        path: subclusters
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: subclusters[0].affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: subclusters[0].affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: subclusters[0].affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: subclusters[0].affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: When setting serviceType to NodePort, this parameter allows you
+          to define the port that is opened at each node for Vertica client connections.
+          If using NodePort and this is omitted, Kubernetes will choose the port automatically.
+          This port must be from within the defined range allocated by the control
+          plane (default is 30000-32767).
+        displayName: Client Node Port
+        path: subclusters[0].clientNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Allows the service object to be attached to a list of external
+          IPs that you specify. If not set, the external IP list is left empty in
+          the service object. More info: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips'
+        displayName: External IPs
+        path: subclusters[0].externalIPs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: This allows a different image to be used for the subcluster than
+          the one in VerticaDB.  This is intended to be used internally by the online
+          image change process.
+        displayName: Image Override
+        path: subclusters[0].imageOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'Specify IP address of LoadBalancer service for this subcluster.
+          This field is ignored when serviceType != "LoadBalancer". More info: https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer'
+        displayName: Load Balancer IP
+        path: subclusters[0].loadBalancerIP
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the subcluster. This is a required parameter. This
+          cannot change after CRD creation.
+        displayName: Name
+        path: subclusters[0].name
+      - description: 'A map of label keys and values to restrict Vertica node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: subclusters[0].nodeSelector
+      - description: 'The priority class name given to pods in this subcluster. This
+          affects where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: subclusters[0].priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for pods in the
+          subcluster. It is advisable that the request and limits match as this ensures
+          the pods are assigned to the guaranteed QoS class. This will reduces the
+          chance that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: subclusters[0].resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: A map of key/value pairs appended to service metadata.annotations.
+        displayName: Service Annotations
+        path: subclusters[0].serviceAnnotations
+      - description: Identifies the name of the service object that will serve this
+          subcluster.  If multiple subclusters share the same service name then they
+          all share the same service object.  This allows for a single service object
+          to round robin between multiple subclusters.  If this is left blank, a service
+          object matching the subcluster name is used.  The actual name of the service
+          object is always prefixed with the name of the owning VerticaDB.
+        displayName: Service Name
+        path: subclusters[0].serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Identifies the type of Kubernetes service to use for external
+          client connectivity. The default is to use a ClusterIP, which sets a stable
+          IP and port to use that is accessible only from within Kubernetes itself.
+          Depending on the service type chosen the user may need to set other config
+          knobs to further config it. These other knobs follow this one. More info:
+          https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
+        displayName: Service Type
+        path: subclusters[0].serviceType
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:ClusterIP
+        - urn:alm:descriptor:com.tectonic.ui:select:NodePort
+        - urn:alm:descriptor:com.tectonic.ui:select:LoadBalancer
+      - description: "The number of pods that the subcluster will have. This determines
+          the number of Vertica nodes that it will have. Changing this number will
+          either delete or schedule new pods. \n The database has a k-safety of 1.
+          So, if this is a primary subcluster, the minimum value is 3. If this is
+          a secondary subcluster, the minimum is 0. \n Note, you must have a valid
+          license to pick a value larger than 3. The default license that comes in
+          the vertica container is for the community edition, which can only have
+          3 nodes. The license can be set with the db.licenseSecret parameter."
+        displayName: Size
+        path: subclusters[0].size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: subclusters[0].tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Indicates the type of subcluster it is. Valid values are: primary,
+          secondary or transient. Types are case-sensitive. You must have at least
+          one primary subcluster in the database. If type is omitted, it will default
+          to a primary. Transient should only be set internally by the operator during
+          online upgrade. It is used to indicate a subcluster that exists temporarily
+          to serve traffic for subclusters that are restarting with a new image.'
+        displayName: Type
+        path: subclusters[0].type
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:primary
+        - urn:alm:descriptor:com.tectonic.ui:select:secondary
+      - description: 'Like the clientNodePort parameter, except this controls the
+          node port to use for the http endpoint in the Vertica server.  The same
+          rules apply: it must be defined within the range allocated by the control
+          plane, if omitted Kubernetes will choose the port automatically.'
+        displayName: Vertica HTTPNode Port
+        path: subclusters[0].verticaHTTPNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: When doing an online upgrade, we designate a subcluster to accept
+          traffic while the other subclusters restart.  The designated subcluster
+          is specified here.  The name of the subcluster can refer to an existing
+          one or an entirely new subcluster.  If the subcluster is new, it will exist
+          only for the duration of the upgrade.  If this struct is left empty the
+          operator will default to picking existing subclusters.
+        displayName: Temporary Subcluster Routing
+        path: temporarySubclusterRouting
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Names of existing subclusters to use for temporary routing of
+          client connections.  The operator will use the first subcluster that is
+          online.
+        displayName: Names
+        path: temporarySubclusterRouting.names
+      - description: A new subcluster will be created using this as a template.  This
+          subcluster will only exist for the life of the online upgrade.  It will
+          accept client traffic for a subcluster that are in the process of being
+          restarted.
+        displayName: Template
+        path: temporarySubclusterRouting.template
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: temporarySubclusterRouting.template.affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: temporarySubclusterRouting.template.affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: temporarySubclusterRouting.template.affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: temporarySubclusterRouting.template.affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: When setting serviceType to NodePort, this parameter allows you
+          to define the port that is opened at each node for Vertica client connections.
+          If using NodePort and this is omitted, Kubernetes will choose the port automatically.
+          This port must be from within the defined range allocated by the control
+          plane (default is 30000-32767).
+        displayName: Client Node Port
+        path: temporarySubclusterRouting.template.clientNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Allows the service object to be attached to a list of external
+          IPs that you specify. If not set, the external IP list is left empty in
+          the service object. More info: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips'
+        displayName: External IPs
+        path: temporarySubclusterRouting.template.externalIPs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: This allows a different image to be used for the subcluster than
+          the one in VerticaDB.  This is intended to be used internally by the online
+          image change process.
+        displayName: Image Override
+        path: temporarySubclusterRouting.template.imageOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'Specify IP address of LoadBalancer service for this subcluster.
+          This field is ignored when serviceType != "LoadBalancer". More info: https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer'
+        displayName: Load Balancer IP
+        path: temporarySubclusterRouting.template.loadBalancerIP
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the subcluster. This is a required parameter. This
+          cannot change after CRD creation.
+        displayName: Name
+        path: temporarySubclusterRouting.template.name
+      - description: 'A map of label keys and values to restrict Vertica node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: temporarySubclusterRouting.template.nodeSelector
+      - description: 'The priority class name given to pods in this subcluster. This
+          affects where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: temporarySubclusterRouting.template.priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for pods in the
+          subcluster. It is advisable that the request and limits match as this ensures
+          the pods are assigned to the guaranteed QoS class. This will reduces the
+          chance that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: temporarySubclusterRouting.template.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: A map of key/value pairs appended to service metadata.annotations.
+        displayName: Service Annotations
+        path: temporarySubclusterRouting.template.serviceAnnotations
+      - description: Identifies the name of the service object that will serve this
+          subcluster.  If multiple subclusters share the same service name then they
+          all share the same service object.  This allows for a single service object
+          to round robin between multiple subclusters.  If this is left blank, a service
+          object matching the subcluster name is used.  The actual name of the service
+          object is always prefixed with the name of the owning VerticaDB.
+        displayName: Service Name
+        path: temporarySubclusterRouting.template.serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Identifies the type of Kubernetes service to use for external
+          client connectivity. The default is to use a ClusterIP, which sets a stable
+          IP and port to use that is accessible only from within Kubernetes itself.
+          Depending on the service type chosen the user may need to set other config
+          knobs to further config it. These other knobs follow this one. More info:
+          https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
+        displayName: Service Type
+        path: temporarySubclusterRouting.template.serviceType
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:ClusterIP
+        - urn:alm:descriptor:com.tectonic.ui:select:NodePort
+        - urn:alm:descriptor:com.tectonic.ui:select:LoadBalancer
+      - description: "The number of pods that the subcluster will have. This determines
+          the number of Vertica nodes that it will have. Changing this number will
+          either delete or schedule new pods. \n The database has a k-safety of 1.
+          So, if this is a primary subcluster, the minimum value is 3. If this is
+          a secondary subcluster, the minimum is 0. \n Note, you must have a valid
+          license to pick a value larger than 3. The default license that comes in
+          the vertica container is for the community edition, which can only have
+          3 nodes. The license can be set with the db.licenseSecret parameter."
+        displayName: Size
+        path: temporarySubclusterRouting.template.size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: temporarySubclusterRouting.template.tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Indicates the type of subcluster it is. Valid values are: primary,
+          secondary or transient. Types are case-sensitive. You must have at least
+          one primary subcluster in the database. If type is omitted, it will default
+          to a primary. Transient should only be set internally by the operator during
+          online upgrade. It is used to indicate a subcluster that exists temporarily
+          to serve traffic for subclusters that are restarting with a new image.'
+        displayName: Type
+        path: temporarySubclusterRouting.template.type
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:primary
+        - urn:alm:descriptor:com.tectonic.ui:select:secondary
+      - description: 'Like the clientNodePort parameter, except this controls the
+          node port to use for the http endpoint in the Vertica server.  The same
+          rules apply: it must be defined within the range allocated by the control
+          plane, if omitted Kubernetes will choose the port automatically.'
+        displayName: Vertica HTTPNode Port
+        path: temporarySubclusterRouting.template.verticaHTTPNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Defines how upgrade will be managed.  Available values are:
+          Offline, Online and Auto. - Offline: means we take down the entire cluster
+          then bring it back up with the new image. - Online: will keep the cluster
+          up when the upgrade occurs.  The data will go into read-only mode until
+          the Vertica nodes from the primary subcluster reform the cluster with the
+          new image. - Auto: will pick between Offline or Online.  Online is only
+          chosen if a license Secret exists, the k-Safety of the database is 1 and
+          we are running with a Vertica version that supports read-only subclusters.'
+        displayName: Upgrade Policy
+        path: upgradePolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Auto
+        - urn:alm:descriptor:com.tectonic.ui:select:Online
+        - urn:alm:descriptor:com.tectonic.ui:select:Offline
+      - description: Additional volume mounts to include in the Vertica container.  These
+          reference volumes that are in the Volumes list.  The mount path must not
+          conflict with a mount path that the operator adds internally.
+        displayName: Volume Mounts
+        path: volumeMounts
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: "Custom volumes that are added to sidecars and the Vertica container.
+          For these volumes to be visible in either container, they must have a corresonding
+          volumeMounts entry.  For sidecars, this is included in `spec.sidecars[*].volumeMounts`.
+          \ For the Vertica container, it is included in `spec.volumeMounts`. \n This
+          accepts any valid volume type.  A unique name must be given for each volume
+          and it cannot conflict with any of the internally generated volumes."
+        displayName: Volumes
+        path: volumes
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      statusDescriptors:
+      - description: A count of the number of pods that have been added to the database.
+        displayName: Added To DBCount
+        path: addedToDBCount
+      - description: Conditions for VerticaDB
+        displayName: Conditions
+        path: conditions
+      - description: The number of subclusters in the database
+        displayName: Subcluster Count
+        path: subclusterCount
+      - description: Status per subcluster.
+        displayName: Subclusters
+        path: subclusters
+      - description: A count of the number of pods that have been added to the database
+          for this subcluster.
+        displayName: Added To DBCount
+        path: subclusters[0].addedToDBCount
+      - displayName: Detail
+        path: subclusters[0].detail
+      - description: This is set to true if the DB exists and the pod has been added
+          to it.
+        displayName: Added To DB
+        path: subclusters[0].detail[0].addedToDB
+      - description: This is set to true if /opt/vertica/config has been bootstrapped.
+        displayName: Installed
+        path: subclusters[0].detail[0].installed
+      - description: True means the vertica process is running on this pod and it
+          can accept connections on port 5433.
+        displayName: Up Node
+        path: subclusters[0].detail[0].upNode
+      - description: This is the vnode name that Vertica internally assigned this
+          pod (e.g. v_<dbname>_nodexxxx)
+        displayName: VNode Name
+        path: subclusters[0].detail[0].vnodeName
+      - description: Name of the subcluster
+        displayName: Name
+        path: subclusters[0].name
+      - description: Object ID of the subcluster.
+        displayName: Oid
+        path: subclusters[0].oid
+      - description: A count of the number of pods that have a running vertica process
+          in this subcluster.
+        displayName: Up Node Count
+        path: subclusters[0].upNodeCount
+      - description: A count of the number of pods that have a running vertica process.
+        displayName: Up Node Count
+        path: upNodeCount
+      - description: Status message for the current running upgrade.   If no upgrade
+          is occurring, this message remains blank.
+        displayName: Upgrade Status
+        path: upgradeStatus
+      version: v1
+    - description: VerticaDB is the CR that defines a Vertica Eon mode cluster that
+        is managed by the verticadb-operator.
+      displayName: Vertica DB
+      kind: VerticaDB
+      name: verticadbs.vertica.com
+      resources:
+      - kind: Pod
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: Statefulset
+        name: ""
+        version: apps/v1
+      specDescriptors:
+      - description: Custom annotations that will be added to all of the objects that
+          the operator will create.
+        displayName: Annotations
+        path: annotations
+      - description: State to indicate whether the operator will restart Vertica if
+          the process is not running. Under normal cicumstances this is set to true.
+          The purpose of this is to allow a maintenance window, such as a manual upgrade,
+          without the operator interfering.
+        displayName: Auto Restart Vertica
+        path: autoRestartVertica
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Secrets that will be mounted in the vertica container.  The
+          purpose of this is to allow custom certs to be available.  The full path
+          is: /certs/<secretName>/<key_i> Where <secretName> is the name provided
+          in the secret and <key_i> is one of the keys in the secret.'
+        displayName: Cert Secrets
+        path: certSecrets
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+        displayName: Name
+        path: certSecrets[0].name
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: Contains details about the communal storage.
+        displayName: Communal
+        path: communal
+      - description: Contains a map of server configuration parameters. To avoid duplicate
+          values, if a parameter is already set through another CR field, (like S3ServerSideEncryption
+          through communal.s3ServerSideEncryption), the corresponding key/value pair
+          is skipped. If a config value is set that isn't supported by the server
+          version you are running, the server will fail to start. These are set only
+          during initial bootstrap. After the database has been initialized, changing
+          the options in the CR will have no affect in the server.
+        displayName: Additional Config
+        path: communal.additionalConfig
+      - description: The absolute path to a certificate bundle of trusted CAs. This
+          CA bundle is used when establishing TLS connections to external services
+          such as AWS, Azure or swebhdf:// scheme.  Typically this would refer to
+          a path to one of the certSecrets.
+        displayName: Ca File
+        path: communal.caFile
+      - description: "The name of a secret that contains the credentials to connect
+          to the communal endpoint (only applies to s3://, gs:// or azb://). Certain
+          keys need to be set, depending on the endpoint type: - s3:// or gs:// -
+          If storing credentials in a secret, the secret must have the following keys
+          set: accesskey and secretkey.  When using Google Cloud Storage, the IDs
+          set in the secret are taken from the hash-based message authentication code
+          (HMAC) keys. - azb:// - It must have the following keys set: accountName
+          - Name of the Azure account blobEndpoint - (Optional) Set this to the location
+          of the endpoint. If using an emulator like Azurite, it can be set to something
+          like 'http://<IP-addr>:<port>' accountKey - If accessing with an account
+          key set it here sharedAccessSignature - If accessing with a shared access
+          signature, set it here \n This field is optional. For AWS, authentication
+          to communal storage can be provided through an attached IAM profile: attached
+          to the EC2 instance or to a ServiceAccount with IRSA (see https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html).
+          IRSA requires a Vertica server running at least with version >= 12.0.3."
+        displayName: Credential Secret
+        path: communal.credentialSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The URL to the communal endpoint. The endpoint must be prefaced
+          with http:// or https:// to know what protocol to connect with. If using
+          S3 or Google Cloud Storage as communal storage and initPolicy is Create
+          or Revive, this field is required and cannot change after creation.
+        displayName: Endpoint
+        path: communal.endpoint
+      - description: A config map that contains the contents of the /etc/hadoop directory.
+          This gets mounted in the container and is used to configure connections
+          to an HDFS communal path
+        displayName: Hadoop Config
+        path: communal.hadoopConfig
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:ConfigMap
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: If true, the operator will include the VerticaDB's UID in the
+          path.  This option exists if you reuse the communal path in the same endpoint
+          as it forces each database path to be unique.
+        displayName: Include UIDIn Path
+        path: communal.includeUIDInPath
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Name of the Kerberos realm.  This is set in the database config
+          parameter KerberosRealm during bootstrapping.
+        displayName: Kerberos Realm
+        path: communal.kerberosRealm
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The service name portion of the Vertica Kerberos principal. This
+          is set in the database config parameter KerberosServiceName during bootstrapping.
+        displayName: Kerberos Service Name
+        path: communal.kerberosServiceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The path to the communal storage. We support S3, Google Cloud
+          Storage, and HDFS paths.  The protocol in the path (e.g. s3:// or webhdfs://)
+          dictates the type of storage.  The path, whether it be a S3 bucket or HDFS
+          path, must exist prior to creating the VerticaDB.  When initPolicy is Create,
+          this field is required and the path must be empty.  When initPolicy is Revive,
+          this field is required and must be non-empty.
+        displayName: Path
+        path: communal.path
+      - description: The region containing the bucket.  If you do not set the correct
+          region, you might experience a delay before the bootstrap fails because
+          Vertica retries several times before giving up.
+        displayName: Region
+        path: communal.region
+      - description: 'The server-side encryption type Vertica will use to read/write
+          from encrypted S3 communal storage. Available values are: SSE-S3, SSE-KMS,
+          SSE-C and empty string (""). - SSE-S3: the S3 service manages encryption
+          keys. - SSE-KMS: encryption keys are managed by the Key Management Service
+          (KMS). KMS key identifier must be supplied through communal.additionalConfig
+          map. - SSE-C: the client manages encryption keys and provides them to S3
+          for each operation. The client key must be supplied through communal.s3SseCustomerKeySecret.
+          - Empty string (""): No encryption. This is the default value. This value
+          cannot change after the initial creation of the VerticaDB.'
+        displayName: S3 Server Side Encryption
+        path: communal.s3ServerSideEncryption
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-S3
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-KMS
+        - urn:alm:descriptor:com.tectonic.ui:select:SSE-C
+      - description: The name of a secret that contains the key to use for the S3SseCustomerKey
+          config option in the server. It is required when S3ServerSideEncryption
+          is SSE-C. When set, the secret must have a key named clientKey.
+        displayName: S3 Sse Customer Key Secret
+        path: communal.s3SseCustomerKeySecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The name of the database.  This cannot be updated once the CRD
+          is created.
+        displayName: DBName
+        path: dbName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Controls if the spread communication between pods is encrypted.  Valid
+          values are 'vertica' or an empty string if not enabled.  When set to 'vertica',
+          Vertica generates the spread encryption key for the cluster when the database
+          starts up.  This can only be set during initial creation of the CR.  If
+          set for initPolicy other than Create, then it has no effect.
+        displayName: Encrypt Spread Comm
+        path: encryptSpreadComm
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Deprecated: setup of TLS certs for http access is controlled
+          by the deployment type now.'
+        displayName: Deprecated HTTPServer Mode
+        path: httpServerMode
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'A secret that contains the TLS credentials to use for the node
+          management agent. If this is empty, the operator will create a secret to
+          use and add the name of the generate secret in this field.  When set, the
+          secret must have the following keys defined: - tls.key: The private key
+          to be used by the HTTP server - tls.crt: The signed certificate chain for
+          the private key - ca.crt: The CA certificate'
+        displayName: HTTPServer TLSSecret
+        path: httpServerTLSSecret
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Ignore the cluster lease when doing a revive or start_db.  Use
+          this with caution, as ignoring the cluster lease when another system is
+          using the same communal storage will cause corruption.
+        displayName: Ignore Cluster Lease
+        path: ignoreClusterLease
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: When set to False, this parameter will ensure that when changing
+          the vertica version that we follow the upgrade path.  The Vertica upgrade
+          path means you cannot downgrade a Vertica release, nor can you skip any
+          released Vertica versions when upgrading.
+        displayName: Ignore Upgrade Path
+        path: ignoreUpgradePath
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: The docker image name that contains the Vertica server.  Whenever
+          this changes, the operator treats this as an upgrade.  The upgrade can be
+          done either in an online or offline fashion.  See the upgradePolicy to understand
+          how to control the behavior.
+        displayName: Image
+        path: image
+      - description: This dictates the image pull policy to use
+        displayName: Image Pull Policy
+        path: imagePullPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy
+      - description: 'ImagePullSecrets is an optional list of references to secrets
+          in the same namespace to use for pulling the image. If specified, these
+          secrets will be passed to individual puller implementations for them to
+          use. For example, in the case of docker, only DockerConfig type secrets
+          are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod'
+        displayName: Image Pull Secrets
+        path: imagePullSecrets
+      - description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+        displayName: Name
+        path: imagePullSecrets[0].name
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: The initialization policy defines how to setup the database.  Available
+          options are to create a new database or revive an existing one.
+        displayName: Init Policy
+        path: initPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Create
+        - urn:alm:descriptor:com.tectonic.ui:select:Revive
+        - urn:alm:descriptor:com.tectonic.ui:select:ScheduleOnly
+      - description: "Sets the fault tolerance for the cluster.  Allowable values
+          are 0 or 1.  0 is only suitable for test environments because we have no
+          fault tolerance and the cluster can only have between 1 and 3 pods.  If
+          set to 1, we have fault tolerance if nodes die and the cluster has a minimum
+          of 3 pods. \n This value cannot change after the initial creation of the
+          VerticaDB."
+        displayName: KSafety
+        path: kSafety
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:0
+        - urn:alm:descriptor:com.tectonic.ui:select:1
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'A secret that contains files required for Kereberos setup.  The
+          secret must have the following keys: - krb5.conf: The contents of the Kerberos
+          config file - krb5.keytab: The keytab file that stores credentials for each
+          Vertica principal. These files will be mounted in /etc.  We use the same
+          keytab file on each host, so it must contain all of the Vertica principals.'
+        displayName: Kerberos Secret
+        path: kerberosSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Custom labels that will be added to all of the objects that the
+          operator will create.
+        displayName: Labels
+        path: labels
+      - description: The name of a secret that contains the contents of license files.
+          The secret must be in the same namespace as the CRD. Each of the keys in
+          the secret will be mounted as files in /home/dbadmin/licensing/mnt. If this
+          is set prior to creating a database, it will include one of the licenses
+          from the secret -- if there are multiple licenses it will pick one by selecting
+          the first one alphabetically.  The user is responsible for installing any
+          additional licenses or if the license was added to the secret after DB creation.
+        displayName: License Secret
+        path: licenseSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: Allows tuning of the Vertica pods liveness probe. Each of the
+          values here are applied to the default liveness probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Liveness Probe Override
+        path: livenessProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Contain details about the local storage
+        displayName: Local
+        path: local
+      - description: The path in the container to the catalog.  When initializing
+          the database with revive, this path must match the catalog path used when
+          the database was first created. For backwards compatibility, if this is
+          omitted, then it shares the same path as the dataPath.
+        displayName: Catalog Path
+        path: local.catalogPath
+      - description: The path in the container to the local directory for the 'DATA,TEMP'
+          storage location usage. When initializing the database with revive, the
+          local path here must match the path that was used when the database was
+          first created.
+        displayName: Data Path
+        path: local.dataPath
+      - description: The path in the container to the depot -- 'DEPOT' storage location
+          usage. When initializing the database with revive, this path must match
+          the depot path used when the database was first created.
+        displayName: Depot Path
+        path: local.depotPath
+      - description: 'The type of volume to use for the depot. Allowable values will
+          be: EmptyDir and PersistentVolume or an empty string. An empty string currently
+          defaults to PersistentVolume.'
+        displayName: Depot Volume
+        path: local.depotVolume
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:PersistentVolume
+        - urn:alm:descriptor:com.tectonic.ui:select:EmptyDir
+      - description: The minimum size of the local data volume when picking a PV.  If
+          changing this after the PV have been created, two things may happen. First,
+          it will cause a resize of the PV to the new size. And, if depot is stored
+          in the PV, a resize of the depot happens too.
+        displayName: Request Size
+        path: local.requestSize
+      - description: The local data stores the local catalog, depot and config files.
+          Portions of the local data are persisted with a persistent volume (PV) using
+          a persistent volume claim (PVC). The catalog and config files are always
+          stored in the PV. The depot may be include too if depotVolume is set to
+          'PersistentVolume'. This field is used to define the name of the storage
+          class to use for the PV. This will be set when creating the PVC. By default,
+          it is not set. This means that that the PVC we create will have the default
+          storage class set in Kubernetes.
+        displayName: Storage Class
+        path: local.storageClass
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:StorageClass
+      - description: This can be used to override any pod-level securityContext for
+          the Vertica pod. It will be merged with the default context. If omitted,
+          then the default context is used.
+        displayName: Pod Security Context
+        path: podSecurityContext
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Allows tuning of the Vertica pods readiness probe. Each of the
+          values here are applied to the default readiness probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Readiness Probe Override
+        path: readinessProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: If a reconciliation iteration needs to be requeued this controls
+          the amount of time in seconds to wait.  If this is set to 0, then the requeue
+          time will increase using an exponential backoff algorithm.  Caution, when
+          setting this to some positive value the exponential backoff is disabled.
+          This should be reserved for test environments as an error scenario could
+          easily consume the logs.
+        displayName: Requeue Time
+        path: requeueTime
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The timeout, in seconds, to use when admintools restarts a node
+          or the entire cluster.  If omitted, we use the admintools default timeout
+          of 20 minutes.
+        displayName: Restart Timeout
+        path: restartTimeout
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Specifies the restore point details to use with this instance
+          of the VerticaDB.
+        displayName: Restore Point
+        path: restorePoint
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:initPolicy:Revive
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Name of the restore archive to use for bootstrapping. This name
+          refers to an object in the database. This must be specified if initPolicy
+          is Revive and a restore is intended.
+        displayName: Archive
+        path: restorePoint.archive
+      - description: The identifier of the restore point in the restore archive to
+          restore from. Specify either index or id exclusively; one of these fields
+          is mandatory, but both cannot be used concurrently.
+        displayName: ID
+        path: restorePoint.id
+      - description: The (1-based) index of the restore point in the restore archive
+          to restore from. Specify either index or id exclusively; one of these fields
+          is mandatory, but both cannot be used concurrently.
+        displayName: Index
+        path: restorePoint.index
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: "This specifies the order of nodes when doing a revive.  Each
+          entry contains an index to a subcluster, which is an index in Subclusters[],
+          and a pod count of the number of pods include from the subcluster. \n For
+          example, suppose the database you want to revive has the following setup:
+          v_db_node0001: subcluster A v_db_node0002: subcluster A v_db_node0003: subcluster
+          B v_db_node0004: subcluster A v_db_node0005: subcluster B v_db_node0006:
+          subcluster B \n And the Subcluster[] array is defined as {'A', 'B'}.  The
+          revive order would be: - {subclusterIndex:0, podCount:2}  # 2 pods from
+          subcluster A - {subclusterIndex:1, podCount:1}  # 1 pod from subcluster
+          B - {subclusterIndex:0, podCount:1}  # 1 pod from subcluster A - {subclusterIndex:1,
+          podCount:2}  # 2 pods from subcluster B \n If InitPolicy is not Revive,
+          this field can be ignored."
+        displayName: Revive Order
+        path: reviveOrder
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:initPolicy:Revive
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The number of pods paired with this subcluster.  If this is omitted
+          then, all remaining pods in the subcluster will be used.
+        displayName: Pod Count
+        path: reviveOrder[0].podCount
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: The index of the subcluster.  This is an index into Subclusters[]
+        displayName: Subcluster Index
+        path: reviveOrder[0].subclusterIndex
+      - description: Allows you to set any additional securityContext for the Vertica
+          server container.  We merge the values with the securityContext generated
+          by the operator.  The operator adds its own capabilities to this.  If you
+          want those capabilities to be removed you must explicitly include them in
+          the drop list.
+        displayName: Security Context
+        path: securityContext
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: The name of a serviceAccount to use to run the Vertica pods.
+          If the service account is not specified or does not exist, the operator
+          will create one, using the specified name if provided, along with a Role
+          and RoleBinding.
+        displayName: Service Account Name
+        path: serviceAccountName
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:ServiceAccount
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'The number of shards to create in the database. This cannot
+          be updated once the CRD is created.  Refer to this page to determine an
+          optimal size: https://www.vertica.com/docs/latest/HTML/Content/Authoring/Eon/SizingEonCluster.htm
+          The default was chosen using this link and the default subcluster size of
+          3.'
+        displayName: Shard Count
+        path: shardCount
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: Optional sidecar containers that run along side the vertica server.  The
+          operator adds the same volume mounts that are in the vertica server container
+          to each sidecar container.
+        displayName: Sidecars
+        path: sidecars
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'An optional secret that has the files for /home/dbadmin/.ssh.  If
+          this is omitted, the ssh files from the image are used.  You can this option
+          if you have a cluster that talks to Vertica notes outside of Kubernetes,
+          as it has the public keys to be able to ssh to those nodes.  It must have
+          the following keys present: id_rsa, id_rsa.pub and authorized_keys.'
+        displayName: SSHSecret
+        path: sshSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Allows tuning of the Vertica pods startup probe. Each of the
+          values here are applied to the default startup probe we create. If this
+          is omitted, we use the default probe.
+        displayName: Startup Probe Override
+        path: startupProbeOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Subclusters
+        path: subclusters
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: subclusters[0].affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: subclusters[0].affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: subclusters[0].affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: subclusters[0].affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: 'Allows the service object to be attached to a list of external
+          IPs that you specify. If not set, the external IP list is left empty in
+          the service object. More info: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips'
+        displayName: External IPs
+        path: subclusters[0].externalIPs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: This allows a different image to be used for the subcluster than
+          the one in VerticaDB.  This is intended to be used internally by the online
+          image change process.
+        displayName: Image Override
+        path: subclusters[0].imageOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Indicates whether the subcluster is a primary or secondary. You
+          must have at least one primary subcluster in the database.
+        displayName: Is Primary
+        path: subclusters[0].isPrimary
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Internal state that indicates whether this is a transient read-only
+          subcluster used for online upgrade.  A subcluster that exists temporarily
+          to serve traffic for subclusters that are restarting with the new image.
+        displayName: Is Transient
+        path: subclusters[0].isTransient
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'Specify IP address of LoadBalancer service for this subcluster.
+          This field is ignored when serviceType != "LoadBalancer". More info: https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer'
+        displayName: Load Balancer IP
+        path: subclusters[0].loadBalancerIP
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the subcluster. This is a required parameter. This
+          cannot change after CRD creation.
+        displayName: Name
+        path: subclusters[0].name
+      - description: When setting serviceType to NodePort, this parameter allows you
+          to define the port that is opened at each node for Vertica client connections.
+          If using NodePort and this is omitted, Kubernetes will choose the port automatically.
+          This port must be from within the defined range allocated by the control
+          plane (default is 30000-32767).
+        displayName: Node Port
+        path: subclusters[0].nodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'A map of label keys and values to restrict Vertica node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: subclusters[0].nodeSelector
+      - description: 'The priority class name given to pods in this subcluster. This
+          affects where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: subclusters[0].priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for pods in the
+          subcluster. It is advisable that the request and limits match as this ensures
+          the pods are assigned to the guaranteed QoS class. This will reduces the
+          chance that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: subclusters[0].resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: A map of key/value pairs appended to service metadata.annotations.
+        displayName: Service Annotations
+        path: subclusters[0].serviceAnnotations
+      - description: Identifies the name of the service object that will serve this
+          subcluster.  If multiple subclusters share the same service name then they
+          all share the same service object.  This allows for a single service object
+          to round robin between multiple subclusters.  If this is left blank, a service
+          object matching the subcluster name is used.  The actual name of the service
+          object is always prefixed with the name of the owning VerticaDB.
+        displayName: Service Name
+        path: subclusters[0].serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Identifies the type of Kubernetes service to use for external
+          client connectivity. The default is to use a ClusterIP, which sets a stable
+          IP and port to use that is accessible only from within Kubernetes itself.
+          Depending on the service type chosen the user may need to set other config
+          knobs to further config it. These other knobs follow this one. More info:
+          https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
+        displayName: Service Type
+        path: subclusters[0].serviceType
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:ClusterIP
+        - urn:alm:descriptor:com.tectonic.ui:select:NodePort
+        - urn:alm:descriptor:com.tectonic.ui:select:LoadBalancer
+      - description: "The number of pods that the subcluster will have. This determines
+          the number of Vertica nodes that it will have. Changing this number will
+          either delete or schedule new pods. \n The database has a k-safety of 1.
+          So, if this is a primary subcluster, the minimum value is 3. If this is
+          a secondary subcluster, the minimum is 0. \n Note, you must have a valid
+          license to pick a value larger than 3. The default license that comes in
+          the vertica container is for the community edition, which can only have
+          3 nodes. The license can be set with the db.licenseSecret parameter."
+        displayName: Size
+        path: subclusters[0].size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: subclusters[0].tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Like the nodePort parameter, except this controls the node port
+          to use for the http endpoint in the Vertica server.  The same rules apply:
+          it must be defined within the range allocated by the control plane, if omitted
+          Kubernetes will choose the port automatically.'
+        displayName: Vertica HTTPNode Port
+        path: subclusters[0].verticaHTTPNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: An optional name for a secret that contains the password for
+          the database's superuser. If this is not set, then we assume no such password
+          is set for the database. If this is set, it is up the user to create this
+          secret before deployment. The secret must have a key named password.
+        displayName: Superuser Password Secret
+        path: superuserPasswordSecret
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: When doing an online upgrade, we designate a subcluster to accept
+          traffic while the other subclusters restart.  The designated subcluster
+          is specified here.  The name of the subcluster can refer to an existing
+          one or an entirely new subcluster.  If the subcluster is new, it will exist
+          only for the duration of the upgrade.  If this struct is left empty the
+          operator will default to picking existing subclusters.
+        displayName: Temporary Subcluster Routing
+        path: temporarySubclusterRouting
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Names of existing subclusters to use for temporary routing of
+          client connections.  The operator will use the first subcluster that is
+          online.
+        displayName: Names
+        path: temporarySubclusterRouting.names
+      - description: A new subcluster will be created using this as a template.  This
+          subcluster will only exist for the life of the online upgrade.  It will
+          accept client traffic for a subcluster that are in the process of being
+          restarted.
+        displayName: Template
+        path: temporarySubclusterRouting.template
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: temporarySubclusterRouting.template.affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: temporarySubclusterRouting.template.affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: temporarySubclusterRouting.template.affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: temporarySubclusterRouting.template.affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: 'Allows the service object to be attached to a list of external
+          IPs that you specify. If not set, the external IP list is left empty in
+          the service object. More info: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips'
+        displayName: External IPs
+        path: temporarySubclusterRouting.template.externalIPs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: This allows a different image to be used for the subcluster than
+          the one in VerticaDB.  This is intended to be used internally by the online
+          image change process.
+        displayName: Image Override
+        path: temporarySubclusterRouting.template.imageOverride
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Indicates whether the subcluster is a primary or secondary. You
+          must have at least one primary subcluster in the database.
+        displayName: Is Primary
+        path: temporarySubclusterRouting.template.isPrimary
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Internal state that indicates whether this is a transient read-only
+          subcluster used for online upgrade.  A subcluster that exists temporarily
+          to serve traffic for subclusters that are restarting with the new image.
+        displayName: Is Transient
+        path: temporarySubclusterRouting.template.isTransient
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: 'Specify IP address of LoadBalancer service for this subcluster.
+          This field is ignored when serviceType != "LoadBalancer". More info: https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer'
+        displayName: Load Balancer IP
+        path: temporarySubclusterRouting.template.loadBalancerIP
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the subcluster. This is a required parameter. This
+          cannot change after CRD creation.
+        displayName: Name
+        path: temporarySubclusterRouting.template.name
+      - description: When setting serviceType to NodePort, this parameter allows you
+          to define the port that is opened at each node for Vertica client connections.
+          If using NodePort and this is omitted, Kubernetes will choose the port automatically.
+          This port must be from within the defined range allocated by the control
+          plane (default is 30000-32767).
+        displayName: Node Port
+        path: temporarySubclusterRouting.template.nodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'A map of label keys and values to restrict Vertica node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: temporarySubclusterRouting.template.nodeSelector
+      - description: 'The priority class name given to pods in this subcluster. This
+          affects where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: temporarySubclusterRouting.template.priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for pods in the
+          subcluster. It is advisable that the request and limits match as this ensures
+          the pods are assigned to the guaranteed QoS class. This will reduces the
+          chance that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: temporarySubclusterRouting.template.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: A map of key/value pairs appended to service metadata.annotations.
+        displayName: Service Annotations
+        path: temporarySubclusterRouting.template.serviceAnnotations
+      - description: Identifies the name of the service object that will serve this
+          subcluster.  If multiple subclusters share the same service name then they
+          all share the same service object.  This allows for a single service object
+          to round robin between multiple subclusters.  If this is left blank, a service
+          object matching the subcluster name is used.  The actual name of the service
+          object is always prefixed with the name of the owning VerticaDB.
+        displayName: Service Name
+        path: temporarySubclusterRouting.template.serviceName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Identifies the type of Kubernetes service to use for external
+          client connectivity. The default is to use a ClusterIP, which sets a stable
+          IP and port to use that is accessible only from within Kubernetes itself.
+          Depending on the service type chosen the user may need to set other config
+          knobs to further config it. These other knobs follow this one. More info:
+          https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
+        displayName: Service Type
+        path: temporarySubclusterRouting.template.serviceType
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:ClusterIP
+        - urn:alm:descriptor:com.tectonic.ui:select:NodePort
+        - urn:alm:descriptor:com.tectonic.ui:select:LoadBalancer
+      - description: "The number of pods that the subcluster will have. This determines
+          the number of Vertica nodes that it will have. Changing this number will
+          either delete or schedule new pods. \n The database has a k-safety of 1.
+          So, if this is a primary subcluster, the minimum value is 3. If this is
+          a secondary subcluster, the minimum is 0. \n Note, you must have a valid
+          license to pick a value larger than 3. The default license that comes in
+          the vertica container is for the community edition, which can only have
+          3 nodes. The license can be set with the db.licenseSecret parameter."
+        displayName: Size
+        path: temporarySubclusterRouting.template.size
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: temporarySubclusterRouting.template.tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Like the nodePort parameter, except this controls the node port
+          to use for the http endpoint in the Vertica server.  The same rules apply:
+          it must be defined within the range allocated by the control plane, if omitted
+          Kubernetes will choose the port automatically.'
+        displayName: Vertica HTTPNode Port
+        path: temporarySubclusterRouting.template.verticaHTTPNodePort
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'Defines how upgrade will be managed.  Available values are:
+          Offline, Online and Auto. - Offline: means we take down the entire cluster
+          then bring it back up with the new image. - Online: will keep the cluster
+          up when the upgrade occurs.  The data will go into read-only mode until
+          the Vertica nodes from the primary subcluster reform the cluster with the
+          new image. - Auto: will pick between Offline or Online.  Online is only
+          chosen if a license Secret exists, the k-Safety of the database is 1 and
+          we are running with a Vertica version that supports read-only subclusters.'
+        displayName: Upgrade Policy
+        path: upgradePolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Auto
+        - urn:alm:descriptor:com.tectonic.ui:select:Online
+        - urn:alm:descriptor:com.tectonic.ui:select:Offline
+      - description: If a reconciliation iteration during an operation such as Upgrade
+          needs to be requeued, this controls the amount of time in seconds to delay
+          adding the key to the reconcile queue.  If RequeueTime is set, it overrides
+          this value. If RequeueTime is not set either, then we set the default value
+          only for upgrades. For other reconciles we use the exponential backoff algorithm.
+        displayName: Upgrade Requeue Time
+        path: upgradeRequeueTime
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Additional volume mounts to include in the Vertica container.  These
+          reference volumes that are in the Volumes list.  The mount path must not
+          conflict with a mount path that the operator adds internally.
+        displayName: Volume Mounts
+        path: volumeMounts
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: "Custom volumes that are added to sidecars and the Vertica container.
+          For these volumes to be visible in either container, they must have a corresonding
+          volumeMounts entry.  For sidecars, this is included in `spec.sidecars[*].volumeMounts`.
+          \ For the Vertica container, it is included in `spec.volumeMounts`. \n This
+          accepts any valid volume type.  A unique name must be given for each volume
+          and it cannot conflict with any of the internally generated volumes."
+        displayName: Volumes
+        path: volumes
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      statusDescriptors:
+      - description: A count of the number of pods that have been added to the database.
+        displayName: Added To DBCount
+        path: addedToDBCount
+      - description: Conditions for VerticaDB
+        displayName: Conditions
+        path: conditions
+      - description: Last time the condition transitioned from one status to another.
+        displayName: Last Transition Time
+        path: conditions[0].lastTransitionTime
+      - description: Status is the status of the condition can be True, False or Unknown
+        displayName: Status
+        path: conditions[0].status
+      - description: Type is the name of the condition
+        displayName: Type
+        path: conditions[0].type
+      - description: A count of the number of pods that have been installed into the
+          vertica cluster.
+        displayName: Install Count
+        path: installCount
+      - description: The number of subclusters in the database
+        displayName: Subcluster Count
+        path: subclusterCount
+      - description: Status per subcluster.
+        displayName: Subclusters
+        path: subclusters
+      - description: A count of the number of pods that have been added to the database
+          for this subcluster.
+        displayName: Added To DBCount
+        path: subclusters[0].addedToDBCount
+      - displayName: Detail
+        path: subclusters[0].detail
+      - description: This is set to true if the DB exists and the pod has been added
+          to it.
+        displayName: Added To DB
+        path: subclusters[0].detail[0].addedToDB
+      - description: This is set to true if /opt/vertica/config has been bootstrapped.
+        displayName: Installed
+        path: subclusters[0].detail[0].installed
+      - description: True means the vertica process on this pod is in read-only state
+        displayName: Read Only
+        path: subclusters[0].detail[0].readOnly
+      - description: True means the vertica process is running on this pod and it
+          can accept connections on port 5433.
+        displayName: Up Node
+        path: subclusters[0].detail[0].upNode
+      - description: This is the vnode name that Vertica internally assigned this
+          pod (e.g. v_<dbname>_nodexxxx)
+        displayName: VNode Name
+        path: subclusters[0].detail[0].vnodeName
+      - description: A count of the number of pods that have been installed into the
+          subcluster.
+        displayName: Install Count
+        path: subclusters[0].installCount
+      - description: Name of the subcluster
+        displayName: Name
+        path: subclusters[0].name
+      - description: Object ID of the subcluster.
+        displayName: Oid
+        path: subclusters[0].oid
+      - description: A count of the number of pods that are in read-only state in
+          this subcluster.
+        displayName: Read Only Count
+        path: subclusters[0].readOnlyCount
+      - description: A count of the number of pods that have a running vertica process
+          in this subcluster.
+        displayName: Up Node Count
+        path: subclusters[0].upNodeCount
+      - description: A count of the number of pods that have a running vertica process.
+        displayName: Up Node Count
+        path: upNodeCount
+      - description: Status message for the current running upgrade.   If no upgrade
+          is occurring, this message remains blank.
+        displayName: Upgrade Status
+        path: upgradeStatus
+      version: v1beta1
+    - description: VerticaRestorePointsQuery is the Schema for the verticarestorepointsqueries
+        API
+      displayName: Vertica Restore Points Query
+      kind: VerticaRestorePointsQuery
+      name: verticarestorepointsqueries.vertica.com
+      resources:
+      - kind: VerticaDB
+        name: ""
+        version: vertica.com/v1beta1
+      specDescriptors:
+      - description: Optional parameter that will limit the query to only restore
+          points satisfying provided filter options
+        displayName: Filter Options
+        path: filterOptions
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Optional parameter that will limit the query to only restore
+          points from this archive
+        displayName: Archive Name
+        path: filterOptions.archiveName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Optional parameter that will limit the query to only restore
+          points created at this timestamp or before timestamp; the timestamp can
+          be of date time format or date only format, e.g. "2006-01-02", "2006-01-02
+          15:04:05", "2006-01-02 15:04:05.000000000"; the timestamp is interpreted
+          as in UTC timezone
+        displayName: End Timestamp
+        path: filterOptions.endTimestamp
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Optional parameter that will limit the query to only restore
+          points created at this timestamp or after this timestamp; the timestamp
+          can be of date time format or date only format, e.g. "2006-01-02", "2006-01-02
+          15:04:05", "2006-01-02 15:04:05.000000000"; the timestamp is interpreted
+          as in UTC timezone
+        displayName: Start Timestamp
+        path: filterOptions.startTimestamp
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: The name of the VerticaDB CR that this VerticaRestorePointsQuery
+          is defined for.  The VerticaDB object must exist in the same namespace as
+          this object.
+        displayName: Vertica DBName
+        path: verticaDBName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      statusDescriptors:
+      - description: Conditions for VerticaRestorePointsQuery
+        displayName: Conditions
+        path: conditions
+      - description: This contains the result of the restore points query. Check the
+          QueryComplete status condition to know when this has been populated by the
+          operator.
+        displayName: Restore Points
+        path: restorePoints
+      - description: Status message for running query
+        displayName: State
+        path: state
+      version: v1beta1
+    - description: VerticaScrutinize is the schema for verticascrutinize API
+      displayName: Vertica Scrutinize
+      kind: VerticaScrutinize
+      name: verticascrutinizers.vertica.com
+      resources:
+      - kind: Pod
+        name: ""
+        version: v1
+      - kind: VerticaDB
+        name: ""
+        version: vertica.com/v1beta1
+      specDescriptors:
+      - description: 'Like nodeSelector this allows you to constrain the pod only
+          to certain pods. It is more expressive than just using node selectors. More
+          info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity'
+        displayName: Affinity
+        path: affinity
+      - description: Describes node affinity scheduling rules for the pod.
+        displayName: Node Affinity
+        path: affinity.nodeAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:nodeAffinity
+      - description: Describes pod affinity scheduling rules (e.g. co-locate this
+          pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Affinity
+        path: affinity.podAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAffinity
+      - description: Describes pod anti-affinity scheduling rules (e.g. avoid putting
+          this pod in the same node, zone, etc. as some other pod(s)).
+        displayName: Pod Anti Affinity
+        path: affinity.podAntiAffinity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podAntiAffinity
+      - description: A list of annotations that will be added to the scrutinize pod.
+        displayName: Annotations
+        path: annotations
+      - description: A list of additional init containers to run. These are run after
+          running the init container that collects the scrutinize command. These can
+          be used to do some kind of post-processing of the tarball, such as uploading
+          it to some kind of storage.
+        displayName: Init Containers
+        path: initContainers
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: A list of labels that will be added to the scrutinize pod.
+        displayName: Labels
+        path: labels
+      - description: 'A map of label keys and values to restrict scrutinize node scheduling
+          to workers with matching labels. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector'
+        displayName: Node Selector
+        path: nodeSelector
+      - description: 'The priority class name given to the scrutinize. This affects
+          where the pod gets scheduled. More info: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass'
+        displayName: Priority Class Name
+        path: priorityClassName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: 'This defines the resource requests and limits for the scrutinize
+          pod. It is advisable that the request and limits match as this ensures the
+          pods are assigned to the guaranteed QoS class. This will reduces the chance
+          that pods are chosen by the OOM killer. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+        displayName: Resources
+        path: resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: 'Any tolerations and taints to use to aid in where to schedule
+          a pod. More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/'
+        displayName: Tolerations
+        path: tolerations
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: The name of the VerticaDB CR that this VerticaScrutinize is defined
+          for.  The VerticaDB object must exist in the same namespace as this object.
+        displayName: Vertica DBName
+        path: verticaDBName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: This allows the user to select the volume to use for the final
+          destination of the scrutinize tarball and any intermediate files. The volume
+          must have enough space to store the scrutinize data. If this is omitted,
+          then a simple emptyDir volume is created to store the scrutinize data.
+        displayName: Volume
+        path: volume
+      statusDescriptors:
+      - description: Set of status conditions to know how far along the scrutinize
+          is.
+        displayName: Conditions
+        path: conditions
+      - description: The name of the scrutinize pod that was created.
+        displayName: Pod Name
+        path: podName
+      - description: The UID of the pod name that was created.
+        displayName: Pod UID
+        path: podUID
+      - description: Status message for scrutinize
+        displayName: State
+        path: state
+      - description: The name of the scrutinize tarball that was created.
+        displayName: Tarball Name
+        path: tarballName
+      version: v1beta1
+  description: |-
+    ### What is Vertica?
+    Vertica is a unified analytics platform, based on a massively scalable architecture with the broadest set of analytical functions spanning event and time series, pattern matching, geospatial and end-to-end in-database machine learning. Vertica enables you to easily apply these powerful functions to the largest and most demanding analytical workloads, arming you and your customers with predictive business insights faster than any analytics data warehouse in the market. Vertica provides a unified analytics platform across major public clouds and on-premises data centers and integrates data in cloud object storage and HDFS without forcing you to move any of your data.
+
+    ### What does this operator do?
+    This operator manages a Vertica Eon Mode database, and automates the following administrative tasks:
+
+    * Installing Vertica
+    * Creating and reviving a Vertica database
+    * Restarting and rescheduling DOWN pods to maintain quorum
+    * Upgrading Vertica to a new version while keeping the database online
+    * Subcluster scaling, both manually and automatically with the Horizontal Pod Autoscaler
+    * Service management and health monitoring for pods
+    * Load balancing for internal and external traffic
+    * Expose a metrics endpoint to integrate with Prometheus to monitor the operator's health
+
+    For a brief overview on how to create a cluster, see the [Vertica GitHub repository](https://github.com/vertica/vertica-kubernetes). For an in-depth look at Vertica on Kubernetes, see the [Vertica documentation](https://www.vertica.com/docs/latest/HTML/Content/Authoring/Containers/ContainerizedVertica.htm).
+  displayName: VerticaDB Operator
+  icon:
+  - base64data: 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22Ynp++ErtGq3v8IcKSQPbhJ/5fS+x+OVnIkRSICIiACNgR4g7MH9Hqbwg5l+qHOwdBhDnVVRQTanQAfff/vbmVbp4UOhS4J5dOeqHNB+0JDyHswyt/9oj4EvRPKmzbexElEoCyBxgbyv5c1ZFmfn5edx7MsrGLZBIYj+wBDkdFIXwxahylaQxOMyWwXVVItAnchnGctQloZZeawKOdahDfLXFsscSewHqpO4l49syY7NRdC+doK+Q2c8kYulFwGw/xibXeZEw1cPmAj+R3Gm15JTwIT4O0gaKMDMgD/cyXD5N06WeL/r/F+HJSzi3zlucnVD6936xt45ajzU1BdNwFBEpzAafDAewDen/L85GvW/1l5efXL/n4dQpOQAGc3XoVy9CGpqyJNIgIiIAIiIAIiIAIiIAIiIAKlCAxD7WRn49pSFlVZBERABERABERABERABERABLoJcHnaA9BGp4OPHZu/O08vIiACIiACIiACIiACIiACIlCawEqw0OhwnFLamgyIgAiIgAiIgAiIgAiIgAiIQIIANyp+AJ0uka63IiACIiACIiACIiACIiACIlCawGBY4C85SkRABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABERABDqXwHiem34t7A1Msfkc0n6fkq4kERABERABERABERABERABEbAm8CxKfpeij1tbUEEREAERqCaByRBW2vXNJm29ajZJURUgsKvj8b+rgA8VFQEREIG2JDB+W7ZKjRIBERABERABERABERABEagEAXU4KnEYFIQIiIAIiIAIiIAIiIAItCcBdTja87iqVSIgAiIgAiIgAiIgAiJQCQLqcFTiMCgIERABERABERABERABEWhPAupwtOdxVatEQAREQAREQAREQAREoBIE1OGoxGFQECIgAiIgAiIgAiIgAiLQngTU4WjP46pWiYAIiIAIiIAIiIAIiEAlCEzoOQrfPyToOTyZK0FgItTljzpOB50WOiWUvz/wDfRr6HvQ17r1M7zWXSZAA+aETg+dAsq2vgl9A/o29Fto1aU/AuQxmxzK35Cgsl08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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - pods/status
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          verbs:
+          - create
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          verbs:
+          - create
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - eventtriggers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - eventtriggers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - eventtriggers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticaautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticaautoscalers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticaautoscalers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticadbs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticadbs/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticadbs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticarestorepointsqueries
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticarestorepointsqueries/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticarestorepointsqueries/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticascrutinizers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticascrutinizers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - vertica.com
+          resources:
+          - verticascrutinizers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - nonResourceURLs:
+          - /metrics
+          verbs:
+          - get
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - mutatingwebhookconfigurations
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - validatingwebhookconfigurations
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: verticadb-operator-manager
+      deployments:
+      - label:
+          control-plane: verticadb-operator
+        name: verticadb-operator-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: verticadb-operator
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: verticadb-operator
+                control-plane: verticadb-operator
+            spec:
+              containers:
+              - command:
+                - /manager
+                env:
+                - name: OPERATOR_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                envFrom:
+                - configMapRef:
+                    name: verticadb-operator-manager-config
+                image: docker.io/opentext/verticadb-operator:2.1.3
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 750Mi
+                  requests:
+                    cpu: 100m
+                    memory: 20Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                volumeMounts:
+                - mountPath: /tmp
+                  name: tmp
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=0
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: verticadb-operator-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - emptyDir:
+                  medium: Memory
+                  sizeLimit: 10Mi
+                name: tmp
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          - coordination.k8s.io
+          resources:
+          - configmaps
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: verticadb-operator-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - database
+  - vertica
+  links:
+  - name: Documentation
+    url: https://www.vertica.com/docs/latest/HTML/Content/Authoring/Containers/ContainerizedVertica.htm
+  - name: Vertica Container Images
+    url: https://hub.docker.com/u/vertica
+  maintainers:
+  - email: mspilchen@opentext.com
+    name: Matt Spilchen
+  maturity: stable
+  minKubeVersion: 1.21.0
+  provider:
+    name: Vertica
+    url: http://www.vertica.com
+  version: 2.1.3
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1beta1
+    containerPort: 443
+    conversionCRDs:
+    - verticadbs.vertica.com
+    deploymentName: verticadb-operator-manager
+    generateName: cverticadbs.kb.io
+    sideEffects: None
+    targetPort: 9443
+    type: ConversionWebhook
+    webhookPath: /convert
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: meventtrigger.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - eventtriggers
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-vertica-com-v1beta1-eventtrigger
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: mverticaautoscaler.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticaautoscalers
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-vertica-com-v1beta1-verticaautoscaler
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: mverticadb.v1.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticadbs
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-vertica-com-v1-verticadb
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: mverticarestorepointsquery.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticarestorepointsqueries
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-vertica-com-v1beta1-verticarestorepointsquery
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: veventtrigger.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - eventtriggers
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-vertica-com-v1beta1-eventtrigger
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: vverticaautoscaler.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticaautoscalers
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-vertica-com-v1beta1-verticaautoscaler
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: vverticadb.v1.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticadbs
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-vertica-com-v1-verticadb
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: verticadb-operator-manager
+    failurePolicy: Fail
+    generateName: vverticarestorepointsquery.kb.io
+    rules:
+    - apiGroups:
+      - vertica.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - verticarestorepointsqueries
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-vertica-com-v1beta1-verticarestorepointsquery

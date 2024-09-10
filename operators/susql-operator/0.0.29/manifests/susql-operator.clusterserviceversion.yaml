@@ -17,25 +17,31 @@ metadata:
             },
             "name": "labelgroup-sample"
           },
-          "spec": null
+          "spec": {
+            "labels": [
+              "labelgroup-sample-1",
+              "labelgroup-sample-2"
+            ]
+          }
         }
       ]
     capabilities: Basic Install
     categories: Monitoring
-    containerImage: quay.io/sustainable_computing_io/susql_operator:0.0.16
-    createdAt: "2024-05-30T08:31:43Z"
-    description: 'Aggregates energy data from pods tagged with SusQL labels '
-    operators.operatorframework.io/builder: operator-sdk-v1.34.1
+    containerImage: quay.io/sustainable_computing_io/susql_operator:0.0.29
+    createdAt: "2024-09-10T06:44:16Z"
+    description: 'Aggregates energy and CO2 emission data for pods tagged with SusQL
+      labels '
+    operators.operatorframework.io/builder: operator-sdk-v1.36.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/sustainable-computing-io/susql-operator
     support: https://github.com/sustainable-computing-io/susql-operator/issues
-  name: susql-operator.v0.0.16
+  name: susql-operator.v0.0.29
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: LabelGroup is the Schema for the labelgroups API
+    - description: LabelGroup is the Schema for the LabelGroups API
       displayName: Label Group
       kind: LabelGroup
       name: labelgroups.susql.ibm.com
@@ -43,16 +49,18 @@ spec:
   description: |-
     ### About this Operator
 
-    SusQL is a Kubernetes operator that aggregates energy data from pods
-    tagged with SusQL specific labels. The energy measurements are taken
-    from Kepler which should be deployed in the cluster before
-    using SusQL.
+    SusQL is a Kubernetes operator that aggregates energy and estimated
+    carbon dioxide emission data for pods tagged with SusQL specific
+    labels. The energy measurements are taken from Kepler which should
+    be deployed in the cluster before using SusQL.
 
     ### Prerequisites
 
-    1. Deployment of Kepler on the cluster
+    1. Deployment of [Kepler](https://sustainable-computing.io/) on the cluster
     2. Ensure that [User Project Monitoring](https://docs.openshift.com/container-platform/latest/monitoring/enabling-monitoring-for-user-defined-projects.html)
     is enabled to monitor energy consumed in user projects.
+    3. Creation of a SusQL Service Monitor:
+          `oc apply -n <NAMESPACE> -f https://raw.githubusercontent.com/sustainable-computing-io/susql-operator/main/hack/susql-servicemonitor.yaml`
 
     ### API Backward Compatibility
 
@@ -143,6 +151,8 @@ spec:
           resources:
           - pods
           - pods/status
+          - namespaces
+          - namespaces/status
           verbs:
           - get
           - list
@@ -176,7 +186,7 @@ spec:
                 - --upstream=http://127.0.0.1:8082/
                 - --logtostderr=true
                 - --v=0
-                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.14.1
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
                 name: kube-rbac-proxy
                 ports:
                 - containerPort: 8443
@@ -194,30 +204,102 @@ spec:
                   capabilities:
                     drop:
                     - ALL
-              - args:
-                - --leader-elect
-                - --kepler-prometheus-url=$(KEPLER-PROMETHEUS-URL)
-                - --kepler-metric-name=$(KEPLER-METRIC-NAME)
-                - --susql-prometheus-database-url=$(SUSQL-PROMETHEUS-DATABASE-URL)
-                - --susql-prometheus-metrics-url=$(SUSQL-PROMETHEUS-METRICS-URL)
-                - --sampling-rate=$(SAMPLING-RATE)
-                - --health-probe-bind-address=:8081
-                - --metrics-bind-address=127.0.0.1:9999
-                command:
+                  runAsNonRoot: true
+              - command:
                 - /manager
                 env:
                 - name: KEPLER-PROMETHEUS-URL
-                  value: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+                  valueFrom:
+                    configMapKeyRef:
+                      key: KEPLER-PROMETHEUS-URL
+                      name: susql-config
+                      optional: true
                 - name: KEPLER-METRIC-NAME
-                  value: kepler_container_joules_total
+                  valueFrom:
+                    configMapKeyRef:
+                      key: KEPLER-METRIC-NAME
+                      name: susql-config
+                      optional: true
                 - name: SUSQL-PROMETHEUS-DATABASE-URL
-                  value: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+                  valueFrom:
+                    configMapKeyRef:
+                      key: SUSQL-PROMETHEUS-DATABASE-URL
+                      name: susql-config
+                      optional: true
                 - name: SUSQL-PROMETHEUS-METRICS-URL
-                  value: http://0.0.0.0:8082
+                  valueFrom:
+                    configMapKeyRef:
+                      key: SUSQL-PROMETHEUS-METRICS-URL
+                      name: susql-config
+                      optional: true
                 - name: SAMPLING-RATE
-                  value: "2"
-                image: quay.io/sustainable_computing_io/susql_operator:0.0.16
-                imagePullPolicy: IfNotPresent
+                  valueFrom:
+                    configMapKeyRef:
+                      key: SAMPLING-RATE
+                      name: susql-config
+                      optional: true
+                - name: LEADER-ELECT
+                  valueFrom:
+                    configMapKeyRef:
+                      key: LEADER-ELECT
+                      name: susql-config
+                      optional: true
+                - name: HEALTH-PROBE-BIND-ADDRESS
+                  valueFrom:
+                    configMapKeyRef:
+                      key: HEALTH-PROBE-BIND-ADDRESS
+                      name: susql-config
+                      optional: true
+                - name: SUSQL-LOG-LEVEL
+                  valueFrom:
+                    configMapKeyRef:
+                      key: SUSQL-LOG-LEVEL
+                      name: susql-config
+                      optional: true
+                - name: CARBON-METHOD
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-METHOD
+                      name: susql-config
+                      optional: true
+                - name: CARBON-INTENSITY
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-INTENSITY
+                      name: susql-config
+                      optional: true
+                - name: CARBON-INTENSITY-URL
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-INTENSITY-URL
+                      name: susql-config
+                      optional: true
+                - name: CARBON-LOCATION
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-LOCATION
+                      name: susql-config
+                      optional: true
+                - name: CARBON-QUERY-RATE
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-QUERY-RATE
+                      name: susql-config
+                      optional: true
+                - name: CARBON-QUERY-FILTER
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-QUERY-FILTER
+                      name: susql-config
+                      optional: true
+                - name: CARBON-QUERY-CONV-2J
+                  valueFrom:
+                    configMapKeyRef:
+                      key: CARBON-QUERY-CONV-2J
+                      name: susql-config
+                      optional: true
+                image: quay.io/sustainable_computing_io/susql_operator:0.0.29
+                imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -229,9 +311,6 @@ spec:
                 - containerPort: 8082
                   name: metric
                   protocol: TCP
-                - containerPort: 9999
-                  name: autometric
-                  protocol: TCP
                 readinessProbe:
                   httpGet:
                     path: /readyz
@@ -241,10 +320,10 @@ spec:
                 resources:
                   limits:
                     cpu: 500m
-                    memory: 128Mi
+                    memory: 512Mi
                   requests:
                     cpu: 10m
-                    memory: 64Mi
+                    memory: 128Mi
                 securityContext:
                   allowPrivilegeEscalation: false
                   capabilities:
@@ -305,6 +384,8 @@ spec:
   - energy
   - kepler
   - susql
+  - carbon dioxide (CO2) emissions
+  - green computing
   links:
   - name: SusQL Operator
     url: https://github.com/sustainable-computing-io/susql-operator
@@ -316,8 +397,8 @@ spec:
   - email: mohammed.munir.abdi@ibm.com
     name: Mohammed Abdi
   maturity: alpha
-  minKubeVersion: 1.16.0
+  minKubeVersion: 1.20.0
   provider:
     name: SusQL Operator Contributors
     url: https://github.com/sustainable-computing-io/susql-operator
-  version: 0.0.16
+  version: 0.0.29

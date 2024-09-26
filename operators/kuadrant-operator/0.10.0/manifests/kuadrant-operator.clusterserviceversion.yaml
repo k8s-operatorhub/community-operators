@@ -5,53 +5,39 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "kuadrant.io/v1beta1",
-          "kind": "AuthPolicy",
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "DNSPolicy",
           "metadata": {
-            "name": "toystore"
+            "name": "dnspolicy-sample"
           },
           "spec": {
-            "authScheme": {
-              "identity": [
-                {
-                  "apiKey": {
-                    "allNamespaces": true,
-                    "selector": {
-                      "matchLabels": {
-                        "app": "toystore"
-                      }
-                    }
-                  },
-                  "credentials": {
-                    "in": "authorization_header",
-                    "keySelector": "APIKEY"
-                  },
-                  "name": "friends"
-                }
-              ],
-              "response": [
-                {
-                  "json": {
-                    "properties": [
-                      {
-                        "name": "userID",
-                        "valueFrom": {
-                          "authJSON": "auth.identity.metadata.annotations.secret\\.kuadrant\\.io/user-id"
-                        }
-                      }
-                    ]
-                  },
-                  "name": "rate-limit-apikey",
-                  "wrapper": "envoyDynamicMetadata",
-                  "wrapperKey": "ext_auth_data"
-                }
-              ]
+            "healthCheck": {
+              "endpoint": "/",
+              "protocol": "HTTP"
             },
-            "rules": null,
             "targetRef": {
               "group": "gateway.networking.k8s.io",
-              "kind": "HTTPRoute",
-              "name": "toystore"
+              "kind": "Gateway",
+              "name": "example-gateway"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TLSPolicy",
+          "metadata": {
+            "name": "tlspolicy-sample"
+          },
+          "spec": {
+            "issuerRef": {
+              "group": "cert-manager.io",
+              "kind": "ClusterIssuer",
+              "name": "self-signed-ca"
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "example-gateway"
             }
           }
         },
@@ -64,53 +50,51 @@ metadata:
           "spec": {}
         },
         {
-          "apiVersion": "kuadrant.io/v1beta1",
+          "apiVersion": "kuadrant.io/v1beta2",
+          "kind": "AuthPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "rules": {
+              "authentication": {
+                "apikey": {
+                  "apiKey": {
+                    "selector": {}
+                  }
+                },
+                "credentials": {
+                  "authorizationHeader": {
+                    "prefix": "APIKEY"
+                  }
+                }
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1beta2",
           "kind": "RateLimitPolicy",
           "metadata": {
             "name": "toystore"
           },
           "spec": {
-            "rateLimits": [
-              {
-                "configurations": [
+            "limits": {
+              "toys": {
+                "rates": [
                   {
-                    "actions": [
-                      {
-                        "metadata": {
-                          "default_value": "no-user",
-                          "descriptor_key": "userID",
-                          "metadata_key": {
-                            "key": "envoy.filters.http.ext_authz",
-                            "path": [
-                              {
-                                "segment": {
-                                  "key": "ext_auth_data"
-                                }
-                              },
-                              {
-                                "segment": {
-                                  "key": "userID"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "limits": [
-                  {
-                    "conditions": [],
-                    "maxValue": 2,
-                    "seconds": 10,
-                    "variables": [
-                      "userID"
-                    ]
+                    "duration": 1,
+                    "limit": 50,
+                    "unit": "minute"
                   }
                 ]
               }
-            ],
+            },
             "targetRef": {
               "group": "gateway.networking.k8s.io",
               "kind": "HTTPRoute",
@@ -121,33 +105,48 @@ metadata:
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
-    containerImage: quay.io/kuadrant/kuadrant-operator:v0.3.0
-    createdAt: "2023-05-31T21:06:50Z"
-    operators.operatorframework.io/builder: operator-sdk-v1.28.1
+    containerImage: quay.io/kuadrant/kuadrant-operator:0.10.0
+    createdAt: "2024-09-18T10:06:56Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.3.0
+  name: kuadrant-operator.v0.10.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: Enable AuthN and AuthZ based access control on workloads
+    - description: AuthPolicy enables authentication and authorization for service
+        workloads in a Gateway API network
       displayName: AuthPolicy
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
-      version: v1beta1
-    - description: Kuadrant is the Schema for the kuadrants API
+      version: v1beta2
+    - description: DNSPolicy configures how North-South based traffic should be balanced
+        and reach the gateways
+      displayName: DNSPolicy
+      kind: DNSPolicy
+      name: dnspolicies.kuadrant.io
+      version: v1alpha1
+    - description: Kuadrant configures installations of Kuadrant Service Protection
+        components
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - description: Enable access control on workloads based on HTTP rate limiting
+    - description: RateLimitPolicy enables rate limiting for service workloads in
+        a Gateway API network
       displayName: RateLimitPolicy
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
-      version: v1beta1
+      version: v1beta2
+    - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
+        of tls certificates
+      displayName: TLSPolicy
+      kind: TLSPolicy
+      name: tlspolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:
@@ -177,6 +176,14 @@ spec:
           - update
           - watch
         - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - apps
           resources:
           - deployments
@@ -199,6 +206,34 @@ spec:
           - list
           - patch
           - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - clusterissuers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - issuers
+          verbs:
+          - get
+          - list
           - watch
         - apiGroups:
           - coordination.k8s.io
@@ -228,6 +263,14 @@ spec:
           - update
           - watch
         - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - extensions.istio.io
           resources:
           - wasmplugins
@@ -238,6 +281,13 @@ spec:
           - list
           - patch
           - update
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gatewayclasses
+          verbs:
+          - list
           - watch
         - apiGroups:
           - gateway.networking.k8s.io
@@ -254,6 +304,20 @@ spec:
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
+          - gateways/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
           - httproutes
           verbs:
           - get
@@ -261,6 +325,14 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes/status
+          verbs:
+          - get
+          - patch
+          - update
         - apiGroups:
           - install.istio.io
           resources:
@@ -298,6 +370,49 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnsrecords
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnsrecords/status
+          verbs:
+          - get
         - apiGroups:
           - kuadrant.io
           resources:
@@ -346,6 +461,31 @@ spec:
           - kuadrant.io
           resources:
           - ratelimitpolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies/status
           verbs:
           - get
           - patch
@@ -410,6 +550,17 @@ spec:
           - update
           - watch
         - apiGroups:
+          - operator.istio.io
+          resources:
+          - istios
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - security.istio.io
           resources:
           - authorizationpolicies
@@ -442,13 +593,17 @@ spec:
             spec:
               containers:
               - args:
-                - --config=controller_manager_config.yaml
+                - --leader-elect
                 command:
                 - /manager
                 env:
                 - name: RELATED_IMAGE_WASMSHIM
-                  value: oci://quay.io/kuadrant/wasm-shim:v0.2.0
-                image: quay.io/kuadrant/kuadrant-operator:v0.3.0
+                  value: oci://quay.io/kuadrant/wasm-shim:v0.5.0
+                - name: OPERATOR_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: quay.io/kuadrant/kuadrant-operator:0.10.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -474,18 +629,10 @@ spec:
                     memory: 200Mi
                 securityContext:
                   allowPrivilegeEscalation: false
-                volumeMounts:
-                - mountPath: /controller_manager_config.yaml
-                  name: manager-config
-                  subPath: controller_manager_config.yaml
               securityContext:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
-              volumes:
-              - configMap:
-                  name: kuadrant-operator-manager-config
-                name: manager-config
       permissions:
       - rules:
         - apiGroups:
@@ -553,11 +700,11 @@ spec:
   - email: didier@redhat.com
     name: Didier Di Cesare
   maturity: alpha
-  minKubeVersion: 1.8.0
+  minKubeVersion: 1.19.0
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
   relatedImages:
-  - image: oci://quay.io/kuadrant/wasm-shim:v0.2.0
+  - image: oci://quay.io/kuadrant/wasm-shim:v0.5.0
     name: wasmshim
-  version: 0.3.0
+  version: 0.10.0

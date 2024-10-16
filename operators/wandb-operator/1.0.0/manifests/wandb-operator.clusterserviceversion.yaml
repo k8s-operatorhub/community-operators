@@ -2,6 +2,13 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
     alm-examples: |-
       [
         {
@@ -11,7 +18,7 @@ metadata:
             "labels": {
               "app.kubernetes.io/created-by": "wandb-operator",
               "app.kubernetes.io/instance": "weightsandbiases-sample",
-              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/managed-by": "olm",
               "app.kubernetes.io/name": "weightsandbiases",
               "app.kubernetes.io/part-of": "wandb-operator"
             },
@@ -23,8 +30,11 @@ metadata:
     capabilities: Basic Install
     categories: "AI/Machine Learning,Developer Tools"
     certified: "false"
+    createdAt: "2024-10-10T14:46:54Z"
+    support: WeightsAndBiases
     repository: https://github.com/wandb/operator
-    containerImage: docker.io/wandb/controller:latest
+    containerImage: quay.io/wandb_tools/wandb-k8s-operator:1.0.0
+    operatorframework.io/suggested-namespace: wandb-system
     description: "Operator for Weights and Biases, enabling seamless integration and management of machine learning experiments in Kubernetes environments."
   name: wandb-operator.v1.0.0
   namespace: placeholder
@@ -53,6 +63,14 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          resourceNames:
+          - privileged
+          verbs:
+          - use
+        - apiGroups:
           - ""
           resources:
           - configmaps
@@ -66,20 +84,33 @@ spec:
           - delete
           - get
           - list
+          - patch
           - update
           - watch
         - apiGroups:
           - ""
           resources:
           - namespaces
+          - namespaces/status
           - nodes
+          - nodes/metrics
+          - nodes/spec
+          - nodes/stats
+          - nodes/proxy
           - pods
           - pods/log
+          - pods/status
           - serviceaccounts
           - services
+          - endpoints
+          - ingresses
+          - resourcequotas
+          - replicationcontrollers
+          - replicationcontrollers/status
           verbs:
           - get
           - list
+          - watch
         - apiGroups:
           - apps
           resources:
@@ -95,6 +126,7 @@ spec:
           - list
           - update
           - watch
+          - patch
         - apiGroups:
           - apps
           resources:
@@ -131,7 +163,7 @@ spec:
           - patch
           - update
         - apiGroups:
-          - autoscaling/v2
+          - autoscaling
           resources:
           - horizontalpodautoscalers
           verbs:
@@ -140,6 +172,38 @@ spec:
           - get
           - list
           - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - cronjobs
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - watch
+          - list
+        - apiGroups:
+          - extensions
+          resources:
+          - daemonsets
+          - deployments
+          - ingresses
+          - replicasets
+          - ingresses/status
+          verbs:
+          - get
+          - list
           - watch
         - apiGroups:
           - networking.k8s.io
@@ -151,7 +215,16 @@ spec:
           - delete
           - get
           - list
+          - patch
           - update
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - ingresses/status
+          verbs:
+          - get
+          - list
           - watch
         - apiGroups:
           - rbac.authorization.k8s.io
@@ -165,15 +238,19 @@ spec:
           - list
           - update
           - watch
+        - nonResourceURLs:
+          - /metrics
+          verbs:
+          - get
         serviceAccountName: operator-controller-manager
       deployments:
       - label:
           app.kubernetes.io/component: manager
-          app.kubernetes.io/created-by: operator
+          app.kubernetes.io/created-by: wandb-operator
           app.kubernetes.io/instance: controller-manager
-          app.kubernetes.io/managed-by: kustomize
-          app.kubernetes.io/name: deployment
-          app.kubernetes.io/part-of: operator
+          app.kubernetes.io/managed-by: olm
+          app.kubernetes.io/name: wandb-operator
+          app.kubernetes.io/part-of: wandb-operator
           control-plane: controller-manager
         name: operator-controller-manager
         spec:
@@ -199,7 +276,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.serviceAccountName
-                image: docker.io/wandb/controller:latest
+                image: quay.io/wandb_tools/wandb-k8s-operator:1.0.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -287,8 +364,8 @@ spec:
   maintainers:
   - email: abhinav.garg@domain.com
     name: Abhinav Garg
-  maturity: alpha
-  minKubeVersion: 1.23.0
+  maturity: stable
+  minKubeVersion: 1.25.0
   provider:
     name: Weights & Biases
     url: https://wandb.ai

@@ -1,0 +1,753 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: sn-operator-system/sn-operator-serving-cert
+    controller-gen.kubebuilder.io/version: v0.15.0
+  creationTimestamp: null
+  name: pulsarcoordinators.k8s.streamnative.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: sn-operator-webhook-service
+          namespace: sn-operator-system
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: k8s.streamnative.io
+  names:
+    categories:
+    - pulsar
+    kind: PulsarCoordinator
+    listKind: PulsarCoordinatorList
+    plural: pulsarcoordinators
+    shortNames:
+    - pcoord
+    singular: pulsarcoordinator
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.image
+      name: IMAGE
+      type: string
+    - jsonPath: .spec.placement.availabilityPolicy
+      name: AVAILABILITY_POLICY
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: READY
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PulsarCoordinator is the Schema for the pulsarcoordinators API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PulsarCoordinatorSpec defines the desired state of PulsarCoordinator
+            properties:
+              auditLog:
+                description: AuditLog is the custom configuration of audit log.
+                properties:
+                  categories:
+                    default:
+                    - Management
+                    description: |-
+                      Categories indicate the captured categories of audit log events. Default is [Management]
+                      More details in https://github.com/streamnative/sn-pulsar-plugins/tree/master/pulsar-audit-log#pulsar-audit-log
+                    items:
+                      type: string
+                    type: array
+                type: object
+              authentication:
+                description: Authentication defines the configuration of authentication
+                properties:
+                  apiKey:
+                    description: ApiKey defines the configuration flag of api key
+                      authentication
+                    properties:
+                      authzAdminRole:
+                        description: AuthzAdminRole Authz Role to operate as a Pulsar
+                          superuser.
+                        type: string
+                      authzRoleClaim:
+                        description: AuthzRoleClaim JWT claim to use for Authz roles.
+                        type: string
+                      enabled:
+                        description: Enabled defines whether ApiKey is enabled
+                        type: boolean
+                      subjectClaim:
+                        default: sub
+                        description: SubjectClaim JWT claim to use as the user name,
+                          by default sub.
+                        type: string
+                    type: object
+                type: object
+              autoScalingPolicy:
+                description: AutoScalingPolicy is simply a flag for now indicating
+                  if sn-operator manages hpa on components.
+                type: object
+              detector:
+                description: |-
+                  Detector defines the configuration of SLA detector
+                  Detector will be enabled when the field is not nil
+                properties:
+                  image:
+                    description: |-
+                      Image is the container image used to pulsar detector pods.
+                      The default should be same as broker image
+                    nullable: true
+                    type: string
+                  kafka:
+                    nullable: true
+                    properties:
+                      authParam:
+                        type: string
+                      authPlugin:
+                        type: string
+                      schemaRegistryURL:
+                        type: string
+                      securityProtocol:
+                        type: string
+                      serviceURL:
+                        type: string
+                    type: object
+                  pod:
+                    description: CommonPodPolicy defines the common pod data
+                    nullable: true
+                    properties:
+                      labels:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      tolerations:
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        nullable: true
+                        type: array
+                    type: object
+                  serviceEndpoint:
+                    description: |-
+                      ServiceEndpoint represents custom service endpoint for pulsar service and web service
+                      If it is specified, it will override the service endpoint from pulsarbroker
+                    properties:
+                      pulsarServiceURL:
+                        type: string
+                      webServiceURL:
+                        type: string
+                    type: object
+                type: object
+              image:
+                description: Image is the container image used to run pods in the
+                  pulsar cluster.
+                type: string
+              istio:
+                description: Istio defines Istio configuration of components
+                properties:
+                  mtls:
+                    description: Mtls defines the mTLS configuration
+                    properties:
+                      mode:
+                        default: strict
+                        type: string
+                    type: object
+                  revision:
+                    type: string
+                  trustDomain:
+                    description: TrustDomain corresponds to the trust root of a system
+                      and is part of a workload identity
+                    type: string
+                type: object
+              kafkaConnect:
+                description: KafkaConnectServlet defines the configuration of Kafka
+                  Connect servlet
+                nullable: true
+                properties:
+                  defaultNamespace:
+                    description: Default namespace for KSN Connect, if not provide,
+                      will use the default namespace.
+                    type: string
+                  defaultTenant:
+                    description: Default tenant for KSN Connect, if not provide, will
+                      use the default tenant.
+                    type: string
+                  enabled:
+                    description: Enabled indicates whether to deploy the Kafka Connect.
+                    nullable: true
+                    type: boolean
+                  kafkaBootstrapServersTLS:
+                    description: KafkaBootstrapServersTLS
+                    type: boolean
+                  offsetStorageTopic:
+                    description: OffsetStorageTopic is the offset storage topic for
+                      the KSN Connect, if not provide, will use the default offset
+                      storage topic `kafka-connect-offset-storage`.
+                    type: string
+                  pod:
+                    description: Pod defines the policy for creating kafka connect
+                      pods
+                    properties:
+                      labels:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      resources:
+                        description: Resources is the resource requirement of api
+                          key service
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                      serviceAccountName:
+                        description: ServiceAccountName is the name of the ServiceAccount
+                          to use to run the kafka connect.
+                        type: string
+                      tolerations:
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        nullable: true
+                        type: array
+                    type: object
+                type: object
+              pfsql:
+                description: Pfsql defines the configuration of PFSQLCluster
+                properties:
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: Labels is a set of key/value pairs that will be added
+                      to the pfsql cluster pods.
+                    type: object
+                  metadataCompactionThreshold:
+                    description: MetadataCompactionThreshold is the threshold of metadata
+                      compaction.
+                    nullable: true
+                    type: string
+                  metadataTopicName:
+                    description: MetadataTopicName is the name of the metadata topic.
+                    type: string
+                  metadataTopicSubscriptionName:
+                    description: MetadataTopicSubscriptionName is the name of the
+                      metadata topic subscription.
+                    nullable: true
+                    type: string
+                  pod:
+                    description: CommonPodPolicy defines the common pod data
+                    nullable: true
+                    properties:
+                      labels:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      tolerations:
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        nullable: true
+                        type: array
+                    type: object
+                  serviceAccountName:
+                    description: ServiceAccountName is the name of the ServiceAccount
+                      to use to run the pfsql cluster.
+                    type: string
+                  stateStorageEnabled:
+                    description: StateStorageEnabled is the flag to enable state storage.
+                    nullable: true
+                    type: boolean
+                type: object
+              placement:
+                description: Placement determines the distribution of pods and data.
+                properties:
+                  availabilityPolicy:
+                    description: AvailabilityPolicy determines the distribution of
+                      pods and data.
+                    enum:
+                    - Zonal
+                    - Regional
+                    type: string
+                type: object
+              pod:
+                description: Pod defines the common metadata of the pod that will
+                  be used on components
+                properties:
+                  labels:
+                    additionalProperties:
+                      type: string
+                    nullable: true
+                    type: object
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    nullable: true
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  tolerations:
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists and Equal. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    nullable: true
+                    type: array
+                type: object
+              toolSet:
+                description: |-
+                  ToolSet defines the configuration of the tool set pod
+                  ToolSet is enabled by default when the field is defined even if it is empty
+                properties:
+                  enabled:
+                    description: Enabled defines whether toolset is enabled
+                    type: boolean
+                  replicas:
+                    description: Replicas is the desired replicas of the toolset.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              troubleshootings:
+                description: |-
+                  Troubleshootings defines a list of troubleshooting commands to be executed.
+                  Each item represents a troubleshooting command.
+                items:
+                  description: TroubleshootingSpec defines a troubleshooting command
+                    to be executed.
+                  properties:
+                    action:
+                      description: Action is the specific command to be executed.
+                        Options include but are not limited to 'heapDump', 'threadDump',
+                        'hotThread'.
+                      type: string
+                    id:
+                      description: ID is the unique identifier for the command, used
+                        to differentiate between multiple commands.
+                      type: string
+                    inputs:
+                      description: List of parameters to be used when executing the
+                        command.
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
+                    message:
+                      description: Field for setting messages to indicate the reason
+                        for performing this action, notes, and other remarks.
+                      type: string
+                    name:
+                      description: Name of the command. In this context, it is the
+                        name of the pod to which the command will be applied.
+                      type: string
+                    s3PresignedUrl:
+                      description: Pre-signed S3 URL for uploading the output files
+                        generated after the command execution. If not configured,
+                        the upload step will be ignored.
+                      type: string
+                    scope:
+                      description: Scope of the command. Currently, only the 'pods'
+                        option is supported.
+                      enum:
+                      - pods
+                      type: string
+                    split:
+                      description: Configuration for splitting a log file.
+                      properties:
+                        number:
+                          description: Number indicates the target number of parts
+                            that the log file should be split into.
+                          type: integer
+                        size:
+                          description: Size indicates the target size for each part
+                            after the log file is split.
+                          type: string
+                      type: object
+                  required:
+                  - action
+                  - id
+                  - name
+                  - scope
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+            type: object
+          status:
+            description: PulsarCoordinatorStatus defines the observed state of PulsarCoordinator
+            properties:
+              computeUnit:
+                anyOf:
+                - type: integer
+                - type: string
+                description: ComputeUnit defines all compute units under this coordinator
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              conditions:
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed for this cluster.
+                  It corresponds to the metadata generation, which is updated on mutation by the API Server.
+                format: int64
+                type: integer
+              storageUnit:
+                anyOf:
+                - type: integer
+                - type: string
+                description: StorageUnit defines all storage units under this coordinator
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              troubleshootings:
+                description: |-
+                  Troubleshootings defines a list of troubleshooting commands along with their execution status.
+                  Each item represents a troubleshooting status.
+                items:
+                  description: TroubleshootingStatus defines a troubleshooting command
+                    along with its execution status.
+                  properties:
+                    commands:
+                      description: Actual commands executed(including split command).
+                      items:
+                        type: string
+                      type: array
+                    id:
+                      description: Unique identifier for the command, used to differentiate
+                        between multiple commands.
+                      type: string
+                    message:
+                      description: Additional information about the execution status
+                        of the command.
+                      type: string
+                    outputs:
+                      description: List of the paths of output files generated after
+                        the command execution. The wildcard field indicates whether
+                        the path includes wildcards.
+                      items:
+                        description: TroubleshootingOutput represents the path of
+                          an output file generated after the command execution.
+                        properties:
+                          path:
+                            description: Path of the output file.
+                            type: string
+                          wildcard:
+                            description: Indicates whether the path includes wildcards.
+                            type: boolean
+                        type: object
+                      type: array
+                    phase:
+                      description: Phase of execution of the command.
+                      type: string
+                  required:
+                  - id
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

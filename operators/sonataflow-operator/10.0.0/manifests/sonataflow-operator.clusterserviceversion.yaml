@@ -1,0 +1,886 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "sonataflow.org/v1alpha08",
+          "kind": "SonataFlow",
+          "metadata": {
+            "annotations": {
+              "sonataflow.org/description": "Greeting example on k8s!",
+              "sonataflow.org/version": "0.0.1"
+            },
+            "name": "greeting"
+          },
+          "spec": {
+            "flow": {
+              "functions": [
+                {
+                  "name": "greetFunction",
+                  "operation": "sysout",
+                  "type": "custom"
+                }
+              ],
+              "start": "ChooseOnLanguage",
+              "states": [
+                {
+                  "dataConditions": [
+                    {
+                      "condition": "${ .language == \"English\" }",
+                      "transition": "GreetInEnglish"
+                    },
+                    {
+                      "condition": "${ .language == \"Spanish\" }",
+                      "transition": "GreetInSpanish"
+                    }
+                  ],
+                  "defaultCondition": "GreetInEnglish",
+                  "name": "ChooseOnLanguage",
+                  "type": "switch"
+                },
+                {
+                  "data": {
+                    "greeting": "Hello from JSON Workflow, "
+                  },
+                  "name": "GreetInEnglish",
+                  "transition": "GreetPerson",
+                  "type": "inject"
+                },
+                {
+                  "data": {
+                    "greeting": "Saludos desde JSON Workflow, "
+                  },
+                  "name": "GreetInSpanish",
+                  "transition": "GreetPerson",
+                  "type": "inject"
+                },
+                {
+                  "actions": [
+                    {
+                      "functionRef": {
+                        "arguments": {
+                          "message": ".greeting+.name"
+                        },
+                        "refName": "greetFunction"
+                      },
+                      "name": "greetAction"
+                    }
+                  ],
+                  "end": true,
+                  "name": "GreetPerson",
+                  "type": "operation"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "apiVersion": "sonataflow.org/v1alpha08",
+          "kind": "SonataFlowBuild",
+          "metadata": {
+            "name": "greeting"
+          },
+          "spec": {
+            "timeout": "360s"
+          }
+        },
+        {
+          "apiVersion": "sonataflow.org/v1alpha08",
+          "kind": "SonataFlowClusterPlatform",
+          "metadata": {
+            "name": "sonataflow-clusterplatform"
+          },
+          "spec": {
+            "platformRef": {
+              "name": "sonataflow-platform",
+              "namespace": "sonataflow-operator-system"
+            }
+          }
+        },
+        {
+          "apiVersion": "sonataflow.org/v1alpha08",
+          "kind": "SonataFlowPlatform",
+          "metadata": {
+            "name": "sonataflow-platform"
+          },
+          "spec": {
+            "build": {
+              "config": {
+                "registry": {
+                  "address": "docker.io/apache",
+                  "secret": "regcred"
+                }
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Application Runtime
+    containerImage: docker.io/apache/incubator-kie-sonataflow-operator:10.0.0
+    description: SonataFlow Kubernetes Operator for deploying workflow applications
+      based on the CNCF Serverless Workflow specification
+    operators.operatorframework.io/builder: operator-sdk-v1.25.0
+    operators.operatorframework.io/internal-objects: '["sonataflowbuilds.sonataflow.org"]'
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/apache/incubator-kie-tools/packages/sonataflow-operator
+    support: Apache Software Foundation
+  name: sonataflow-operator.v10.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: SonataFlowBuild is an internal custom resource to control workflow
+          build instances in the target platform
+        displayName: Sonata Flow Build
+        kind: SonataFlowBuild
+        name: sonataflowbuilds.sonataflow.org
+        resources:
+          - kind: BuildConfig
+            name: An Openshift Build Config
+            version: build.openshift.io/v1
+        specDescriptors:
+          - description: 'Arguments lists the command line arguments to send to the internal
+              builder command. Depending on the build method you might set this attribute
+              instead of BuildArgs. For example: ".spec.arguments=verbose=3". Please see
+              the SonataFlow guides.'
+            displayName: Arguments
+            path: arguments
+          - description: Optional build arguments that can be set to the internal build
+              (e.g. Docker ARG)
+            displayName: BuildArgs
+            path: buildArgs
+          - description: Optional environment variables to add to the internal build
+            displayName: Envs
+            path: envs
+          - description: Resources optional compute resource requirements for the builder
+            displayName: Resources
+            path: resources
+          - description: Timeout defines the Build maximum execution duration. The Build
+              deadline is set to the Build start time plus the Timeout duration. If the
+              Build deadline is exceeded, the Build context is canceled, and its phase
+              set to BuildPhaseFailed.
+            displayName: Timeout
+            path: timeout
+        statusDescriptors:
+          - description: BuildPhase Current phase of the build
+            displayName: BuildPhase
+            path: buildPhase
+          - description: Error Last error found during build
+            displayName: Error
+            path: error
+          - description: ImageTag The final image tag produced by this build instance
+            displayName: ImageTag
+            path: imageTag
+          - description: InnerBuild is a reference to an internal build object, which
+              can be anything known only to internal builders.
+            displayName: InnerBuild
+            path: innerBuild
+        version: v1alpha08
+      - description: SonataFlowClusterPlatform is the Schema for the sonataflowclusterplatforms
+          API
+        displayName: Sonata Flow Cluster Platform
+        kind: SonataFlowClusterPlatform
+        name: sonataflowclusterplatforms.sonataflow.org
+        resources:
+          - kind: SonataFlowPlatform
+            name: A SonataFlow Platform
+            version: sonataflow.org/v1alpha08
+        specDescriptors:
+          - description: Capabilities defines which platform capabilities should be applied
+              cluster-wide. If nil, defaults to `capabilities.workflows["services"]`
+            displayName: Capabilities
+            path: capabilities
+          - description: PlatformRef defines which existing SonataFlowPlatform's supporting
+              services should be used cluster-wide.
+            displayName: PlatformRef
+            path: platformRef
+          - description: Name of the SonataFlowPlatform
+            displayName: Platform_Name
+            path: platformRef.name
+          - description: Namespace of the SonataFlowPlatform
+            displayName: Platform_NS
+            path: platformRef.namespace
+        statusDescriptors:
+          - description: Version the operator version controlling this ClusterPlatform
+            displayName: version
+            path: version
+        version: v1alpha08
+      - description: SonataFlowPlatform is the descriptor for the workflow platform
+          infrastructure.
+        displayName: Sonata Flow Platform
+        kind: SonataFlowPlatform
+        name: sonataflowplatforms.sonataflow.org
+        resources:
+          - kind: Namespace
+            name: The Namespace controlled by the platform
+            version: v1
+        specDescriptors:
+          - description: Build Attributes for building workflows in the target platform
+            displayName: Build
+            path: build
+          - description: 'Arguments lists the command line arguments to send to the internal
+              builder command. Depending on the build method you might set this attribute
+              instead of BuildArgs. For example: ".spec.arguments=verbose=3". Please see
+              the SonataFlow guides.'
+            displayName: Arguments
+            path: build.template.arguments
+          - description: Optional build arguments that can be set to the internal build
+              (e.g. Docker ARG)
+            displayName: BuildArgs
+            path: build.template.buildArgs
+          - description: Optional environment variables to add to the internal build
+            displayName: Envs
+            path: build.template.envs
+          - description: Resources optional compute resource requirements for the builder
+            displayName: Resources
+            path: build.template.resources
+          - description: Timeout defines the Build maximum execution duration. The Build
+              deadline is set to the Build start time plus the Timeout duration. If the
+              Build deadline is exceeded, the Build context is canceled, and its phase
+              set to BuildPhaseFailed.
+            displayName: Timeout
+            path: build.template.timeout
+          - description: DevMode Attributes for running workflows in devmode (immutable,
+              no build required)
+            displayName: DevMode
+            path: devMode
+          - description: "Services attributes for deploying supporting applications like
+              Data Index & Job Service. Only workflows without the `sonataflow.org/profile:
+              dev` annotation will be configured to use these service(s). Setting this
+              will override the use of any cluster-scoped services that might be defined
+              via `SonataFlowClusterPlatform`."
+            displayName: Services
+            path: services
+          - description: PodTemplate describes the deployment details of this platform
+              service instance.
+            displayName: podTemplate
+            path: services.dataIndex.podTemplate
+          - description: PodTemplate describes the deployment details of this platform
+              service instance.
+            displayName: podTemplate
+            path: services.jobService.podTemplate
+        statusDescriptors:
+          - description: Cluster what kind of cluster you're running (ie, plain Kubernetes
+              or OpenShift)
+            displayName: cluster
+            path: cluster
+          - description: ClusterPlatformRef information related to the (optional) active
+              SonataFlowClusterPlatform
+            displayName: clusterPlatformRef
+            path: clusterPlatformRef
+          - description: Info generic information related to the build
+            displayName: info
+            path: info
+          - description: Version the operator version controlling this Platform
+            displayName: version
+            path: version
+        version: v1alpha08
+      - description: SonataFlow is the descriptor representation for a workflow application
+          based on the CNCF Serverless Workflow specification.
+        displayName: Sonata Flow
+        kind: SonataFlow
+        name: sonataflows.sonataflow.org
+        resources:
+          - kind: Deployment
+            name: A Deployment for the Flow
+            version: apps/v1
+          - kind: Service
+            name: A Service for the Flow
+            version: v1
+          - kind: SonataFlowBuild
+            name: A SonataFlow Build
+            version: sonataflow.org/v1alpha08
+          - kind: Route
+            name: An OpenShift Route for the Flow
+            version: route.openshift.io/v1
+          - kind: ConfigMap
+            name: The ConfigMaps with Flow definition and additional configuration files
+            version: v1
+        specDescriptors:
+          - description: Flow the workflow definition.
+            displayName: flow
+            path: flow
+          - description: PodTemplate describes the deployment details of this SonataFlow
+              instance.
+            displayName: podTemplate
+            path: podTemplate
+          - description: Resources workflow resources that are linked to this workflow
+              definition. For example, a collection of OpenAPI specification files.
+            displayName: resources
+            path: resources
+          - description: Sink describes the sinkBinding details of this SonataFlow instance.
+            displayName: sink
+            path: sink
+        statusDescriptors:
+          - description: Address is used as a part of Addressable interface (status.address.url)
+              for knative
+            displayName: address
+            path: address
+          - description: Endpoint is an externally accessible URL of the workflow
+            displayName: endpoint
+            path: endpoint
+          - displayName: lastTimeRecoverAttempt
+            path: lastTimeRecoverAttempt
+          - description: keeps track of how many failure recovers a given workflow had
+              so far
+            displayName: recoverFailureAttempts
+            path: recoverFailureAttempts
+          - description: Services displays which platform services are being used by this
+              workflow
+            displayName: services
+            path: services
+        version: v1alpha08
+  description: |-
+    SonataFlow Kubernetes Operator for deploying workflow applications
+    based on the [CNCF Serverless Workflow specification](https://serverlessworkflow.io/):
+
+    * Deploy workflow applications using the [dev profile](https://sonataflow.org/serverlessworkflow/latest/cloud/operator/developing-workflows.html), suited for the your development cycle
+    * Build workflow applications based on the platform you're currently working on.
+  displayName: SonataFlow Operator
+  icon:
+  - base64data: "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"
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+                - pods
+                - pods/exec
+                - services
+                - services/finalizers
+                - namespaces
+                - serviceaccounts
+                - persistentvolumeclaims
+                - secrets
+                - events
+                - deployments
+                - nodes
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - configmaps
+                - pods
+                - pods/exec
+                - services
+                - services/finalizers
+                - namespaces
+                - serviceaccounts
+                - persistentvolumeclaims
+                - secrets
+                - events
+                - deployments
+                - nodes
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - roles
+                - rolebindings
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - eventing.knative.dev
+              resources:
+                - triggers
+                - triggers/status
+                - triggers/finalizers
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sources.knative.dev
+              resources:
+                - sinkbindings
+                - sinkbindings/status
+                - sinkbindings/finalizers
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowbuilds
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowbuilds/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowbuilds/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowclusterplatforms
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowclusterplatforms/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowclusterplatforms/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowplatforms
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowplatforms/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflowplatforms/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflows
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflows/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - sonataflow.org
+              resources:
+                - sonataflows/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - route
+                - routes
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - route/finalizers
+                - routes/finalizers
+              verbs:
+                - get
+                - list
+                - create
+                - update
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - image.openshift.io
+              resources:
+                - imagestreams
+                - imagestreamtags
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - image.openshift.io
+              resources:
+                - imagestreams/finalizers
+                - imagestreamtags/finalizers
+              verbs:
+                - get
+                - list
+                - create
+                - update
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - build.openshift.io
+              resources:
+                - buildconfigs
+                - builds
+              verbs:
+                - create
+                - delete
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - build.openshift.io
+              resources:
+                - buildconfigs/finalizers
+                - builds/finalizers
+              verbs:
+                - get
+                - list
+                - create
+                - update
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - build.openshift.io
+              resources:
+                - buildconfigs/instantiatebinary
+              verbs:
+                - create
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+            - apiGroups:
+                - apps
+              resources:
+                - statefulset
+                - statefulsets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingress
+                - ingresses
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - serving.knative.dev
+              resources:
+                - service
+                - services
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - eventing.knative.dev
+              resources:
+                - broker
+                - brokers
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apps.openshift.io
+              resources:
+                - deploymentconfigs
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - routes
+              verbs:
+                - get
+                - list
+                - watch
+          serviceAccountName: sonataflow-operator-controller-manager
+      deployments:
+        - label:
+            control-plane: sonataflow-operator
+          name: sonataflow-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: sonataflow-operator
+            strategy: {}
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  control-plane: sonataflow-operator
+              spec:
+                containers:
+                  - args:
+                      - --health-probe-bind-address=:8081
+                      - --metrics-bind-address=127.0.0.1:8080
+                      - --leader-elect
+                      - --v=0
+                    command:
+                      - /usr/local/bin/manager
+                    env:
+                      - name: POD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                    image: docker.io/apache/incubator-kie-sonataflow-operator:10.0.0
+                    imagePullPolicy: IfNotPresent
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 128Mi
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                    volumeMounts:
+                      - mountPath: /config/controllers_cfg.yaml
+                        name: controllers-config
+                        subPath: controllers_cfg.yaml
+                  - args:
+                      - --secure-listen-address=0.0.0.0:8443
+                      - --upstream=http://127.0.0.1:8080/
+                      - --logtostderr=true
+                      - --v=0
+                    image: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
+                    name: kube-rbac-proxy
+                    ports:
+                      - containerPort: 8443
+                        name: https
+                        protocol: TCP
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 128Mi
+                      requests:
+                        cpu: 5m
+                        memory: 64Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      seccompProfile:
+                        type: RuntimeDefault
+                securityContext:
+                  runAsNonRoot: true
+                serviceAccountName: sonataflow-operator-controller-manager
+                terminationGracePeriodSeconds: 10
+                volumes:
+                  - configMap:
+                      name: sonataflow-operator-controllers-config
+                    name: controllers-config
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: sonataflow-operator-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: false
+      type: OwnNamespace
+    - supported: false
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - sonataflow
+    - cncf
+    - serverless
+    - serverlessworkflow
+  links:
+    - name: Product Page
+      url: https://github.com/apache/incubator-kie-tools
+  maintainers:
+    - email: dev@kie.apache.org
+      name: Apache Software Foundation
+  maturity: alpha
+  minKubeVersion: 1.23.0
+  provider:
+    name: Apache Software Foundation
+  version: 10.0.0
+  replaces: sonataflow-operator.v1.44.1

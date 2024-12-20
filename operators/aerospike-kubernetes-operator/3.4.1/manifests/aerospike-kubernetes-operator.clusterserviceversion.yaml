@@ -1,0 +1,967 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "asdb.aerospike.com/v1",
+          "kind": "AerospikeCluster",
+          "metadata": {
+            "name": "aerocluster",
+            "namespace": "aerospike"
+          },
+          "spec": {
+            "aerospikeConfig": {
+              "namespaces": [
+                {
+                  "name": "test",
+                  "replication-factor": 2,
+                  "storage-engine": {
+                    "data-size": 1073741824,
+                    "type": "memory"
+                  }
+                }
+              ],
+              "network": {
+                "fabric": {
+                  "port": 3001
+                },
+                "heartbeat": {
+                  "port": 3002
+                },
+                "service": {
+                  "port": 3000
+                }
+              },
+              "service": {
+                "feature-key-file": "/etc/aerospike/secret/features.conf"
+              }
+            },
+            "image": "aerospike/aerospike-server-enterprise:7.2.0.1",
+            "podSpec": {
+              "multiPodPerHost": true
+            },
+            "size": 2,
+            "storage": {
+              "volumes": [
+                {
+                  "aerospike": {
+                    "path": "/etc/aerospike/secret"
+                  },
+                  "name": "aerospike-config-secret",
+                  "source": {
+                    "secret": {
+                      "secretName": "aerospike-secret"
+                    }
+                  }
+                }
+              ]
+            },
+            "validationPolicy": {
+              "skipWorkDirValidate": true,
+              "skipXdrDlogFileValidate": true
+            }
+          }
+        },
+        {
+          "apiVersion": "asdb.aerospike.com/v1beta1",
+          "kind": "AerospikeBackup",
+          "metadata": {
+            "name": "aerospikebackup",
+            "namespace": "aerospike"
+          },
+          "spec": {
+            "backupService": {
+              "name": "aerospikebackupservice-sample",
+              "namespace": "aerospike"
+            },
+            "config": {
+              "aerospike-cluster": {
+                "aerospike-aerospikebackup-test-cluster": {
+                  "credentials": {
+                    "password": "admin123",
+                    "user": "admin"
+                  },
+                  "seed-nodes": [
+                    {
+                      "host-name": "aerocluster.aerospike.svc.cluster.local",
+                      "port": 3000
+                    }
+                  ]
+                }
+              },
+              "backup-routines": {
+                "aerospike-aerospikebackup-test-routine": {
+                  "backup-policy": "test-policy",
+                  "incr-interval-cron": "@hourly",
+                  "interval-cron": "@daily",
+                  "namespaces": [
+                    "test"
+                  ],
+                  "source-cluster": "aerospike-aerospikebackup-test-cluster",
+                  "storage": "local"
+                },
+                "aerospike-aerospikebackup-test-routine1": {
+                  "backup-policy": "test-policy1",
+                  "incr-interval-cron": "@hourly",
+                  "interval-cron": "@daily",
+                  "namespaces": [
+                    "test"
+                  ],
+                  "source-cluster": "aerospike-aerospikebackup-test-cluster",
+                  "storage": "s3Storage"
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "asdb.aerospike.com/v1beta1",
+          "kind": "AerospikeBackupService",
+          "metadata": {
+            "name": "aerospikebackupservice-sample",
+            "namespace": "aerospike"
+          },
+          "spec": {
+            "config": {
+              "backup-policies": {
+                "test-policy": {
+                  "parallel": 3,
+                  "remove-files": "KeepAll"
+                },
+                "test-policy1": {
+                  "parallel": 3,
+                  "remove-files": "KeepAll"
+                }
+              },
+              "service": {
+                "http": {
+                  "port": 8081
+                }
+              },
+              "storage": {
+                "local": {
+                  "path": "/localStorage",
+                  "type": "local"
+                },
+                "s3Storage": {
+                  "path": "s3://aerospike-kubernetes-operator-test",
+                  "s3-endpoint-override": "",
+                  "s3-profile": "default",
+                  "s3-region": "us-east-1",
+                  "type": "aws-s3"
+                }
+              }
+            },
+            "image": "aerospike/aerospike-backup-service:2.0.0",
+            "secrets": [
+              {
+                "secretName": "aws-secret",
+                "volumeMount": {
+                  "mountPath": "/root/.aws/credentials",
+                  "name": "aws-secret",
+                  "subPath": "credentials"
+                }
+              }
+            ],
+            "service": {
+              "type": "LoadBalancer"
+            }
+          }
+        },
+        {
+          "apiVersion": "asdb.aerospike.com/v1beta1",
+          "kind": "AerospikeRestore",
+          "metadata": {
+            "name": "aerospikerestore-sample",
+            "namespace": "aerospike"
+          },
+          "spec": {
+            "backupService": {
+              "name": "aerospikebackupservice-sample",
+              "namespace": "aerospike"
+            },
+            "config": {
+              "destination": {
+                "credentials": {
+                  "password": "admin123",
+                  "user": "admin"
+                },
+                "label": "destinationCluster",
+                "seed-nodes": [
+                  {
+                    "host-name": "aerocluster.test.svc.cluster.local",
+                    "port": 3000
+                  }
+                ]
+              },
+              "policy": {
+                "no-generation": true,
+                "no-indexes": true,
+                "parallel": 3
+              },
+              "source": {
+                "path": "/localStorage/aerospike-aerospikebackup-test-routine/backup/1722326391329/data/test",
+                "type": "local"
+              }
+            },
+            "type": "Full"
+          }
+        }
+      ]
+    capabilities: Deep Insights
+    categories: Database
+    containerImage: docker.io/aerospike/aerospike-kubernetes-operator:3.4.1
+    createdAt: "2024-12-20T16:22:55Z"
+    olm.skipRange: '>=3.3.0 <3.4.1'
+    description: The Aerospike Kubernetes Operator automates the deployment and management
+      of Aerospike enterprise clusters on Kubernetes.
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/aerospike/aerospike-kubernetes-operator/
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+  name: aerospike-kubernetes-operator.v3.4.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: AerospikeBackup is the Schema for the aerospikebackup API
+      displayName: Aerospike Backup
+      kind: AerospikeBackup
+      name: aerospikebackups.asdb.aerospike.com
+      specDescriptors:
+      - description: |-
+          BackupService is the backup service reference i.e. name and namespace.
+          It is used to communicate to the backup service to trigger backups. This field is immutable
+        displayName: Backup Service
+        path: backupService
+      - description: |-
+          Config is the free form configuration for the backup in YAML format.
+          This config is used to trigger backups. It includes: aerospike-cluster, backup-routines.
+        displayName: Backup Config
+        path: config
+      - description: OnDemandBackups is the configuration for on-demand backups.
+        displayName: On Demand Backups
+        path: onDemandBackups
+      version: v1beta1
+    - description: AerospikeBackupService is the Schema for the aerospikebackupservices
+        API
+      displayName: Aerospike Backup Service
+      kind: AerospikeBackupService
+      name: aerospikebackupservices.asdb.aerospike.com
+      specDescriptors:
+      - description: |-
+          Config is the free form configuration for the backup service in YAML format.
+          This config is used to start the backup service. The config is passed as a file to the backup service.
+          It includes: service, backup-policies, storage, secret-agent.
+        displayName: Backup Service Config
+        path: config
+      - description: Image is the image for the backup service.
+        displayName: Backup Service Image
+        path: image
+      - description: |-
+          Resources defines the requests and limits for the backup service container.
+          Resources.Limits should be more than Resources.Requests.
+        displayName: Resources
+        path: resources
+      - description: SecretMounts is the list of secret to be mounted in the backup
+          service.
+        displayName: Backup Service SecretMounts
+        path: secrets
+      - description: |-
+          Service defines the Kubernetes service configuration for the backup service.
+          It is used to expose the backup service deployment. By default, the service type is ClusterIP.
+        displayName: K8s Service
+        path: service
+      version: v1beta1
+    - description: AerospikeCluster is the schema for the AerospikeCluster API
+      displayName: Aerospike Cluster
+      kind: AerospikeCluster
+      name: aerospikeclusters.asdb.aerospike.com
+      resources:
+      - kind: Pod
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: StatefulSet
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: Has the Aerospike roles and users definitions. Required if aerospike
+          cluster security is enabled.
+        displayName: Access Control
+        path: aerospikeAccessControl
+      - description: Sets config in aerospike.conf file. Other configs are taken as
+          default
+        displayName: Aerospike Server Configuration
+        path: aerospikeConfig
+      - description: AerospikeNetworkPolicy specifies how clients and tools access
+          the Aerospike cluster.
+        displayName: Aerospike Network Policy
+        path: aerospikeNetworkPolicy
+      - description: Disable the PodDisruptionBudget creation for the Aerospike cluster.
+        displayName: Disable PodDisruptionBudget
+        path: disablePDB
+      - description: |-
+          EnableDynamicConfigUpdate enables dynamic config update flow of the operator.
+          If enabled, operator will try to update the Aerospike config dynamically.
+          In case of inconsistent state during dynamic config update, operator falls back to rolling restart.
+        displayName: Enable Dynamic Config Update
+        path: enableDynamicConfigUpdate
+      - description: Aerospike server image
+        displayName: Server Image
+        path: image
+      - description: |-
+          K8sNodeBlockList is a list of Kubernetes nodes which are not used for Aerospike pods. Pods are not scheduled on
+          these nodes. Pods are migrated from these nodes if already present. This is useful for the maintenance of
+          Kubernetes nodes.
+        displayName: Kubernetes Node BlockList
+        path: k8sNodeBlockList
+      - description: |-
+          MaxUnavailable is the percentage/number of pods that can be allowed to go down or unavailable before application
+          disruption. This value is used to create PodDisruptionBudget. Defaults to 1.
+          Refer Aerospike documentation for more details.
+        displayName: Max Unavailable
+        path: maxUnavailable
+      - description: Operations is a list of on-demand operations to be performed
+          on the Aerospike cluster.
+        displayName: Operations
+        path: operations
+      - description: Certificates to connect to Aerospike.
+        displayName: Operator Client Cert
+        path: operatorClientCert
+      - description: Paused flag is used to pause the reconciliation for the AerospikeCluster.
+        displayName: Pause Reconcile
+        path: paused
+      - description: Specify additional configuration for the Aerospike pods
+        displayName: Pod Configuration
+        path: podSpec
+      - description: |-
+          RackConfig Configures the operator to deploy rack aware Aerospike cluster.
+          Pods will be deployed in given racks based on given configuration
+        displayName: Rack Config
+        path: rackConfig
+      - description: RosterNodeBlockList is a list of blocked nodeIDs from roster
+          in a strong-consistency setup
+        displayName: Roster Node BlockList
+        path: rosterNodeBlockList
+      - description: |-
+          SeedsFinderServices creates additional Kubernetes service that allow
+          clients to discover Aerospike cluster nodes.
+        displayName: Seeds Finder Services
+        path: seedsFinderServices
+      - description: Aerospike cluster size
+        displayName: Cluster Size
+        path: size
+      - description: Storage specify persistent storage to use for the Aerospike pods
+        displayName: Storage
+        path: storage
+      - description: ValidationPolicy controls validation of the Aerospike cluster
+          resource.
+        displayName: Validation Policy
+        path: validationPolicy
+      version: v1
+    - description: AerospikeCluster is the schema for the AerospikeCluster API
+      displayName: Aerospike Cluster
+      kind: AerospikeCluster
+      name: aerospikeclusters.asdb.aerospike.com
+      resources:
+      - kind: Pod
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: StatefulSet
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: Has the Aerospike roles and users definitions. Required if aerospike
+          cluster security is enabled.
+        displayName: Access Control
+        path: aerospikeAccessControl
+      - description: Sets config in aerospike.conf file. Other configs are taken as
+          default
+        displayName: Aerospike Server Configuration
+        path: aerospikeConfig
+      - description: AerospikeNetworkPolicy specifies how clients and tools access
+          the Aerospike cluster.
+        displayName: Aerospike Network Policy
+        path: aerospikeNetworkPolicy
+      - description: Aerospike server image
+        displayName: Server Image
+        path: image
+      - description: Certificates to connect to Aerospike.
+        displayName: Operator Client Cert
+        path: operatorClientCert
+      - description: Specify additional configuration for the Aerospike pods
+        displayName: Pod Configuration
+        path: podSpec
+      - description: |-
+          RackConfig Configures the operator to deploy rack aware Aerospike cluster.
+          Pods will be deployed in given racks based on given configuration
+        displayName: Rack Config
+        path: rackConfig
+      - description: |-
+          SeedsFinderServices creates additional Kubernetes service that allow
+          clients to discover Aerospike cluster nodes.
+        displayName: Seeds Finder Services
+        path: seedsFinderServices
+      - description: Aerospike cluster size
+        displayName: Cluster Size
+        path: size
+      - description: Storage specify persistent storage to use for the Aerospike pods
+        displayName: Storage
+        path: storage
+      - description: ValidationPolicy controls validation of the Aerospike cluster
+          resource.
+        displayName: Validation Policy
+        path: validationPolicy
+      statusDescriptors:
+      - description: Aerospike cluster size
+        displayName: Cluster Size
+        path: size
+      version: v1beta1
+    - description: AerospikeRestore is the Schema for the aerospikerestores API
+      displayName: Aerospike Restore
+      kind: AerospikeRestore
+      name: aerospikerestores.asdb.aerospike.com
+      specDescriptors:
+      - description: |-
+          BackupService is the backup service reference i.e. name and namespace.
+          It is used to communicate to the backup service to trigger restores. This field is immutable
+        displayName: Backup Service
+        path: backupService
+      - description: |-
+          Config is the free form configuration for the restore in YAML format.
+          This config is used to trigger restores. It includes: destination, policy, source, secret-agent, time and routine.
+        displayName: Restore Config
+        path: config
+      - description: |-
+          PollingPeriod is the polling period for restore operation status.
+          It is used to poll the restore service to fetch restore operation status.
+          Default is 60 seconds.
+        displayName: Restore Service Polling Period
+        path: pollingPeriod
+      - description: |-
+          Type is the type of restore. It can of type Full, Incremental, and Timestamp.
+          Based on the restore type, the relevant restore config should be given.
+        displayName: Restore Type
+        path: type
+      version: v1beta1
+  description: |
+    The Aerospike Kubernetes Operator automates the deployment and management of Aerospike enterprise clusters on Kubernetes. The operator allows you to deploy multi-node Aerospike clusters, recover automatically from node failures, scale up or down automatically as load changes, ensure nodes are evenly split across racks or zones, automatically update to new versions of Aerospike and manage configuration changes in your clusters.
+
+    ### Capabilities:
+
+     -   Deploy Aerospike clusters
+     -   Scale up and down existing Aerospike clusters
+     -   Version upgrade and downgrade
+     -   Configure persistent storage and resource allocation
+     -   Standardize and validate configurations
+     -   Cluster security management
+     -   Aerospike cluster monitoring
+     -   Backup and restore Aerospike clusters
+  displayName: Aerospike Kubernetes Operator
+  icon:
+  - base64data: PHN2ZyB3aWR0aD0iMjUwMCIgaGVpZ2h0PSIyNTAwIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWlkWU1pZCI+PHBhdGggZD0iTTAgMGgyNTZ2MjU2SDBWMHoiIGZpbGw9IiNCMDI1MkEiLz48cGF0aCBkPSJNMTU2LjI5MyA5NS42MDVsLTczLjE2OSAzMi41OTQgNzMuMTcgMzIuODFWOTUuNjA1em0tOTIuMDMyIDM5Ljk3OWwtMTcuMDQ5LTcuMyAxNy4wNDktNy44ODIgMTQ0LjUyNy02NS4zNzZ2MTcuNDAzbC0zNy45MzIgMTYuODI0djc4LjExN2wzNy45MzIgMTd2MTYuNjA0TDY0LjI2IDEzNS41ODR6IiBmaWxsPSIjRkZGIi8+PC9zdmc+
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackups
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackups/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackups/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackupservices
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackupservices/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikebackupservices/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikeclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikeclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikeclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikerestores
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikerestores/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - asdb.aerospike.com
+          resources:
+          - aerospikerestores/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - create
+          - delete
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: aerospike-operator-controller-manager
+      deployments:
+      - label:
+          control-plane: controller-manager
+        name: aerospike-operator-controller-manager
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --config=controller_manager_config.yaml
+                command:
+                - /manager
+                env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                - name: AEROSPIKE_KUBERNETES_INIT_REGISTRY
+                  value: docker.io
+                - name: AEROSPIKE_KUBERNETES_INIT_REGISTRY_NAMESPACE
+                  value: aerospike
+                - name: AEROSPIKE_KUBERNETES_INIT_NAME_TAG
+                  value: aerospike-kubernetes-init:2.2.2
+                image: docker.io/aerospike/aerospike-kubernetes-operator:3.4.1
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 400m
+                    memory: 512Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /controller_manager_config.yaml
+                  name: manager-config
+                  subPath: controller_manager_config.yaml
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=0
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+              serviceAccountName: aerospike-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - configMap:
+                  name: aerospike-operator-manager-config
+                name: manager-config
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: aerospike-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - Aerospike
+  links:
+  - name: Documentation
+    url: https://docs.aerospike.com/cloud/kubernetes/operator
+  - name: Aerospike
+    url: https://aerospike.com
+  maintainers:
+  - email: developers@aerospike.com
+    name: Aerospike, Inc.
+  maturity: stable
+  minKubeVersion: 1.19.0
+  provider:
+    name: Aerospike
+  version: 3.4.1
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: maerospikecluster.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikeclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-asdb-aerospike-com-v1-aerospikecluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: maerospikerestore.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikerestores
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-asdb-aerospike-com-v1beta1-aerospikerestore
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vaerospikebackup.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikebackups
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-asdb-aerospike-com-v1beta1-aerospikebackup
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vaerospikebackupservice.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikebackupservices
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-asdb-aerospike-com-v1beta1-aerospikebackupservice
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vaerospikecluster.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikeclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-asdb-aerospike-com-v1-aerospikecluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: aerospike-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vaerospikerestore.kb.io
+    rules:
+    - apiGroups:
+      - asdb.aerospike.com
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - aerospikerestores
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-asdb-aerospike-com-v1beta1-aerospikerestore

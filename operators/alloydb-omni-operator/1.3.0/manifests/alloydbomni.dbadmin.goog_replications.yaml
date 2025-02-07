@@ -1,0 +1,494 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (unknown)
+  creationTimestamp: null
+  labels:
+    alloydb-omni: "true"
+  name: replications.alloydbomni.dbadmin.goog
+spec:
+  group: alloydbomni.dbadmin.goog
+  names:
+    kind: Replication
+    listKind: ReplicationList
+    plural: replications
+    singular: replication
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.dbcluster.name
+      name: DBCluster
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: ReadyReason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Healthy")].status
+      name: Healthy
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Healthy")].reason
+      name: HealthyReason
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Replication is the Schema for the Replications API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReplicationSpec defines the desired state of Replication
+            properties:
+              dbcluster:
+                description: DBCluster is the DBCluster this Replication belongs to.
+                properties:
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              downstream:
+                description: Downstream contains spec for replication downstream database.
+                properties:
+                  control:
+                    description: Control specifies the replication operation to be
+                      taken on this database. This field is required, and the allowed
+                      values are setup, promote, and rewind.
+                    enum:
+                    - setup
+                    - promote
+                    - rewind
+                    type: string
+                  host:
+                    description: Host is the upstream database's connection endpoint
+                      that this database can access for replication.
+                    type: string
+                  password:
+                    description: Password is the reference to the secret storing upstream
+                      database's replication user password.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  port:
+                    description: Port is the upstream database's port that this database
+                      can access for replication. Default is 5432.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  replicationSlotName:
+                    description: ReplicationSlotName is the name of the replication
+                      slot created on the upstream database, and will be used by this
+                      database for replication.
+                    type: string
+                  username:
+                    description: Username is the name of the replication user created
+                      on the upstream database, and will be used by this database
+                      to connect to upstream for replication.
+                    type: string
+                required:
+                - control
+                - host
+                - password
+                - replicationSlotName
+                - username
+                type: object
+              upstream:
+                description: Upstream contains spec for replication upstream database.
+                properties:
+                  applicationName:
+                    description: ApplicationName is the identifier of the synchronous
+                      replication connection. This value is required if Synchronous
+                      is set to "true".
+                    type: string
+                  logicalReplication:
+                    description: LogicalReplication specifies the logical replication
+                      configuration for the replication slot. If empty, the replication
+                      slot will be configured as a physical replication slot.
+                    properties:
+                      databaseName:
+                        description: DatabaseName is the database associated with
+                          this slot. Only changes from this database will be streamed
+                          through the slot.
+                        type: string
+                      pluginName:
+                        description: PluginName is the decoding plugin associated
+                          with this slot. See https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-EXPLANATION-OUTPUT-PLUGINS
+                          for details.
+                        type: string
+                    required:
+                    - databaseName
+                    - pluginName
+                    type: object
+                  password:
+                    description: Password is the reference to the secret storing replication
+                      user password. If not provided, a password will be generated
+                      and stored in a secret shown in status.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  replicationSlotName:
+                    description: ReplicationSlotName is the name of the replication
+                      slot to be used for replication. If not provided, a replication
+                      slot name will be generated and shown in status.
+                    type: string
+                  synchronous:
+                    default: "false"
+                    description: 'Synchronous specifies whether the replication slot
+                      should be configured for synchronous replication. If true, the
+                      applicationName will be added to the list of synchronous standbys.
+                      Note: This will have a negative impact on performance.'
+                    enum:
+                    - "true"
+                    - "false"
+                    type: string
+                  username:
+                    description: Username is the name of the replication user to be
+                      used for replication. If not provided, a username will be generated
+                      and shown in status.
+                    type: string
+                type: object
+            type: object
+          status:
+            description: ReplicationStatus defines the observed state of Replication
+            properties:
+              conditions:
+                description: Conditions represents the latest available observations
+                  of the Entity's current state.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    \n type FooStatus struct{ // Represents the observations of a
+                    foo's current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              criticalIncidents:
+                description: CriticalIncidents is a flat list of all active Critical
+                  Incidents.
+                items:
+                  description: CriticalIncident contains all information about an
+                    ongoing critical incident.
+                  properties:
+                    code:
+                      description: Code is the error code of this particular error.
+                        Error codes are DBSE+numeric strings, like "DBSE1012".
+                      type: string
+                    createTime:
+                      description: CreateTime is the timestamp when this Incident
+                        was created at the origin.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message describes the incident/error that occurred.
+                      type: string
+                    messageTemplateParams:
+                      additionalProperties:
+                        type: string
+                      description: MessageTemplateParams contains key-value pairs
+                        necessary for generating a user-friendly data-driven version
+                        of Message in the UI.
+                      type: object
+                    resource:
+                      description: Resource contains information about the Database
+                        Service component that reported the incident as well as about
+                        the K8s resource.
+                      properties:
+                        component:
+                          description: Component is an internal identifier of the
+                            Database Service subsystem that reported the incident.
+                          type: string
+                        location:
+                          description: Location
+                          properties:
+                            cluster:
+                              description: Cluster is the name of the cluster of the
+                                affected K8S resource.
+                              type: string
+                            group:
+                              description: Group is the Group name of the k8s resource.
+                              type: string
+                            kind:
+                              description: Kind is the Kind of the k8s resource.
+                              type: string
+                            name:
+                              description: Name is the name of the affected K8S resource.
+                              type: string
+                            namespace:
+                              description: Namespace is the namespace of the affected
+                                K8S resource.
+                              type: string
+                            version:
+                              description: Group is the Version of the k8s resource.
+                              type: string
+                          type: object
+                      required:
+                      - component
+                      type: object
+                    stackTrace:
+                      description: StackTrace contains an unstructured list of messages
+                        from the stack trace.
+                      items:
+                        description: CriticalIncidentStackTraceMessage contains stack
+                          trace information available for the incident.
+                        properties:
+                          component:
+                            description: Component is the name of a Database Service
+                              component that logged the message.
+                            type: string
+                          message:
+                            description: Logged message.
+                            type: string
+                        type: object
+                      type: array
+                    transientUntil:
+                      description: TransientUntil if present indicates that the issue
+                        should be considered transient until the specified time.
+                      format: date-time
+                      type: string
+                  required:
+                  - code
+                  - createTime
+                  - resource
+                  type: object
+                type: array
+              downstream:
+                description: Downstream contains observed state of replication downstream
+                  database.
+                properties:
+                  physicalDownstream:
+                    properties:
+                      setupStrategies:
+                        description: SetupStrategies contains information on the execution
+                          of each attempted setup strategy. They appear in this list
+                          in the same order as the strategies were defined in the
+                          spec.
+                        items:
+                          properties:
+                            endedAt:
+                              description: EndedAt is the time at which the most recent
+                                attempt of this strategy ended..
+                              format: date-time
+                              type: string
+                            message:
+                              description: Message is a description of why the setup
+                                attempt is in the state it is.
+                              type: string
+                            retries:
+                              description: Retries is the number of times this strategy
+                                has been retried.
+                              format: int32
+                              type: integer
+                            startedAt:
+                              description: StartedAt is the time at which the most
+                                recent attempt of this strategy was started.
+                              format: date-time
+                              type: string
+                            state:
+                              description: "State is the current state of this setup
+                                strategy. It can take the following values: \n - InProgress:
+                                The strategy is currently executing. - Success: The
+                                strategy has successfully completed and no more setup
+                                strategies will be attempted. - Error: The strategy
+                                has failed but will be retried. The Retries field
+                                will show how many times this strategy has been retried.
+                                - Fallback: The strategy has failed and will not be
+                                reattempted. Instead we will fallback to the next
+                                available strategy if it exists."
+                              enum:
+                              - Unknown
+                              - InProgress
+                              - Success
+                              - Error
+                              - Fallback
+                              type: string
+                            strategy:
+                              description: Strategy is the name of the strategy type
+                                this status is for.
+                              type: string
+                          required:
+                          - state
+                          - strategy
+                          type: object
+                        type: array
+                      state:
+                        description: State is the state of replication as seen in
+                          the pg_stat_wal_receiver table of the downstream database
+                          server.
+                        type: string
+                      synchronousEnabled:
+                        description: SynchronousEnabled indicates whether the application_name
+                          used by this replication has been included in the synchronous_standby_names
+                          config on the upstream database. When using this field,
+                          keep in mind that there may be a delay between when the
+                          change is made on the upstream and when the new value gets
+                          reflected here. Also, this field will contain the last value
+                          pushed down from the upstream. If upstream is unreachable
+                          it will retain its last value until it can reach the upstream
+                          again.
+                        type: boolean
+                      synchronousStatus:
+                        description: SynchronousStatus contains the value from the
+                          sync_state column from the database table pg_stat_replication
+                          on the upstream side of the connection. When using this
+                          field, keep in mind that there may be a delay between when
+                          the change is made on the upstream and when the new value
+                          gets reflected here. Also, this field will contain the last
+                          value pushed down from the upstream. If the upstream is
+                          unreachable it will retain its last value until it can reach
+                          the upstream again.
+                        type: string
+                    type: object
+                type: object
+              observedGeneration:
+                description: 'Internal: The generation observed by the controller.'
+                format: int64
+                type: integer
+              reconciled:
+                description: 'Internal: Whether the resource was reconciled by the
+                  controller.'
+                type: boolean
+              upstream:
+                description: Upstream contains observed state of replication upstream
+                  database.
+                properties:
+                  host:
+                    description: Host is this database's connection endpoint that
+                      downstream databases can access for replication.
+                    type: string
+                  password:
+                    description: Password is the reference to the secret storing this
+                      database's replication user password.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  port:
+                    description: Port is this database's port that downstream databases
+                      can access for replication.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  replicationSlotName:
+                    description: ReplicationSlotName is the name of the replication
+                      slot created on this database. Downstream databases can use
+                      this replication slot for replication.
+                    type: string
+                  username:
+                    description: Username is the name of the replication user on this
+                      database. Downstream databases can use this user to connect
+                      to this database for replication.
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

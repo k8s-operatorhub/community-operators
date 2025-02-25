@@ -1,0 +1,269 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.2
+  creationTimestamp: null
+  name: accessentries.eks.services.k8s.aws
+spec:
+  group: eks.services.k8s.aws
+  names:
+    kind: AccessEntry
+    listKind: AccessEntryList
+    plural: accessentries
+    singular: accessentry
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterName
+      name: CLUSTER
+      type: string
+    - jsonPath: .spec.type
+      name: TYPE
+      type: string
+    - jsonPath: .spec.username
+      name: USERNAME
+      type: string
+    - jsonPath: .spec.principalARN
+      name: PRINCIPALARN
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="ACK.ResourceSynced")].status
+      name: Synced
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AccessEntry is the Schema for the AccessEntries API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              AccessEntrySpec defines the desired state of AccessEntry.
+
+              An access entry allows an IAM principal (user or role) to access your cluster.
+              Access entries can replace the need to maintain the aws-auth ConfigMap for
+              authentication. For more information about access entries, see Access entries
+              (https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html) in
+              the Amazon EKS User Guide.
+            properties:
+              accessPolicies:
+                items:
+                  properties:
+                    accessScope:
+                      description: The scope of an AccessPolicy that's associated
+                        to an AccessEntry.
+                      properties:
+                        namespaces:
+                          items:
+                            type: string
+                          type: array
+                        type:
+                          type: string
+                      type: object
+                    policyARN:
+                      type: string
+                  type: object
+                type: array
+              clusterName:
+                description: The name of your cluster.
+                type: string
+              clusterRef:
+                description: "AWSResourceReferenceWrapper provides a wrapper around
+                  *AWSResourceReference\ntype to provide more user friendly syntax
+                  for references using 'from' field\nEx:\nAPIIDRef:\n\n\tfrom:\n\t
+                  \ name: my-api"
+                properties:
+                  from:
+                    description: |-
+                      AWSResourceReference provides all the values necessary to reference another
+                      k8s resource for finding the identifier(Id/ARN/Name)
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    type: object
+                type: object
+              kubernetesGroups:
+                description: |-
+                  The value for name that you've specified for kind: Group as a subject in
+                  a Kubernetes RoleBinding or ClusterRoleBinding object. Amazon EKS doesn't
+                  confirm that the value for name exists in any bindings on your cluster. You
+                  can specify one or more names.
+
+                  Kubernetes authorizes the principalArn of the access entry to access any
+                  cluster objects that you've specified in a Kubernetes Role or ClusterRole
+                  object that is also specified in a binding's roleRef. For more information
+                  about creating Kubernetes RoleBinding, ClusterRoleBinding, Role, or ClusterRole
+                  objects, see Using RBAC Authorization in the Kubernetes documentation (https://kubernetes.io/docs/reference/access-authn-authz/rbac/).
+
+                  If you want Amazon EKS to authorize the principalArn (instead of, or in addition
+                  to Kubernetes authorizing the principalArn), you can associate one or more
+                  access policies to the access entry using AssociateAccessPolicy. If you associate
+                  any access policies, the principalARN has all permissions assigned in the
+                  associated access policies and all permissions in any Kubernetes Role or
+                  ClusterRole objects that the group names are bound to.
+                items:
+                  type: string
+                type: array
+              principalARN:
+                description: |-
+                  The ARN of the IAM principal for the AccessEntry. You can specify one ARN
+                  for each access entry. You can't specify the same ARN in more than one access
+                  entry. This value can't be changed after access entry creation.
+
+                  The valid principals differ depending on the type of the access entry in
+                  the type field. The only valid ARN is IAM roles for the types of access entries
+                  for nodes: . You can use every IAM principal type for STANDARD access entries.
+                  You can't use the STS session principal type with access entries because
+                  this is a temporary principal for each session and not a permanent identity
+                  that can be assigned permissions.
+
+                  IAM best practices (https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#bp-users-federation-idp)
+                  recommend using IAM roles with temporary credentials, rather than IAM users
+                  with long-term credentials.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Metadata that assists with categorization and organization. Each tag consists
+                  of a key and an optional value. You define both. Tags don't propagate to
+                  any other cluster or Amazon Web Services resources.
+                type: object
+              type:
+                description: |-
+                  The type of the new access entry. Valid values are Standard, FARGATE_LINUX,
+                  EC2_LINUX, and EC2_WINDOWS.
+
+                  If the principalArn is for an IAM role that's used for self-managed Amazon
+                  EC2 nodes, specify EC2_LINUX or EC2_WINDOWS. Amazon EKS grants the necessary
+                  permissions to the node for you. If the principalArn is for any other purpose,
+                  specify STANDARD. If you don't specify a value, Amazon EKS sets the value
+                  to STANDARD. It's unnecessary to create access entries for IAM roles used
+                  with Fargate profiles or managed Amazon EC2 nodes, because Amazon EKS creates
+                  entries in the aws-auth ConfigMap for the roles. You can't change this value
+                  once you've created the access entry.
+
+                  If you set the value to EC2_LINUX or EC2_WINDOWS, you can't specify values
+                  for kubernetesGroups, or associate an AccessPolicy to the access entry.
+                type: string
+              username:
+                description: |-
+                  The username to authenticate to Kubernetes with. We recommend not specifying
+                  a username and letting Amazon EKS specify it for you. For more information
+                  about the value Amazon EKS specifies for you, or constraints before specifying
+                  your own username, see Creating access entries (https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html#creating-access-entries)
+                  in the Amazon EKS User Guide.
+                type: string
+            required:
+            - principalARN
+            type: object
+          status:
+            description: AccessEntryStatus defines the observed state of AccessEntry
+            properties:
+              ackResourceMetadata:
+                description: |-
+                  All CRs managed by ACK have a common `Status.ACKResourceMetadata` member
+                  that is used to contain resource sync state, account ownership,
+                  constructed ARN for the resource
+                properties:
+                  arn:
+                    description: |-
+                      ARN is the Amazon Resource Name for the resource. This is a
+                      globally-unique identifier and is set only by the ACK service controller
+                      once the controller has orchestrated the creation of the resource OR
+                      when it has verified that an "adopted" resource (a resource where the
+                      ARN annotation was set by the Kubernetes user on the CR) exists and
+                      matches the supplied CR's Spec field values.
+                      https://github.com/aws/aws-controllers-k8s/issues/270
+                    type: string
+                  ownerAccountID:
+                    description: |-
+                      OwnerAccountID is the AWS Account ID of the account that owns the
+                      backend AWS service API resource.
+                    type: string
+                  region:
+                    description: Region is the AWS region in which the resource exists
+                      or will exist.
+                    type: string
+                required:
+                - ownerAccountID
+                - region
+                type: object
+              conditions:
+                description: |-
+                  All CRs managed by ACK have a common `Status.Conditions` member that
+                  contains a collection of `ackv1alpha1.Condition` objects that describe
+                  the various terminal states of the CR and its backend AWS service API
+                  resource
+                items:
+                  description: |-
+                    Condition is the common struct used by all CRDs managed by ACK service
+                    controllers to indicate terminal states  of the CR and its backend AWS
+                    service API resource
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type is the type of the Condition
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                description: The Unix epoch timestamp at object creation.
+                format: date-time
+                type: string
+              modifiedAt:
+                description: The Unix epoch timestamp for the last modification to
+                  the object.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

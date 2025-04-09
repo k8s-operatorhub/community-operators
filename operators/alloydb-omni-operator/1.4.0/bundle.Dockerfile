@@ -12,5 +12,5 @@ LABEL operators.operatorframework.io.metrics.project_layout=unknown
 LABEL com.redhat.openshift.versions=v4.12
 
 # Copy files to locations specified by labels.
-COPY bundle-gen/manifests /manifests/
-COPY bundle-gen/metadata /metadata/
+COPY manifests /manifests/
+COPY metadata /metadata/

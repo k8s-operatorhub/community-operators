@@ -1,0 +1,812 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha1",
+          "kind": "AppArmorProfile",
+          "metadata": {
+            "annotations": {
+              "description": "Block writing to any files in the disk."
+            },
+            "name": "test-profile"
+          },
+          "spec": {
+            "abstract": {
+              "filesystem": {
+                "readOnlyPaths": [],
+                "readWritePaths": [],
+                "writeOnlyPaths": []
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha1",
+          "kind": "SecurityProfilesOperatorDaemon",
+          "metadata": {
+            "name": "spod",
+            "namespace": "security-profiles-operator"
+          },
+          "spec": {
+            "enableAppArmor": false,
+            "enableLogEnricher": false,
+            "enableSelinux": false
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha1",
+          "kind": "ProfileRecording",
+          "metadata": {
+            "name": "test-recording"
+          },
+          "spec": {
+            "kind": "SeccompProfile",
+            "podSelector": {
+              "matchLabels": {
+                "app": "alpine"
+              }
+            },
+            "recorder": "bpf"
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha1",
+          "kind": "ProfileBinding",
+          "metadata": {
+            "name": "profile-binding"
+          },
+          "spec": {
+            "image": "nginx:1.19.1",
+            "profileRef": {
+              "kind": "SeccompProfile",
+              "name": "profile-allow-unsafe"
+            }
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha2",
+          "kind": "RawSelinuxProfile",
+          "metadata": {
+            "name": "errorlogger"
+          },
+          "spec": {
+            "policy": "(blockinherit container)\n(allow process var_log_t ( dir ( open read getattr lock search ioctl add_name remove_name write ))) \n(allow process var_log_t ( file ( getattr read write append ioctl lock map open create  ))) \n(allow process var_log_t ( sock_file ( getattr read write append open  ))) \n"
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1beta1",
+          "kind": "SeccompProfile",
+          "metadata": {
+            "annotations": {
+              "description": "Blocks all syscalls."
+            },
+            "name": "profile-block-all"
+          },
+          "spec": {
+            "defaultAction": "SCMP_ACT_ERRNO"
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1beta1",
+          "kind": "SeccompProfile",
+          "metadata": {
+            "annotations": {
+              "description": "UNSAFE: Allows all syscalls whilst logging their use. Similar to running as unconfined in terms of enforcement."
+            },
+            "name": "profile-complain-unsafe"
+          },
+          "spec": {
+            "defaultAction": "SCMP_ACT_LOG"
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1beta1",
+          "kind": "SeccompProfile",
+          "metadata": {
+            "annotations": {
+              "description": "UNSAFE: Allows all syscalls. Similar to running as unconfined as it provides no enforcement."
+            },
+            "name": "profile-allow-unsafe"
+          },
+          "spec": {
+            "defaultAction": "SCMP_ACT_ALLOW"
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1beta1",
+          "kind": "SeccompProfile",
+          "metadata": {
+            "annotations": {
+              "description": "Enables complain mode whilst blocking high-risk syscalls. Some essential syscalls are allowed to decrease log noise."
+            },
+            "name": "profile-complain-block-high-risk"
+          },
+          "spec": {
+            "architectures": [
+              "SCMP_ARCH_X86_64"
+            ],
+            "defaultAction": "SCMP_ACT_LOG",
+            "syscalls": [
+              {
+                "action": "SCMP_ACT_ALLOW",
+                "names": [
+                  "exit",
+                  "exit_group",
+                  "futex",
+                  "nanosleep"
+                ]
+              },
+              {
+                "action": "SCMP_ACT_ERRNO",
+                "names": [
+                  "acct",
+                  "add_key",
+                  "bpf",
+                  "clock_adjtime",
+                  "clock_settime",
+                  "create_module",
+                  "delete_module",
+                  "finit_module",
+                  "get_kernel_syms",
+                  "get_mempolicy",
+                  "init_module",
+                  "ioperm",
+                  "iopl",
+                  "kcmp",
+                  "kexec_file_load",
+                  "kexec_load",
+                  "keyctl",
+                  "lookup_dcookie",
+                  "mbind",
+                  "mount",
+                  "move_pages",
+                  "name_to_handle_at",
+                  "nfsservctl",
+                  "open_by_handle_at",
+                  "perf_event_open",
+                  "personality",
+                  "pivot_root",
+                  "process_vm_readv",
+                  "process_vm_writev",
+                  "ptrace",
+                  "query_module",
+                  "quotactl",
+                  "reboot",
+                  "request_key",
+                  "set_mempolicy",
+                  "setns",
+                  "settimeofday",
+                  "stime",
+                  "swapoff",
+                  "swapon",
+                  "_sysctl",
+                  "sysfs",
+                  "umount2",
+                  "umount",
+                  "unshare",
+                  "uselib",
+                  "userfaultfd",
+                  "ustat",
+                  "vm86old",
+                  "vm86"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "security-profiles-operator.x-k8s.io/v1alpha2",
+          "kind": "SelinuxProfile",
+          "metadata": {
+            "name": "errorlogger"
+          },
+          "spec": {
+            "allow": {
+              "var_log_t": {
+                "dir": [
+                  "open",
+                  "read",
+                  "getattr",
+                  "lock",
+                  "search",
+                  "ioctl",
+                  "add_name",
+                  "remove_name",
+                  "write"
+                ],
+                "file": [
+                  "getattr",
+                  "read",
+                  "write",
+                  "append",
+                  "ioctl",
+                  "lock",
+                  "map",
+                  "open",
+                  "create"
+                ],
+                "sock_file": [
+                  "getattr",
+                  "read",
+                  "write",
+                  "append",
+                  "open"
+                ]
+              }
+            },
+            "inherit": [
+              {
+                "name": "container"
+              }
+            ]
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Security
+    containerImage: registry.k8s.io/security-profiles-operator/security-profiles-operator:v0.9.1
+    createdAt: "2025-04-09T08:07:05Z"
+    olm.skipRange: '>=0.4.1 <0.9.1'
+    operatorframework.io/cluster-monitoring: "true"
+    operatorframework.io/os.linux: supported
+    operatorframework.io/suggested-namespace: security-profiles-operator
+    operators.openshift.io/valid-subscription: '["OpenShift Kubernetes Engine", "OpenShift
+      Container Platform", "OpenShift Platform Plus"]'
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+  name: security-profiles-operator.v0.9.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: ProfileBinding is the Schema for the profilebindings API.
+      displayName: Profile Binding
+      kind: ProfileBinding
+      name: profilebindings.security-profiles-operator.x-k8s.io
+      version: v1alpha1
+    - description: ProfileRecording is the Schema for the profilerecordings API.
+      displayName: Profile Recording
+      kind: ProfileRecording
+      name: profilerecordings.security-profiles-operator.x-k8s.io
+      version: v1alpha1
+    - description: SeccompProfile is a cluster level specification for a seccomp profile.
+        See https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#seccomp
+      displayName: Seccomp Profile
+      kind: SeccompProfile
+      name: seccompprofiles.security-profiles-operator.x-k8s.io
+      version: v1beta1
+    - description: SecurityProfileNodeStatus is a per-node status of a security profile
+      displayName: Security Profile Node Status
+      kind: SecurityProfileNodeStatus
+      name: securityprofilenodestatuses.security-profiles-operator.x-k8s.io
+      version: v1alpha1
+    - description: SecurityProfilesOperatorDaemon is the Schema to configure the spod
+        deployment.
+      displayName: Security Profiles Operator Daemon
+      kind: SecurityProfilesOperatorDaemon
+      name: securityprofilesoperatordaemons.security-profiles-operator.x-k8s.io
+      version: v1alpha1
+    - kind: RawSelinuxProfile
+      name: rawselinuxprofiles.security-profiles-operator.x-k8s.io
+      version: v1alpha2
+    - description: SelinuxProfile is the Schema for the selinuxprofiles API.
+      displayName: Selinux Profile
+      kind: SelinuxProfile
+      name: selinuxprofiles.security-profiles-operator.x-k8s.io
+      version: v1alpha2
+    - description: AppArmorProfile is a cluster level specification for an AppArmor
+        profile.
+      displayName: App Armor Profile
+      kind: AppArmorProfile
+      name: apparmorprofiles.security-profiles-operator.x-k8s.io
+      version: v1alpha1
+  description: SPO is an operator which aims to make it easier for users to use SELinux,
+    seccomp and AppArmor in Kubernetes clusters
+  displayName: Security Profiles Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTguNTEgMjU4LjUxIj48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2QxZDFkMTt9LmNscy0ye2ZpbGw6IzhkOGQ4Zjt9PC9zdHlsZT48L2RlZnM+PHRpdGxlPkFzc2V0IDQ8L3RpdGxlPjxnIGlkPSJMYXllcl8yIiBkYXRhLW5hbWU9IkxheWVyIDIiPjxnIGlkPSJMYXllcl8xLTIiIGRhdGEtbmFtZT0iTGF5ZXIgMSI+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTI5LjI1LDIwQTEwOS4xLDEwOS4xLDAsMCwxLDIwNi40LDIwNi40LDEwOS4xLDEwOS4xLDAsMSwxLDUyLjExLDUyLjExLDEwOC40NSwxMDguNDUsMCwwLDEsMTI5LjI1LDIwbTAtMjBoMEM1OC4xNiwwLDAsNTguMTYsMCwxMjkuMjVIMGMwLDcxLjA5LDU4LjE2LDEyOS4yNiwxMjkuMjUsMTI5LjI2aDBjNzEuMDksMCwxMjkuMjYtNTguMTcsMTI5LjI2LTEyOS4yNmgwQzI1OC41MSw1OC4xNiwyMDAuMzQsMCwxMjkuMjUsMFoiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0xNzcuNTQsMTAzLjQxSDE0MS42NkwxNTQuOSw2NS43NmMxLjI1LTQuNC0yLjMzLTguNzYtNy4yMS04Ljc2SDEwMi45M2E3LjMyLDcuMzIsMCwwLDAtNy40LDZsLTEwLDY5LjYxYy0uNTksNC4xNywyLjg5LDcuODksNy40LDcuODloMzYuOUwxMTUuNTUsMTk3Yy0xLjEyLDQuNDEsMi40OCw4LjU1LDcuMjQsOC41NWE3LjU4LDcuNTgsMCwwLDAsNi40Ny0zLjQ4TDE4NCwxMTMuODVDMTg2Ljg2LDEwOS4yNCwxODMuMjksMTAzLjQxLDE3Ny41NCwxMDMuNDFaIi8+PC9nPjwvZz48L3N2Zz4=
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resourceNames:
+          - security-profiles-operator-profile
+          resources:
+          - configmaps
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - mutatingwebhookconfigurations
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets/finalizers
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          - issuers
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusteroperators
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - profilerecordings
+          - profilerecordings/finalizers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - rawselinuxprofiles
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - rawselinuxprofiles/finalizers
+          - seccompprofiles/finalizers
+          - securityprofilesoperatordaemons/finalizers
+          - selinuxprofiles/finalizers
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - rawselinuxprofiles/status
+          - seccompprofiles/status
+          - securityprofilesoperatordaemons/status
+          - selinuxprofiles/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - seccompprofiles
+          - selinuxprofiles
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - securityprofilenodestatuses
+          verbs:
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - securityprofilesoperatordaemons
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        serviceAccountName: security-profiles-operator
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - profilebindings
+          - profilerecordings
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - profilebindings/finalizers
+          - profilerecordings/finalizers
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - profilebindings/status
+          - profilerecordings/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - seccompprofiles
+          - selinuxprofiles
+          verbs:
+          - get
+          - list
+          - watch
+        serviceAccountName: spo-webhook
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - subjectaccessreviews
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - apparmorprofiles
+          - rawselinuxprofiles
+          - selinuxprofiles
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - apparmorprofiles/finalizers
+          - rawselinuxprofiles/finalizers
+          - seccompprofiles/finalizers
+          - selinuxprofiles/finalizers
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - apparmorprofiles/status
+          - rawselinuxprofiles/status
+          - seccompprofiles/status
+          - selinuxprofiles/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - profilerecordings
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - seccompprofiles
+          - securityprofilenodestatuses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security-profiles-operator.x-k8s.io
+          resources:
+          - securityprofilesoperatordaemons
+          verbs:
+          - get
+          - list
+          - watch
+        serviceAccountName: spod
+      deployments:
+      - label:
+          app: security-profiles-operator
+        name: security-profiles-operator
+        spec:
+          replicas: 3
+          selector:
+            matchLabels:
+              app: security-profiles-operator
+              name: security-profiles-operator
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app: security-profiles-operator
+                name: security-profiles-operator
+            spec:
+              containers:
+              - args:
+                - manager
+                env:
+                - name: RELATED_IMAGE_SELINUXD
+                  value: quay.io/security-profiles-operator/selinuxd
+                - name: RELATED_IMAGE_SELINUXD_EL8
+                  value: quay.io/security-profiles-operator/selinuxd-el8:latest
+                - name: RELATED_IMAGE_SELINUXD_EL9
+                  value: quay.io/security-profiles-operator/selinuxd-el9:latest
+                - name: RELATED_IMAGE_SELINUXD_FEDORA
+                  value: quay.io/security-profiles-operator/selinuxd-fedora:latest
+                - name: OPERATOR_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                - name: NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                - name: KUBELET_DIR
+                  value: /var/lib/kubelet
+                image: registry.k8s.io/security-profiles-operator/security-profiles-operator:v0.9.1
+                imagePullPolicy: Always
+                name: security-profiles-operator
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 250m
+                    memory: 50Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+              securityContext:
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: security-profiles-operator
+              tolerations:
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/master
+                operator: Exists
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/control-plane
+                operator: Exists
+              - effect: NoExecute
+                key: node.kubernetes.io/not-ready
+                operator: Exists
+      permissions:
+      - rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+          - get
+          - update
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        serviceAccountName: security-profiles-operator
+      - rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - security-profiles-operator-webhook-lock
+          resources:
+          - leases
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        serviceAccountName: spo-webhook
+      - rules:
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        serviceAccountName: spod
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - security
+  - selinux
+  - seccomp
+  - apparmor
+  - ebpf
+  links:
+  - name: Security Profiles Operator
+    url: https://github.com/kubernetes-sigs/security-profiles-operator
+  maintainers:
+  - email: dev@kubernetes.io
+    name: Kubernetes upstream
+  maturity: beta
+  provider:
+    name: Kubernetes SIGs
+    url: https://github.com/kubernetes-sigs
+  relatedImages:
+  - image: quay.io/security-profiles-operator/selinuxd
+    name: selinuxd
+  - image: quay.io/security-profiles-operator/selinuxd-el8:latest
+    name: selinuxd-el8
+  - image: quay.io/security-profiles-operator/selinuxd-el9:latest
+    name: selinuxd-el9
+  - image: quay.io/security-profiles-operator/selinuxd-fedora:latest
+    name: selinuxd-fedora
+  version: 0.9.1

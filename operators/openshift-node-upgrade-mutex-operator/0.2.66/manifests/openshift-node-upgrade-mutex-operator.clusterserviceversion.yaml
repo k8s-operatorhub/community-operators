@@ -1,0 +1,895 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "openshift-optional.skrzypek.io/v1alpha1",
+          "kind": "MutexRule",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "openshift-node-upgrade-mutex-operator",
+              "app.kubernetes.io/instance": "mutexrule-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "mutexrule",
+              "app.kubernetes.io/part-of": "openshift-node-upgrade-mutex-operator"
+            },
+            "name": "mutexrule-sample"
+          },
+          "spec": {
+            "jobName": "example",
+            "jobNamespace": "node-upgrade-mutex-operator",
+            "jobSpec": {
+              "selector": {},
+              "template": {
+                "metadata": {
+                  "name": "mutex"
+                },
+                "spec": {
+                  "containers": [
+                    {
+                      "command": [
+                        "sleep",
+                        "20"
+                      ],
+                      "image": "ubi9/toolbox",
+                      "name": "mutex"
+                    }
+                  ],
+                  "restartPolicy": "Never"
+                }
+              }
+            },
+            "type": "kubernetes"
+          }
+        },
+        {
+          "apiVersion": "openshift-optional.skrzypek.io/v1alpha1",
+          "kind": "MutexRunConfig",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "openshift-node-upgrade-mutex-operator",
+              "app.kubernetes.io/instance": "mutexrunconfig-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "mutexrunconfig",
+              "app.kubernetes.io/part-of": "openshift-node-upgrade-mutex-operator"
+            },
+            "name": "mutexrunconfig-sample"
+          },
+          "spec": {
+            "canary": {
+              "name": "canary-example"
+            },
+            "mutexRules": [
+              {
+                "name": "mutexrule-sample",
+                "namespace": "node-upgrade-mutex-operator"
+              }
+            ],
+            "mutexTargets": [
+              {
+                "name": "mutextarget-sample",
+                "namespace": "node-upgrade-mutex-operator"
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "openshift-optional.skrzypek.io/v1alpha1",
+          "kind": "MutexTarget",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "openshift-node-upgrade-mutex-operator",
+              "app.kubernetes.io/instance": "mutextarget-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "mutextarget",
+              "app.kubernetes.io/part-of": "openshift-node-upgrade-mutex-operator"
+            },
+            "name": "mutextarget-sample"
+          },
+          "spec": {
+            "machineConfigPools": [
+              "worker"
+            ]
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: OpenShift Optional
+    certified: "false"
+    containerImage: quay.io/jskrzypek/openshift-node-upgrade-mutex-operator
+    createdAt: "2025-05-30T17:49:00Z"
+    description: |
+      This software injects required operations into the worker node upgrade process.
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operatorframework.io/suggested-namespace: node-upgrade-mutex-operator
+    operators.operatorframework.io/builder: operator-sdk-v1.39.2
+    operators.operatorframework.io/project_layout: ansible.sdk.operatorframework.io/v1
+    provider: Jason Skrzypek
+    repository: https://github.com/shpwrck/openshift-upgrade-rollout-operator
+    support: Best Effort
+  name: openshift-node-upgrade-mutex-operator.v0.2.66
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: A node mutex rule definition in the form of a kubernetes job spec
+        displayName: Mutex Rule
+        kind: MutexRule
+        name: mutexrules.openshift-optional.skrzypek.io
+        version: v1alpha1
+      - description: Lists of Targets and Rules to apply to them, as well as an upgrade facilitating Machine Config Pool
+        displayName: Mutex Run Config
+        kind: MutexRunConfig
+        name: mutexrunconfigs.openshift-optional.skrzypek.io
+        version: v1alpha1
+      - description: A list of Machine Config Pools to enforce upgrade procedure.
+        displayName: Mutex Target
+        kind: MutexTarget
+        name: mutextargets.openshift-optional.skrzypek.io
+        version: v1alpha1
+  description: |
+    ## Introduction
+
+    This operator injects required operations in the form of a Kubernetes job into the worker node upgrade process using MachineConfigPools. In short, when provided a list of operations (`MutexRules`) and a list of MachineConfigPools (`MutexTargets`) , the OpenShift Node Upgrade Mutex Operator will execute each operation for a given target, enable updates for the given target by modifying it's MachineConfigPool membership, and wait until the node has been upgraded before proceeding onto subsequent operations and targets.
+
+    ## Dependencies
+
+    ### Release Version Label
+
+    In order to confirm the successful upgrade of each target node, the NFD Operator is used to generate a version feature on every worker node. In order to proceed through given targets, each node must have this label
+    `'machineconfiguration.openshift.io/release-image-version'` with a key providing the semantic version of this node (e.g. `'4.16.4'`)
+
+    There are several ways to accomplish this, but an example MachineConfig has been provided [here](https://github.com/shpwrck/openshift-node-upgrade-mutex-operator/blob/main/machineconfig.yaml).
+
+    ### Canary Machine Config Pool
+
+    In addition to node labels, a MachineConfigPool that will be used to accomodate targets subject to upgrades must be provided matching the following criteria:
+    * selects only worker nodes
+    * is not paused
+
+    Applying the example below will create a compatible canary pool:
+
+    ```yaml
+    ---
+    apiVersion: machineconfiguration.openshift.io/v1
+    kind: MachineConfigPool
+    metadata:
+      name: canary
+    spec:
+      machineConfigSelector:
+        matchLabels:
+          machineconfiguration.openshift.io/role: worker
+      nodeSelector:
+        matchLabels:
+          node-role.kubernetes.io/worker: ''
+        matchExpressions:
+          - key: 'isCanary'
+            operator: Exists
+      paused: false
+    ```
+
+    ## Usage / Custom Resources Definitions
+
+    #### MutexRule:
+
+    A resource storing a single rule referring to a template for a Kubernetes job to be created.
+    This resource **does not** modify existing resources.
+
+    ```yaml
+    ---
+    apiVersion: openshift-optional.skrzypek.io/v1alpha1
+    kind: MutexRule
+    metadata:
+      name: k8s-example
+    spec:
+      jobName: "example" # Jobs will be run with this prefix name
+      jobNamespace: "node-upgrade-mutex-operator" # Jobs will be run in this namespace
+      jobSpec: # Accepts full 'batch/v1' job spec
+        selector: {}
+        template:
+          metadata:
+            name: mutex
+          spec:
+            containers:
+            - command:
+              - sleep
+              args:
+              - "30"
+              image: ubi9/toolbox
+              name: mutex
+            restartPolicy: Never
+      cleanUpJobSpec: # Accepts full 'batch/v1' job spec (Optional)
+        selector: {}
+        template:
+          metadata:
+            name: mutex
+          spec:
+            containers:
+            - command:
+              - sleep
+              args:
+              - "30"
+              image: ubi9/toolbox
+              name: mutex
+            restartPolicy: Never
+      type: kubernetes
+    ```
+
+    #### MutexTarget:
+
+    A resource storing a set of MachineConfigPools to pause and incrementally upgrade.
+    This resource **does not** modify existing resources.
+
+    ```yaml
+    ---
+    apiVersion: openshift-optional.skrzypek.io/v1alpha1
+    kind: MutexTarget
+    metadata:
+      name: worker-example
+    spec:
+      machineConfigPools:
+        - worker # Name of existing machineconfigpool
+    ```
+
+    #### MutexRunConfig:
+
+    A resource that references existing MutexRules and MutexTargets as well as an existing MachineConfigPool that will allow members to be upgraded. Every rule defined in the `mutexRules` list will be added as a mandatory task to every node that is a member of the each MachineConfigPool defined in the `mutexTargets` list.
+    This resource **does** modify existing resources.
+
+    ```yaml
+    apiVersion: openshift-optional.skrzypek.io/v1alpha1
+    kind: MutexRunConfig
+    metadata:
+      name: example
+    spec:
+      skipTLSVerify: false # Defaults to false if omitted
+      canary:
+        name: canary # Name of unpaused machineconfigpool to modify
+      mutexRules: # List of existing mutexRules
+        - name: k8s-example
+          namespace: node-upgrade-mutex-operator
+      mutexTargets: # List of existing mutexTargets
+        - name: worker-example
+          namespace: node-upgrade-mutex-operator
+    ```
+
+    ## Procedure
+
+    #### MutexRule
+
+    1. Upon creation/modification, the schema of each K8s rule is validated.
+    2. Status is updated to indicate valid or invalid configuration.
+
+    #### MutexTargets
+
+    1. Upon creation/modification, the existence of each target is validated.
+    2. Status is updated to indicate valid or invalid configuration.
+    3. The nodes assigned to each target are added to the status field `nodes`.
+
+    #### MutexRunConfigs
+
+    1. Upon creation/modification, the existence as well as validation status of each rule, target, and canary pool is confirmed.
+    2. If valid, the existence of an upgrade is queried. An upgrade is available if the following is true:
+        * The `status.history` of the `cluster` ClusterVersion equals `Completed`
+        * The `release-image-version` of any worker node is less than the `spec.desiredUpdate.version` of the `cluster` ClusterVersion.
+    3. If an update exists, each target MachineConfigPool has `spec.paused` set to `true`.
+    4. If each pool is paused, each node is updated to include a label for each rule with the following format:
+        * `mutexrule.openshift-optional.skrzypek.io/{{MutexRule_Name}}.{{MutexRule_Namespace}}`
+    5. If labels have been applied, the provided canary pool is modified to exclude nodes with labels provided by step (4).
+    6. Assuming steps (2-5) have completed successfully, then the process for running jobs and updating nodes begins. The process per node is as follows:
+        * Launch each K8S job sequentially
+        * Remove the current node's rule labels
+        * Wait until the `release-image-version` of the node matches the `spec.desiredUpdate.version` of the `cluster` ClusterVersion
+        * Launch each K8S cleanup job sequentially
+    7. If the update succeeds, all machine config pools are unpaused and all match expressions are removed.
+
+    ## Permissions Granted
+
+    In addition to the permissions required to operate the included CRDs, the following access is granted to the operator's service account.
+
+    | Resource | Permissions |
+    | :---: | :---: |
+    | Jobs | Create & Read |
+    | Nodes | Read & Update |
+    | ClusterVersion | Read |
+    | MachineConfigPools | Read & Update |
+
+    ## Notes
+
+    * This operator was built using the operator-sdk's ansible plugin and therefore has all of the inherited capabilities and restrictions.
+    * This operator has undergone minimal testing and should not be run in production environments without acknowledging the risks.
+    * This operator is currently alpha and subject to change based on requirements.
+
+    ## Additional Information
+    For additional information refer to the [GitHub Repository](https://github.com/shpwrck/openshift-node-upgrade-mutex-operator)
+  displayName: OpenShift Node Upgrade Mutex Operator
+  icon:
+    - base64data: |
+        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
+        C1wRWk2D/j/u2G2tT2oHpgAAAABJRU5ErkJggg==
+      mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+                - pods
+                - pods/exec
+                - pods/log
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+                - replicasets
+                - statefulsets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - config.openshift.io
+              resources:
+                - clusterversions
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - machineconfiguration.openshift.io
+              resources:
+                - machineconfigpools
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apiregistration.k8s.io
+              resources:
+                - apiservices
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - openshift-optional.skrzypek.io
+              resources:
+                - mutexrules
+                - mutexrules/status
+                - mutexrules/finalizers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - openshift-optional.skrzypek.io
+              resources:
+                - mutextargets
+                - mutextargets/status
+                - mutextargets/finalizers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - openshift-optional.skrzypek.io
+              resources:
+                - mutexrunconfigs
+                - mutexrunconfigs/status
+                - mutexrunconfigs/finalizers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+          serviceAccountName: openshift-node-upgrade-mutex-operator-controller-manager
+      deployments:
+        - label:
+            app.kubernetes.io/component: manager
+            app.kubernetes.io/created-by: openshift-node-upgrade-mutex-operator
+            app.kubernetes.io/instance: controller-manager
+            app.kubernetes.io/managed-by: kustomize
+            app.kubernetes.io/name: deployment
+            app.kubernetes.io/part-of: openshift-node-upgrade-mutex-operator
+            control-plane: controller-manager
+          name: openshift-node-upgrade-mutex-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            strategy: {}
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  control-plane: controller-manager
+              spec:
+                affinity:
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: node-role.kubernetes.io/control-plane
+                              operator: Exists
+                containers:
+                  - args:
+                      - --secure-listen-address=0.0.0.0:8443
+                      - --upstream=http://127.0.0.1:8080/
+                      - --logtostderr=true
+                      - --v=0
+                    image: gcr.io/kubebuilder/kube-rbac-proxy@sha256:d8cc6ffb98190e8dd403bfe67ddcb454e6127d32b87acc237b3e5240f70a20fb
+                    name: kube-rbac-proxy
+                    ports:
+                      - containerPort: 8443
+                        name: https
+                        protocol: TCP
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 128Mi
+                      requests:
+                        cpu: 5m
+                        memory: 64Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                  - args:
+                      - --health-probe-bind-address=:6789
+                      - --metrics-bind-address=127.0.0.1:8080
+                      - --leader-elect
+                      - --leader-election-id=openshift-node-upgrade-mutex-operator
+                    env:
+                      - name: ANSIBLE_GATHERING
+                        value: explicit
+                    image: quay.io/jskrzypek/openshift-node-upgrade-mutex-operator@sha256:d4c28e8b256c00429d9999595c2386f1a25de597ee8e6c33871bb7b22b84c4af
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 6789
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 6789
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 768Mi
+                      requests:
+                        cpu: 10m
+                        memory: 256Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                securityContext:
+                  runAsNonRoot: true
+                serviceAccountName: openshift-node-upgrade-mutex-operator-controller-manager
+                terminationGracePeriodSeconds: 10
+                tolerations:
+                  - effect: NoSchedule
+                    key: node-role.kubernetes.io/master
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: openshift-node-upgrade-mutex-operator-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: false
+      type: AllNamespaces
+  keywords:
+    - OpenShift Optional
+    - Upgrade
+    - Mutex
+  links:
+    - name: Openshift Node Upgrade Mutex Operator
+      url: https://github.com/shpwrck/openshift-node-upgrade-mutex-operator
+  maintainers:
+    - email: jskrzype@redhat.com
+      name: Jason Skrzypek
+  maturity: alpha
+  minKubeVersion: 1.27.0
+  provider:
+    name: Jason Skrzypek
+    url: https://github.com/shpwrck
+  relatedImages:
+    - image: gcr.io/kubebuilder/kube-rbac-proxy@sha256:d8cc6ffb98190e8dd403bfe67ddcb454e6127d32b87acc237b3e5240f70a20fb
+      name: kube-rbac-proxy
+    - image: quay.io/jskrzypek/openshift-node-upgrade-mutex-operator@sha256:d4c28e8b256c00429d9999595c2386f1a25de597ee8e6c33871bb7b22b84c4af
+      name: manager
+  version: 0.2.66

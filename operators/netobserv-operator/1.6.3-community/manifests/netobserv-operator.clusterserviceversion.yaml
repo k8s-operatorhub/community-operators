@@ -1,0 +1,1380 @@
+apiVersion: operators.coreos.com/v1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "flows.netobserv.io/v1alpha1",
+          "kind": "FlowMetric",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "netobserv-operator",
+              "app.kubernetes.io/instance": "flowmetric-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "flowmetric",
+              "app.kubernetes.io/part-of": "netobserv-operator"
+            },
+            "name": "flowmetric-sample"
+          },
+          "spec": {
+            "charts": [
+              {
+                "dashboardName": "Main",
+                "queries": [
+                  {
+                    "legend": "",
+                    "promQL": "sum(rate($METRIC[2m]))"
+                  }
+                ],
+                "title": "External ingress traffic",
+                "type": "SingleStat",
+                "unit": "Bps"
+              },
+              {
+                "dashboardName": "Main",
+                "queries": [
+                  {
+                    "legend": "{{DstK8S_Namespace}} / {{DstK8S_OwnerName}}",
+                    "promQL": "sum(rate($METRIC{DstK8S_Namespace!=\"\"}[2m])) by (DstK8S_Namespace, DstK8S_OwnerName)"
+                  }
+                ],
+                "sectionName": "External",
+                "title": "Top external ingress traffic per workload",
+                "type": "StackArea",
+                "unit": "Bps"
+              }
+            ],
+            "direction": "Ingress",
+            "filters": [
+              {
+                "field": "SrcSubnetLabel",
+                "matchType": "Absence"
+              }
+            ],
+            "labels": [
+              "DstK8S_HostName",
+              "DstK8S_Namespace",
+              "DstK8S_OwnerName",
+              "DstK8S_OwnerType"
+            ],
+            "metricName": "cluster_external_ingress_bytes_total",
+            "type": "Counter",
+            "valueField": "Bytes"
+          }
+        },
+        {
+          "apiVersion": "flows.netobserv.io/v1beta1",
+          "kind": "FlowCollector",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "agent": {
+              "ebpf": {
+                "cacheActiveTimeout": "5s",
+                "cacheMaxFlows": 100000,
+                "excludeInterfaces": [
+                  "lo"
+                ],
+                "imagePullPolicy": "IfNotPresent",
+                "interfaces": [],
+                "kafkaBatchSize": 1048576,
+                "logLevel": "info",
+                "privileged": false,
+                "resources": {
+                  "limits": {
+                    "memory": "800Mi"
+                  },
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "50Mi"
+                  }
+                },
+                "sampling": 50
+              },
+              "type": "EBPF"
+            },
+            "consolePlugin": {
+              "autoscaler": {
+                "maxReplicas": 3,
+                "metrics": [
+                  {
+                    "resource": {
+                      "name": "cpu",
+                      "target": {
+                        "averageUtilization": 50,
+                        "type": "Utilization"
+                      }
+                    },
+                    "type": "Resource"
+                  }
+                ],
+                "minReplicas": 1,
+                "status": "DISABLED"
+              },
+              "enable": true,
+              "imagePullPolicy": "IfNotPresent",
+              "logLevel": "info",
+              "port": 9001,
+              "portNaming": {
+                "enable": true,
+                "portNames": {
+                  "3100": "loki"
+                }
+              },
+              "quickFilters": [
+                {
+                  "default": true,
+                  "filter": {
+                    "flow_layer": "app"
+                  },
+                  "name": "Applications"
+                },
+                {
+                  "filter": {
+                    "flow_layer": "infra"
+                  },
+                  "name": "Infrastructure"
+                },
+                {
+                  "default": true,
+                  "filter": {
+                    "dst_kind": "Pod",
+                    "src_kind": "Pod"
+                  },
+                  "name": "Pods network"
+                },
+                {
+                  "filter": {
+                    "dst_kind": "Service"
+                  },
+                  "name": "Services network"
+                }
+              ],
+              "register": true
+            },
+            "deploymentModel": "DIRECT",
+            "exporters": [],
+            "kafka": {
+              "address": "kafka-cluster-kafka-bootstrap.netobserv",
+              "tls": {
+                "caCert": {
+                  "certFile": "ca.crt",
+                  "name": "kafka-cluster-cluster-ca-cert",
+                  "type": "secret"
+                },
+                "enable": false,
+                "userCert": {
+                  "certFile": "user.crt",
+                  "certKey": "user.key",
+                  "name": "flp-kafka",
+                  "type": "secret"
+                }
+              },
+              "topic": "network-flows"
+            },
+            "loki": {
+              "batchSize": 10485760,
+              "batchWait": "1s",
+              "enable": true,
+              "maxBackoff": "5s",
+              "maxRetries": 2,
+              "minBackoff": "1s",
+              "statusTls": {
+                "caCert": {
+                  "certFile": "service-ca.crt",
+                  "name": "loki-ca-bundle",
+                  "type": "configmap"
+                },
+                "enable": false,
+                "insecureSkipVerify": false,
+                "userCert": {
+                  "certFile": "tls.crt",
+                  "certKey": "tls.key",
+                  "name": "loki-query-frontend-http",
+                  "type": "secret"
+                }
+              },
+              "tls": {
+                "caCert": {
+                  "certFile": "service-ca.crt",
+                  "name": "loki-gateway-ca-bundle",
+                  "type": "configmap"
+                },
+                "enable": false,
+                "insecureSkipVerify": false
+              },
+              "url": "http://loki.netobserv.svc:3100/"
+            },
+            "namespace": "netobserv",
+            "processor": {
+              "conversationEndTimeout": "10s",
+              "conversationHeartbeatInterval": "30s",
+              "conversationTerminatingTimeout": "5s",
+              "dropUnusedFields": true,
+              "imagePullPolicy": "IfNotPresent",
+              "kafkaConsumerAutoscaler": null,
+              "kafkaConsumerBatchSize": 10485760,
+              "kafkaConsumerQueueCapacity": 1000,
+              "kafkaConsumerReplicas": 3,
+              "logLevel": "info",
+              "logTypes": "FLOWS",
+              "metrics": {
+                "disableAlerts": [],
+                "includeList": [
+                  "node_ingress_bytes_total",
+                  "workload_ingress_bytes_total",
+                  "namespace_flows_total"
+                ],
+                "server": {
+                  "port": 9102
+                }
+              },
+              "port": 2055,
+              "profilePort": 6060,
+              "resources": {
+                "limits": {
+                  "memory": "800Mi"
+                },
+                "requests": {
+                  "cpu": "100m",
+                  "memory": "100Mi"
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "flows.netobserv.io/v1beta2",
+          "kind": "FlowCollector",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "agent": {
+              "ebpf": {
+                "cacheActiveTimeout": "5s",
+                "cacheMaxFlows": 100000,
+                "excludeInterfaces": [
+                  "lo"
+                ],
+                "imagePullPolicy": "IfNotPresent",
+                "interfaces": [],
+                "kafkaBatchSize": 1048576,
+                "logLevel": "info",
+                "metrics": {
+                  "server": {
+                    "port": 9400
+                  }
+                },
+                "privileged": false,
+                "resources": {
+                  "limits": {
+                    "memory": "800Mi"
+                  },
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "50Mi"
+                  }
+                },
+                "sampling": 50
+              },
+              "type": "eBPF"
+            },
+            "consolePlugin": {
+              "autoscaler": {
+                "maxReplicas": 3,
+                "metrics": [
+                  {
+                    "resource": {
+                      "name": "cpu",
+                      "target": {
+                        "averageUtilization": 50,
+                        "type": "Utilization"
+                      }
+                    },
+                    "type": "Resource"
+                  }
+                ],
+                "minReplicas": 1,
+                "status": "Disabled"
+              },
+              "enable": true,
+              "imagePullPolicy": "IfNotPresent",
+              "logLevel": "info",
+              "portNaming": {
+                "enable": true,
+                "portNames": {
+                  "3100": "loki"
+                }
+              },
+              "quickFilters": [
+                {
+                  "default": true,
+                  "filter": {
+                    "flow_layer": "\"app\""
+                  },
+                  "name": "Applications"
+                },
+                {
+                  "filter": {
+                    "flow_layer": "\"infra\""
+                  },
+                  "name": "Infrastructure"
+                },
+                {
+                  "default": true,
+                  "filter": {
+                    "dst_kind": "\"Pod\"",
+                    "src_kind": "\"Pod\""
+                  },
+                  "name": "Pods network"
+                },
+                {
+                  "filter": {
+                    "dst_kind": "\"Service\""
+                  },
+                  "name": "Services network"
+                }
+              ],
+              "replicas": 1,
+              "resources": {
+                "limits": {
+                  "memory": "100Mi"
+                },
+                "requests": {
+                  "cpu": "100m",
+                  "memory": "50Mi"
+                }
+              }
+            },
+            "deploymentModel": "Direct",
+            "exporters": [],
+            "kafka": {
+              "address": "kafka-cluster-kafka-bootstrap.netobserv",
+              "tls": {
+                "caCert": {
+                  "certFile": "ca.crt",
+                  "name": "kafka-cluster-cluster-ca-cert",
+                  "type": "secret"
+                },
+                "enable": false,
+                "userCert": {
+                  "certFile": "user.crt",
+                  "certKey": "user.key",
+                  "name": "flp-kafka",
+                  "type": "secret"
+                }
+              },
+              "topic": "network-flows"
+            },
+            "loki": {
+              "enable": true,
+              "lokiStack": {
+                "name": "loki"
+              },
+              "mode": "Monolithic",
+              "monolithic": {
+                "tenantID": "netobserv",
+                "tls": {
+                  "caCert": {
+                    "certFile": "service-ca.crt",
+                    "name": "loki-gateway-ca-bundle",
+                    "type": "configmap"
+                  },
+                  "enable": false
+                },
+                "url": "http://loki.netobserv.svc:3100/"
+              },
+              "readTimeout": "30s",
+              "writeBatchSize": 10485760,
+              "writeBatchWait": "1s",
+              "writeTimeout": "10s"
+            },
+            "namespace": "netobserv",
+            "processor": {
+              "imagePullPolicy": "IfNotPresent",
+              "kafkaConsumerAutoscaler": null,
+              "kafkaConsumerBatchSize": 10485760,
+              "kafkaConsumerQueueCapacity": 1000,
+              "kafkaConsumerReplicas": 3,
+              "logLevel": "info",
+              "logTypes": "Flows",
+              "metrics": {
+                "disableAlerts": [],
+                "server": {
+                  "port": 9401
+                }
+              },
+              "resources": {
+                "limits": {
+                  "memory": "800Mi"
+                },
+                "requests": {
+                  "cpu": "100m",
+                  "memory": "100Mi"
+                }
+              }
+            },
+            "prometheus": {
+              "querier": {
+                "enable": true,
+                "mode": "Auto",
+                "timeout": "30s"
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Seamless Upgrades
+    categories: Monitoring, Networking
+    console.openshift.io/plugins: '["netobserv-plugin"]'
+    containerImage: quay.io/netobserv/network-observability-operator:1.6.2-community
+    createdAt: "2024-08-22T18:26:56Z"
+    description: Network flows collector and monitoring solution
+    operatorframework.io/initialization-resource: '{"apiVersion":"flows.netobserv.io/v1beta2",
+      "kind":"FlowCollector","metadata":{"name":"cluster"},"spec": {}}'
+    operatorframework.io/suggested-namespace: openshift-netobserv-operator
+    operators.operatorframework.io/builder: operator-sdk-v1.25.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/netobserv/network-observability-operator
+    support: NetObserv team
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/arch.ppc64le: supported
+    operatorframework.io/arch.s390x: supported
+    operatorframework.io/os.linux: supported
+  name: netobserv-operator.v1.6.3-community
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: '`FlowCollector` is the schema for the network flows collection
+        API, which pilots and configures the underlying deployments.'
+      displayName: Flow Collector
+      kind: FlowCollector
+      name: flowcollectors.flows.netobserv.io
+      version: v1beta1
+    - description: '`FlowCollector` is the schema for the network flows collection
+        API, which pilots and configures the underlying deployments.'
+      displayName: Flow Collector
+      kind: FlowCollector
+      name: flowcollectors.flows.netobserv.io
+      specDescriptors:
+      - description: defines the desired type of deployment for flow processing.
+        displayName: Deployment model
+        path: deploymentModel
+      - description: for flows extraction.
+        displayName: Agent configuration
+        path: agent
+      - path: agent.type
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - path: agent.ipfix
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: Settings related to the eBPF-based flow reporter.
+        displayName: eBPF Agent configuration
+        path: agent.ebpf
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:agent.type:eBPF
+      - displayName: Privileged mode
+        path: agent.ebpf.privileged
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - displayName: Cache active timeout
+        path: agent.ebpf.cacheActiveTimeout
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Cache max flows
+        path: agent.ebpf.cacheMaxFlows
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Kafka batch size
+        path: agent.ebpf.kafkaBatchSize
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Log level
+        path: agent.ebpf.logLevel
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Image pull policy
+        path: agent.ebpf.imagePullPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Resource Requirements
+        path: agent.ebpf.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - path: agent.ebpf.advanced
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - path: agent.ebpf.flowFilter
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - path: agent.ebpf.metrics.enable
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: to use Kafka as a broker as part of the flow collection pipeline.
+        displayName: Kafka configuration
+        path: kafka
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+      - displayName: TLS configuration
+        path: kafka.tls
+      - path: kafka.tls.enable
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - displayName: Insecure
+        path: kafka.tls.insecureSkipVerify
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:kafka.tls.enable:true
+      - displayName: User certificate when using mTLS
+        path: kafka.tls.userCert
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:kafka.tls.enable:true
+      - displayName: CA certificate
+        path: kafka.tls.caCert
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:kafka.tls.enable:true
+      - path: kafka.sasl
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: of the component that receives the flows from the agent, enriches
+          them, generates metrics, and forwards them to the Loki persistence layer
+          and/or any available exporter.
+        displayName: Processor configuration
+        path: processor
+      - displayName: Multi-cluster deployment
+        path: processor.multiClusterDeployment
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - displayName: Cluster name
+        path: processor.clusterName
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:processor.multiClusterDeployment:true
+      - displayName: Availability zones
+        path: processor.addZone
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - path: processor.advanced
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Metrics configuration
+        path: processor.metrics
+      - displayName: Server configuration
+        path: processor.metrics.server
+      - displayName: TLS configuration
+        path: processor.metrics.server.tls
+      - displayName: Insecure
+        path: processor.metrics.server.tls.insecureSkipVerify
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:processor.metrics.server.tls.type:Provided
+      - displayName: Cert
+        path: processor.metrics.server.tls.provided
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:processor.metrics.server.tls.type:Provided
+      - displayName: CA
+        path: processor.metrics.server.tls.providedCaFile
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:processor.metrics.server.tls.type:Provided
+      - displayName: Kafka consumer replicas
+        path: processor.kafkaConsumerReplicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: kafka consumer autoscaler
+        path: processor.kafkaConsumerAutoscaler
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Kafka consumer queue capacity
+        path: processor.kafkaConsumerQueueCapacity
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Kafka consumer batch size
+        path: processor.kafkaConsumerBatchSize
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:deploymentModel:Kafka
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - path: processor.subnetLabels.openShiftAutoDetect
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - displayName: Log level
+        path: processor.logLevel
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Image pull policy
+        path: processor.imagePullPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Resource Requirements
+        path: processor.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: for the flow store.
+        displayName: Loki client settings
+        path: loki
+      - displayName: Enable
+        path: loki.enable
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - displayName: Mode
+        path: loki.mode
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.enable:true
+      - displayName: Loki stack
+        path: loki.lokiStack
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.mode:LokiStack
+      - displayName: Monolithic
+        path: loki.monolithic
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.mode:Monolithic
+      - displayName: Microservices
+        path: loki.microservices
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.mode:Microservices
+      - displayName: Manual
+        path: loki.manual
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.mode:Manual
+      - displayName: Write batch wait
+        path: loki.writeBatchWait
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Write batch size
+        path: loki.writeBatchSize
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Write timeout
+        path: loki.writeTimeout
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - path: loki.advanced
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: related to the OpenShift Console integration.
+        displayName: Console plugin configuration
+        path: consolePlugin
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:loki.enable:true
+      - displayName: Enable
+        path: consolePlugin.enable
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - displayName: Port naming
+        path: consolePlugin.portNaming
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+      - displayName: Quick filters
+        path: consolePlugin.quickFilters
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+      - displayName: Replicas
+        path: consolePlugin.replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Horizontal pod autoscaler
+        path: consolePlugin.autoscaler
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Log level
+        path: consolePlugin.logLevel
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Image pull policy
+        path: consolePlugin.imagePullPolicy
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:imagePullPolicy"
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Resource Requirements
+        path: consolePlugin.resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:consolePlugin.enable:true
+      - path: consolePlugin.advanced
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      - description: additional optional exporters for custom consumption or storage.
+        displayName: Exporters
+        path: exporters
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - displayName: Type
+        path: exporters[0].type
+      - displayName: IPFIX configuration
+        path: exporters[0].ipfix
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:exporters.type:IPFIX
+      - displayName: Kafka configuration
+        path: exporters[0].kafka
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldDependency:exporters.type:Kafka
+      - displayName: Exclude interfaces
+        path: agent.ebpf.excludeInterfaces
+      - displayName: Features
+        path: agent.ebpf.features
+      - displayName: Interfaces
+        path: agent.ebpf.interfaces
+      - displayName: Metrics
+        path: agent.ebpf.metrics
+      - displayName: Disable alerts
+        path: agent.ebpf.metrics.disableAlerts
+      - displayName: Server
+        path: agent.ebpf.metrics.server
+      - displayName: Port
+        path: agent.ebpf.metrics.server.port
+      - displayName: Sampling
+        path: agent.ebpf.sampling
+      - displayName: Enable
+        path: consolePlugin.portNaming.enable
+      - displayName: Port names
+        path: consolePlugin.portNaming.portNames
+      - displayName: Address
+        path: kafka.address
+      - displayName: Topic
+        path: kafka.topic
+      - displayName: Name
+        path: loki.lokiStack.name
+      - displayName: Namespace
+        path: loki.lokiStack.namespace
+      - displayName: Auth token
+        path: loki.manual.authToken
+      - displayName: Ingester url
+        path: loki.manual.ingesterUrl
+      - displayName: Querier url
+        path: loki.manual.querierUrl
+      - displayName: Status url
+        path: loki.manual.statusUrl
+      - displayName: TenantID
+        path: loki.manual.tenantID
+      - displayName: Ingester url
+        path: loki.microservices.ingesterUrl
+      - displayName: Querier url
+        path: loki.microservices.querierUrl
+      - displayName: TenantID
+        path: loki.microservices.tenantID
+      - displayName: TenantID
+        path: loki.monolithic.tenantID
+      - displayName: Url
+        path: loki.monolithic.url
+      - displayName: Read timeout
+        path: loki.readTimeout
+      - displayName: Namespace
+        path: namespace
+      - displayName: Log types
+        path: processor.logTypes
+      - displayName: Disable alerts
+        path: processor.metrics.disableAlerts
+      - displayName: Include list
+        path: processor.metrics.includeList
+      - displayName: Port
+        path: processor.metrics.server.port
+      - displayName: Subnet labels
+        path: processor.subnetLabels
+      - displayName: Custom labels
+        path: processor.subnetLabels.customLabels
+      - displayName: Prometheus
+        path: prometheus
+      - displayName: Querier
+        path: prometheus.querier
+      - displayName: Enable
+        path: prometheus.querier.enable
+      - displayName: Manual
+        path: prometheus.querier.manual
+      - displayName: Forward user token
+        path: prometheus.querier.manual.forwardUserToken
+      - displayName: Url
+        path: prometheus.querier.manual.url
+      - displayName: Mode
+        path: prometheus.querier.mode
+      - displayName: Timeout
+        path: prometheus.querier.timeout
+      statusDescriptors:
+      - description: Namespace where console plugin and flowlogs-pipeline have been
+          deployed.
+        displayName: Namespace
+        path: namespace
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Conditions of the FlowCollector instance health.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1beta2
+    - description: '`FlowMetric` is the schema for the custom metrics API, which allows
+        to generate more metrics out of flow logs. You can find examples here: https://github.com/netobserv/network-observability-operator/tree/1.6.2-community/config/samples/flowmetrics'
+      displayName: Flow Metric
+      kind: FlowMetric
+      name: flowmetrics.flows.netobserv.io
+      version: v1alpha1
+  description: |-
+    DEPRECATED: this distribution channel is deprecated and doesn't receive new updates. Please read https://github.com/orgs/netobserv/discussions/996 to learn more.
+
+    NetObserv Operator is an OpenShift / Kubernetes operator for network observability. It deploys a monitoring pipeline that consists in:
+    - an eBPF agent, that generates network flows from captured packets
+    - flowlogs-pipeline, a component that collects, enriches and exports these flows
+    - when used in OpenShift, a Console plugin for flows visualization with powerful filtering options, a topology representation and more
+
+    Flow data is then available in multiple ways, each optional:
+
+    - As Prometheus metrics
+    - As raw flow logs stored in Grafana Loki
+    - As raw flow logs exported to a collector
+
+    ## Dependencies
+
+    ### Loki
+
+    [Loki](https://grafana.com/oss/loki/), from GrafanaLabs, can optionally be used as the backend to store all collected flows. The NetObserv Operator does not install Loki directly, however we provide some guidance to help you there.
+
+    For normal usage, we recommend two options:
+
+    - Installing the [Loki Operator](https://loki-operator.dev/docs/prologue/quickstart.md/). We have written [a guide](https://github.com/netobserv/documents/blob/main/loki_operator.md) to help you through those steps. Please note that it requires configuring an object storage. Note also that the Loki Operator can also be used for [OpenShift cluster logging](https://docs.openshift.com/container-platform/latest/logging/cluster-logging.html). If you do so, you should not share the same `LokiStack` for Logging and NetObserv.
+
+    - Installing using [Grafana's official documentation](https://grafana.com/docs/loki/latest/). Here also we wrote a ["distributed Loki" step by step guide](https://github.com/netobserv/documents/blob/main/loki_distributed.md).
+
+    For a quick try that is not suitable for production and not scalable (it deploys a single pod, configures a 10GB storage PVC, with 24 hours of retention), you can simply run the following commands:
+
+    ```
+    kubectl create namespace netobserv
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/5410e65b8e05aaabd1244a9524cfedd8ac8c56b5/examples/zero-click-loki/1-storage.yaml) -n netobserv
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/5410e65b8e05aaabd1244a9524cfedd8ac8c56b5/examples/zero-click-loki/2-loki.yaml) -n netobserv
+    ```
+
+    If you prefer to not use Loki, you must set `spec.loki.enable` to `false` in `FlowCollector`.
+    In that case, you can still get the Prometheus metrics or export raw flows to a custom collector. But be aware that some of the Console plugin features will be disabled. For instance, you will not be able to view raw flows there, and the metrics / topology will have a more limited level of details, missing information such as pods or IPs.
+
+    ### Kafka
+
+    [Apache Kafka](https://kafka.apache.org/) can optionally be used for a more resilient and scalable architecture. You can use for example [Strimzi](https://strimzi.io/), an operator-based distribution of Kafka for Kubernetes and OpenShift.
+
+    ### Grafana
+
+    [Grafana](https://grafana.com/oss/grafana/) can optionally be installed for custom dashboards and query capabilities.
+
+    ## Configuration
+
+    The `FlowCollector` resource is used to configure the operator and its managed components. A comprehensive documentation is [available here](https://github.com/netobserv/network-observability-operator/blob/1.6.2-community/docs/FlowCollector.md), and a full sample file [there](https://github.com/netobserv/network-observability-operator/blob/1.6.2-community/config/samples/flows_v1beta2_flowcollector.yaml).
+
+    To edit configuration in cluster, run:
+
+    ```bash
+    kubectl edit flowcollector cluster
+    ```
+
+    As it operates cluster-wide on every node, only a single `FlowCollector` is allowed, and it has to be named `cluster`.
+
+    A couple of settings deserve special attention:
+
+    - Sampling (`spec.agent.ebpf.sampling`): a value of `100` means: one flow every 100 is sampled. `1` means all flows are sampled. The lower it is, the more flows you get, and the more accurate are derived metrics, but the higher amount of resources are consumed. By default, sampling is set to 50 (ie. 1:50). Note that more sampled flows also means more storage needed. We recommend to start with default values and refine empirically, to figure out which setting your cluster can manage.
+
+    - Loki (`spec.loki`): configure here how to reach Loki. The default values match the Loki quick install paths mentioned above, but you might have to configure differently if you used another installation method. Make sure to disable it (`spec.loki.enable`) if you don't want to use Loki.
+
+    - Quick filters (`spec.consolePlugin.quickFilters`): configure preset filters to be displayed in the Console plugin. They offer a way to quickly switch from filters to others, such as showing / hiding pods network, or infrastructure network, or application network, etc. They can be tuned to reflect the different workloads running on your cluster. For a list of available filters, [check this page](https://github.com/netobserv/network-observability-operator/blob/1.6.2-community/docs/QuickFilters.md).
+
+    - Kafka (`spec.deploymentModel: KAFKA` and `spec.kafka`): when enabled, integrates the flow collection pipeline with Kafka, by splitting ingestion from transformation (kube enrichment, derived metrics, ...). Kafka can provide better scalability, resiliency and high availability ([view more details](https://www.redhat.com/en/topics/integration/what-is-apache-kafka)). Assumes Kafka is already deployed and a topic is created.
+
+    - Exporters (`spec.exporters`) an optional list of exporters to which to send enriched flows. KAFKA and IPFIX exporters are supported. This allows you to define any custom storage or processing that can read from Kafka or use the IPFIX standard.
+
+    - To enable availability zones awareness, set `spec.processor.addZone` to `true`.
+
+    ## Further reading
+
+    Please refer to the documentation on GitHub for more information.
+
+    This documentation includes:
+
+    - An [overview](https://github.com/netobserv/network-observability-operator#openshift-console) of the features, with screenshots
+    - More information on [configuring metrics](https://github.com/netobserv/network-observability-operator/blob/1.6.2-community/docs/Metrics.md).
+    - A [performance](https://github.com/netobserv/network-observability-operator#performance-fine-tuning) section, for fine-tuning
+    - A [security](https://github.com/netobserv/network-observability-operator#securing-data-and-communications) section
+    - An [F.A.Q.](https://github.com/netobserv/network-observability-operator#faq--troubleshooting) section
+  displayName: "[DEPRECATED] NetObserv Operator"
+  icon:
+  - base64data: PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI2LjAuMiwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAxMDAgMTAwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6dXJsKCNTVkdJRF8xXyk7fQoJLnN0MXtmaWxsOiNGRkZGRkY7fQoJLnN0MntvcGFjaXR5OjAuNjt9Cgkuc3Qze29wYWNpdHk6MC41O30KCS5zdDR7b3BhY2l0eTowLjQ7fQo8L3N0eWxlPgo8Zz4KCTxnPgoJCTxnPgoJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzFfIiBjeD0iMTQuNzc1OCIgY3k9Ii0yLjk3NzEiIHI9IjkxLjYyNyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgoJCQkJPHN0b3AgIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6IzNDM0ZBNiIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6IzNCMDM0MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNTAsOTljLTEzLjMsMC0yNS40LTUuMy0zNC4yLTEzLjlDNi43LDc2LjIsMSw2My43LDEsNTBDMSwyMi45LDIyLjksMSw1MCwxYzEzLjcsMCwyNi4yLDUuNywzNS4xLDE0LjgKCQkJCUM5My43LDI0LjYsOTksMzYuNyw5OSw1MEM5OSw3Ny4xLDc3LjEsOTksNTAsOTl6Ii8+CgkJPC9nPgoJCTxnPgoJCQk8Y2lyY2xlIGNsYXNzPSJzdDEiIGN4PSIzNy41IiBjeT0iODEuOSIgcj0iNSIvPgoJCTwvZz4KCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNNDguNiw5MS45bDE4LjgtNDMuM2MtMi41LTAuMS01LTAuNy03LjItMkwzMy4yLDY4LjJsMS40LTEuOGwyMC0yNS4xYy0xLjUtMi40LTIuMy01LjEtMi4zLTcuOUw5LDUyLjIKCQkJbDQ3LjYtMjkuOWwwLDBjMC4xLTAuMSwwLjItMC4yLDAuMi0wLjJjNi4xLTYuMSwxNS45LTYuMSwyMiwwbDAuMSwwLjFjNiw2LjEsNiwxNS45LTAuMSwyMS45Yy0wLjEsMC4xLTAuMiwwLjItMC4yLDAuMmwwLDAKCQkJTDQ4LjYsOTEuOXoiLz4KCQk8ZyBjbGFzcz0ic3QyIj4KCQkJPGNpcmNsZSBjbGFzcz0ic3QxIiBjeD0iNTAuMyIgY3k9IjE0LjciIHI9IjMuMSIvPgoJCTwvZz4KCQk8ZyBjbGFzcz0ic3QzIj4KCQkJPGNpcmNsZSBjbGFzcz0ic3QxIiBjeD0iMjcuNyIgY3k9IjU4IiByPSIxLjciLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9Ijc3LjQiIGN5PSI2OS4zIiByPSIxLjciLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjE2LjMiIGN5PSIzNi42IiByPSIxLjciLz4KCQk8L2c+CgkJPGcgY2xhc3M9InN0NCI+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjYzLjciIGN5PSI4NS45IiByPSIyLjIiLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjI5LjQiIGN5PSIxOS42IiByPSI0LjgiLz4KCQk8L2c+CgkJPGcgY2xhc3M9InN0MyI+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9Ijg4IiBjeT0iNTAiIHI9IjQuOCIvPgoJCTwvZz4KCTwvZz4KPC9nPgo8L3N2Zz4K
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - nonResourceURLs:
+          - /metrics
+          verbs:
+          - get
+        - apiGroups:
+          - apiregistration.k8s.io
+          resources:
+          - apiservices
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusterversions
+          - networks
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - namespaces
+          - secrets
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - nodes
+          - pods
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - endpoints
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors
+          - flowmetrics
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/status
+          - flowmetrics/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - loki.grafana.com
+          resourceNames:
+          - logs
+          resources:
+          - network
+          verbs:
+          - create
+          - get
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - prometheusrules
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - operator.openshift.io
+          resources:
+          - consoles
+          verbs:
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - create
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - security.openshift.io
+          resourceNames:
+          - hostnetwork
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: netobserv-controller-manager
+      deployments:
+      - label:
+          app: netobserv-operator
+          control-plane: controller-manager
+        name: netobserv-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: netobserv-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app: netobserv-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --ebpf-agent-image=$(RELATED_IMAGE_EBPF_AGENT)
+                - --flowlogs-pipeline-image=$(RELATED_IMAGE_FLOWLOGS_PIPELINE)
+                - --console-plugin-image=$(RELATED_IMAGE_CONSOLE_PLUGIN)
+                - --downstream-deployment=$(DOWNSTREAM_DEPLOYMENT)
+                - --profiling-bind-address=$(PROFILING_BIND_ADDRESS)
+                command:
+                - /manager
+                env:
+                - name: RELATED_IMAGE_EBPF_AGENT
+                  value: quay.io/netobserv/netobserv-ebpf-agent:v1.6.2-community
+                - name: RELATED_IMAGE_FLOWLOGS_PIPELINE
+                  value: quay.io/netobserv/flowlogs-pipeline:v1.6.2-community
+                - name: RELATED_IMAGE_CONSOLE_PLUGIN
+                  value: quay.io/netobserv/network-observability-console-plugin:v1.6.2-community
+                - name: DOWNSTREAM_DEPLOYMENT
+                  value: "false"
+                - name: PROFILING_BIND_ADDRESS
+                image: quay.io/netobserv/network-observability-operator:1.6.2-community
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    memory: 400Mi
+                  requests:
+                    cpu: 100m
+                    memory: 100Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                - --http2-disable
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.15.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: netobserv-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: webhook-server-cert
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: netobserv-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - network observability
+  - ebpf
+  - ipfix
+  - flow tracing
+  - flows
+  - topology
+  - network
+  - observability
+  links:
+  - name: Project page
+    url: https://github.com/netobserv/network-observability-operator
+  - name: Issue tracker
+    url: https://github.com/netobserv/network-observability-operator/issues
+  - name: Discussion board
+    url: https://github.com/netobserv/network-observability-operator/discussions
+  maintainers:
+  - email: jpinsonn@redhat.com
+    name: Julien Pinsonneau
+  - email: jtakvori@redhat.com
+    name: Joel Takvorian
+  - email: kmeth@redhat.com
+    name: Kalman Meth
+  - email: mmahmoud@redhat.com
+    name: Mohamed S. Mahmoud
+  - email: ocazade@redhat.com
+    name: Olivier Cazade
+  - email: rschaffe@redhat.com
+    name: Ronen Schaffer
+  - email: stlee@redhat.com
+    name: Steven Lee
+  maturity: alpha
+  minKubeVersion: 1.23.0
+  provider:
+    name: Red Hat
+    url: https://www.redhat.com
+  relatedImages:
+  - image: quay.io/netobserv/netobserv-ebpf-agent:v1.6.2-community
+    name: ebpf-agent
+  - image: quay.io/netobserv/flowlogs-pipeline:v1.6.2-community
+    name: flowlogs-pipeline
+  - image: quay.io/netobserv/network-observability-console-plugin:v1.6.2-community
+    name: console-plugin
+  replaces: netobserv-operator.v1.6.2-community
+  version: 1.6.3-community
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    conversionCRDs:
+    - flowcollectors.flows.netobserv.io
+    - flowmetrics.flows.netobserv.io
+    deploymentName: netobserv-controller-manager
+    generateName: cflowcollectorsflowmetrics.kb.io
+    sideEffects: None
+    targetPort: 9443
+    type: ConversionWebhook
+    webhookPath: /convert
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: netobserv-controller-manager
+    failurePolicy: Fail
+    generateName: flowcollectorconversionwebhook.netobserv.io
+    rules:
+    - apiGroups:
+      - netobserv.io
+      apiVersions:
+      - v1beta2
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - flowcollectors
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-netobserv-io-v1beta2-flowcollector
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: netobserv-controller-manager
+    failurePolicy: Fail
+    generateName: flowmetricvalidationwebhook.netobserv.io
+    rules:
+    - apiGroups:
+      - flows.netobserv.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - flowmetrics
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-flows-netobserv-io-v1alpha1-flowmetric

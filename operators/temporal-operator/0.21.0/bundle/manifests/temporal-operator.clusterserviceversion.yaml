@@ -1,0 +1,522 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "temporal.io/v1beta1",
+          "kind": "TemporalCluster",
+          "metadata": {
+            "name": "prod",
+            "namespace": "demo"
+          },
+          "spec": {
+            "jobTtlSecondsAfterFinished": 300,
+            "numHistoryShards": 1,
+            "persistence": {
+              "defaultStore": {
+                "passwordSecretRef": {
+                  "key": "PASSWORD",
+                  "name": "postgres-password"
+                },
+                "sql": {
+                  "connectAddr": "postgres.demo.svc.cluster.local:5432",
+                  "connectProtocol": "tcp",
+                  "databaseName": "temporal",
+                  "pluginName": "postgres",
+                  "user": "temporal"
+                }
+              },
+              "visibilityStore": {
+                "passwordSecretRef": {
+                  "key": "PASSWORD",
+                  "name": "postgres-password"
+                },
+                "sql": {
+                  "connectAddr": "postgres.demo.svc.cluster.local:5432",
+                  "connectProtocol": "tcp",
+                  "databaseName": "temporal_visibility",
+                  "pluginName": "postgres",
+                  "user": "temporal"
+                }
+              }
+            },
+            "ui": {
+              "enabled": true
+            },
+            "version": "1.24.3"
+          }
+        },
+        {
+          "apiVersion": "temporal.io/v1beta1",
+          "kind": "TemporalClusterClient",
+          "metadata": {
+            "name": "my-worker",
+            "namespace": "demo"
+          },
+          "spec": {
+            "clusterRef": {
+              "name": "prod"
+            }
+          }
+        },
+        {
+          "apiVersion": "temporal.io/v1beta1",
+          "kind": "TemporalNamespace",
+          "metadata": {
+            "name": "accounting"
+          },
+          "spec": {
+            "clusterRef": {
+              "name": "prod"
+            },
+            "description": "Accounting team namespace",
+            "retentionPeriod": "168h"
+          }
+        },
+        {
+          "apiVersion": "temporal.io/v1beta1",
+          "kind": "TemporalSchedule",
+          "metadata": {
+            "name": "demo",
+            "namespace": "demo"
+          },
+          "spec": {
+            "allowDeletion": true,
+            "namespaceRef": {
+              "name": "demo"
+            },
+            "schedule": {
+              "action": {
+                "workflow": {
+                  "id": "Demo",
+                  "taskQueue": "SomeWorkflowQueue",
+                  "type": "SomeWorkflow"
+                }
+              },
+              "spec": {
+                "intervals": [
+                  {
+                    "every": "10m"
+                  }
+                ]
+              },
+              "state": {
+                "paused": false
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Seamless Upgrades
+    categories: Application Runtime, Developer Tools, AI/Machine Learning
+    containerImage: ghcr.io/alexandrevilain/temporal-operator
+    createdAt: "2025-04-03T09:32:19Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+  name: temporal-operator.v0.21.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: A TemporalClusterClient creates a new mTLS client in the targeted
+        temporal cluster.
+      displayName: Temporal Cluster Client
+      kind: TemporalClusterClient
+      name: temporalclusterclients.temporal.io
+      version: v1beta1
+    - description: TemporalCluster defines a temporal cluster deployment.
+      displayName: Temporal Cluster
+      kind: TemporalCluster
+      name: temporalclusters.temporal.io
+      version: v1beta1
+    - description: A TemporalNamespace creates a namespace in the targeted temporal
+        cluster.
+      displayName: Temporal Namespace
+      kind: TemporalNamespace
+      name: temporalnamespaces.temporal.io
+      version: v1beta1
+    - kind: TemporalSchedule
+      name: temporalschedules.temporal.io
+      version: v1beta1
+  description: |
+    ## Temporal
+    Temporal is a durable workflow execution environment for applications. The Temporal operator will deploy all required Temporal server services and dependencies. You will need to deploy database, elasticsearch (optional) and prometheus/grafana (optional) separately. Temporal supports native MySQL, PostgreSQL or Cassandra databases.
+
+    ## Quick Setup
+    Follow these steps to deploy a Temporal cluster instance with a test PostgreSQL database.
+
+    ### Create Demo Namespace
+    <pre>
+    $ kubectl apply -f https://raw.githubusercontent.com/alexandrevilain/temporal-operator/main/examples/cluster-postgres/00-namespace.yaml
+    </pre>
+
+    ### Deploy PostgreSQL database
+    <pre>
+    $ kubectl apply -f https://raw.githubusercontent.com/alexandrevilain/temporal-operator/main/examples/cluster-postgres/01-postgresql.yaml
+    </pre>
+
+    ### Create TemporalCluster CustomResource
+    <pre>
+    $ vi temporalcluster.yaml
+    apiVersion: temporal.io/v1beta1
+    kind: TemporalCluster
+    metadata:
+      name: prod
+    spec:
+      jobTtlSecondsAfterFinished: 300
+      numHistoryShards: 512
+      persistence:
+        defaultStore:
+          passwordSecretRef:
+            key: PASSWORD
+            name: postgres-password
+          sql:
+            connectAddr: 'postgres.demo.svc.cluster.local:5432'
+            connectProtocol: tcp
+            databaseName: temporal
+            pluginName: postgres
+            user: temporal
+        visibilityStore:
+          passwordSecretRef:
+            key: PASSWORD
+            name: postgres-password
+          sql:
+            connectAddr: 'postgres.demo.svc.cluster.local:5432'
+            connectProtocol: tcp
+            databaseName: temporal_visibility
+            pluginName: postgres
+            user: temporal
+      ui:
+        enabled: true
+      version: 1.24.3
+    </pre>
+
+    ### Apply TemporalCluster CustomResource
+    <pre>
+    $ kubectl apply -f temporal.yaml -n demo
+    </pre>
+  displayName: Temporal Operator
+  icon:
+  - base64data: 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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - secrets
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - get
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          - issuers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - destinationrules
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - ingresses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - security.istio.io
+          resources:
+          - peerauthentications
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - temporal.io
+          resources:
+          - temporalclusterclients
+          - temporalclusters
+          - temporalnamespaces
+          - temporalschedules
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - temporal.io
+          resources:
+          - temporalclusterclients/finalizers
+          - temporalclusters/finalizers
+          - temporalnamespaces/finalizers
+          - temporalschedules/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - temporal.io
+          resources:
+          - temporalclusterclients/status
+          - temporalclusters/status
+          - temporalnamespaces/status
+          - temporalschedules/status
+          verbs:
+          - get
+          - patch
+          - update
+        serviceAccountName: temporal-operator-controller-manager
+      deployments:
+      - label:
+          control-plane: controller-manager
+        name: temporal-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --leader-elect
+                command:
+                - /manager
+                image: ghcr.io/alexandrevilain/temporal-operator:v0.21.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: temporal-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: webhook-server-cert
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: temporal-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - durable
+  - execution
+  - workflow
+  - sdk
+  - application
+  - distributed
+  links:
+  - name: Temporal Operator
+    url: https://github.com/alexandrevilain/temporal-operator
+  maintainers:
+  - email: alexandre.vilain@me.com
+    name: alexandrevilain
+  - email: keith.tenzer@temporal.io
+    name: ktenzer
+  maturity: alpha
+  minKubeVersion: 1.22.0
+  provider:
+    name: Temporal Community
+    url: https://temporal.io/
+  replaces: temporal-operator.helm-chart-0.6.0
+  version: 0.21.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mtemporalc.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-temporal-io-v1beta1-temporalcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: temporal-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vtemporalc.kb.io
+    rules:
+    - apiGroups:
+      - temporal.io
+      apiVersions:
+      - v1beta1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - temporalclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-temporal-io-v1beta1-temporalcluster

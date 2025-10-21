@@ -40,7 +40,7 @@ env:
   OPP_MIRROR_INDEX_NAME: "catalog"
   OPP_MIRROR_INDEX_ENABLED: "1"
   OPP_MIRROR_INDEX_MULTIARCH_BASE: "quay.io/operator-framework/opm"
-  OPP_MULTIARCH_SUPPORTED_VERSIONS: "latest"
+  OPP_MULTIARCH_SUPPORTED_VERSIONS: "v1.57.0"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
   IIB_INPUT_REGISTRY_USER: "framework_automation"
   OPP_REGISTRY_MIRROR_USER: "framework_automation"
@@ -191,7 +191,7 @@ jobs:
     needs: [pr-check, remove-k8s ]
 
     if: needs.pr-check.outputs.opp_release_ready == '1' && (needs.pr-check.outputs.opp_op_delete == '0' || needs.pr-check.outputs.opp_is_new_operatror == '1' || needs.pr-check.outputs.opp_recreate == '1' )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: List of missing operators
         id: operators
@@ -226,7 +226,10 @@ jobs:
           ANSIBLE_FORCE_COLOR: 1
           ANSIBLE_DISPLAY_SKIPPED_HOSTS: 0
           ANSIBLE_STDOUT_CALLBACK: "yaml"
+          TMPDIR: "/mnt/tmp"
         run: |
+          sudo mkdir -p "${TMPDIR}"
+          sudo chmod 1777 "${TMPDIR}"
           OPP_FORCE_OPERATORS=${OPP_FORCE_OPERATORS// /,}
           echo $OPP_FORCE_OPERATORS
           [ "$OPP_AUTO_LABEL" = '1' ] && ANSIBLE_ARGS="-e automatic_cluster_version_label=true" || ANSIBLE_ARGS="-e automatic_cluster_version_label=false"
@@ -236,12 +239,12 @@ jobs:
           cd operator-test-playbooks
           ansible-playbook -i localhost, -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=true -e catalog_repo=$OPP_THIS_REPO_BASE/$OPP_THIS_REPO -e catalog_repo_branch=$OPP_THIS_BRANCH upstream/local.yml --tags reset_tools,operator_info -e operator_base_dir=/tmp/community-operators-for-catalog/operators -e operators=$OPP_FORCE_OPERATORS -e cluster_type=$OPP_PRODUCTION_TYPE -e strict_cluster_version_labels=true -e production_registry_namespace=$OPP_RELEASE_BUNDLE_REGISTRY/$OPP_RELEASE_BUNDLE_ORGANIZATION $ANSIBLE_ARGS
       - name: Upload operator_info
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: operator_info
           path: "/tmp/operator-test/op_info.yaml"
       - name: Upload converted operators
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: operators_converted
           path: "/tmp/operator-test/operators"
@@ -259,12 +262,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download operator_info
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: operator_info
           path: /tmp/operator-test/
       - name: Download converted operators
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: operators_converted
           path: /tmp/operator-test/operators
@@ -302,12 +305,12 @@ jobs:
       fail-fast: false
     steps:
       - name: Download operator_info
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: operator_info
           path: /tmp/operator-test/
       - name: Download converted operators
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: operators_converted
           path: /tmp/operator-test/operators
@@ -354,7 +357,7 @@ jobs:
     needs: [ pr-check, operators-k8s, bundles-k8s, release-k8s]
     if: needs.pr-check.outputs.opp_release_ready == '1' && needs.operators-k8s.outputs.opp_uncomplete_operators != ''
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         index-tag: ['latest']
@@ -392,9 +395,12 @@ jobs:
     env:
       OHIO_INPUT_CATALOG_IMAGE: "quay.io/operatorhubio/catalog_tmp:latest"
       OHIO_REGISTRY_IMAGE: "quay.io/operator-framework/upstream-community-operators:latest"
+      TMPDIR: "/mnt/tmp"
 
     steps:
       - name: Ohio image
+        env:
+          TMPDIR: "/mnt/tmp"
         run: |
           echo "ohio_image operators/sync $OPP_THIS_REPO $OPP_THIS_BRANCH"
           bash <(curl -sL $OPP_SCRIPT_CLEANUP_URL)

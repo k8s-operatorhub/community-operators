@@ -1,0 +1,320 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  creationTimestamp: null
+  name: flowmetrics.flows.netobserv.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: netobserv-webhook-service
+          namespace: netobserv
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: flows.netobserv.io
+  names:
+    kind: FlowMetric
+    listKind: FlowMetricList
+    plural: flowmetrics
+    singular: flowmetric
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.metricName
+      name: Metric Name
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Status
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="CardinalityOK")].reason
+      name: Cardinality
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: FlowMetric is the API allowing to create custom metrics from
+          the collected flow logs.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              FlowMetricSpec defines the desired state of FlowMetric
+              The provided API allows you to customize these metrics according to your needs.<br>
+              When adding new metrics or modifying existing labels, you must carefully monitor the memory
+              usage of Prometheus workloads as this could potentially have a high impact. Cf https://rhobs-handbook.netlify.app/products/openshiftmonitoring/telemetry.md/#what-is-the-cardinality-of-a-metric<br>
+              To check the cardinality of all NetObserv metrics, run as `promql`: `count({__name__=~"netobserv.*"}) by (__name__)`.
+            properties:
+              buckets:
+                description: A list of buckets to use when `type` is "Histogram".
+                  The list must be parsable as floats. When not set, Prometheus default
+                  buckets are used.
+                items:
+                  type: string
+                type: array
+              charts:
+                description: Charts configuration, for the OpenShift Console in the
+                  administrator view, Dashboards menu.
+                items:
+                  description: Configures charts / dashboard generation associated
+                    to a metric
+                  properties:
+                    dashboardName:
+                      default: Main
+                      description: Name of the containing dashboard. If this name
+                        does not refer to an existing dashboard, a new dashboard is
+                        created.
+                      type: string
+                    queries:
+                      description: |-
+                        List of queries to be displayed on this chart. If `type` is `SingleStat` and multiple queries are provided,
+                        this chart is automatically expanded in several panels (one per query).
+                      items:
+                        description: Configures PromQL queries
+                        properties:
+                          legend:
+                            description: |-
+                              The query legend that applies to each timeseries represented in this chart. When multiple timeseries are displayed, you should set a legend
+                              that distinguishes each of them. It can be done with the following format: `{{ Label }}`. For example, if the `promQL` groups timeseries per
+                              label such as: `sum(rate($METRIC[2m])) by (Label1, Label2)`, you may write as the legend: `Label1={{ Label1 }}, Label2={{ Label2 }}`.
+                            type: string
+                          promQL:
+                            description: |-
+                              The `promQL` query to be run against Prometheus. If the chart `type` is `SingleStat`, this query should only return
+                              a single timeseries. For other types, a top 7 is displayed.
+                              You can use `$METRIC` to refer to the metric defined in this resource. For example: `sum(rate($METRIC[2m]))`.
+                              To learn more about `promQL`, refer to the Prometheus documentation: https://prometheus.io/docs/prometheus/latest/querying/basics/
+                            type: string
+                          top:
+                            default: 7
+                            description: Top N series to display per timestamp. Does
+                              not apply to `SingleStat` chart type.
+                            minimum: 1
+                            type: integer
+                        required:
+                        - legend
+                        - promQL
+                        - top
+                        type: object
+                      type: array
+                    sectionName:
+                      description: |-
+                        Name of the containing dashboard section. If this name does not refer to an existing section, a new section is created.
+                        If `sectionName` is omitted or empty, the chart is placed in the global top section.
+                      type: string
+                    title:
+                      description: Title of the chart.
+                      type: string
+                    type:
+                      description: Type of the chart.
+                      enum:
+                      - SingleStat
+                      - Line
+                      - StackArea
+                      type: string
+                    unit:
+                      description: Unit of this chart. Only a few units are currently
+                        supported. Leave empty to use generic number.
+                      enum:
+                      - bytes
+                      - seconds
+                      - Bps
+                      - pps
+                      - percent
+                      - ""
+                      type: string
+                  required:
+                  - dashboardName
+                  - queries
+                  - title
+                  - type
+                  type: object
+                type: array
+              direction:
+                default: Any
+                description: |-
+                  Filter for ingress, egress or any direction flows.
+                  When set to `Ingress`, it is equivalent to adding the regular expression filter on `FlowDirection`: `0|2`.
+                  When set to `Egress`, it is equivalent to adding the regular expression filter on `FlowDirection`: `1|2`.
+                enum:
+                - Any
+                - Egress
+                - Ingress
+                type: string
+              divider:
+                description: When nonzero, scale factor (divider) of the value. Metric
+                  value = Flow value / Divider.
+                type: string
+              filters:
+                description: |-
+                  `filters` is a list of fields and values used to restrict which flows are taken into account. Oftentimes, these filters must
+                  be used to eliminate duplicates: `Duplicate != "true"` and `FlowDirection = "0"`.
+                  Refer to the documentation for the list of available fields: https://docs.openshift.com/container-platform/latest/observability/network_observability/json-flows-format-reference.html.
+                items:
+                  properties:
+                    field:
+                      description: Name of the field to filter on
+                      type: string
+                    matchType:
+                      default: Equal
+                      description: Type of matching to apply
+                      enum:
+                      - Equal
+                      - NotEqual
+                      - Presence
+                      - Absence
+                      - MatchRegex
+                      - NotMatchRegex
+                      type: string
+                    value:
+                      description: Value to filter on. When `matchType` is `Equal`
+                        or `NotEqual`, you can use field injection with `$(SomeField)`
+                        to refer to any other field of the flow.
+                      type: string
+                  required:
+                  - field
+                  - matchType
+                  type: object
+                type: array
+              labels:
+                description: |-
+                  `labels` is a list of fields that should be used as Prometheus labels, also known as dimensions.
+                  From choosing labels results the level of granularity of this metric, and the available aggregations at query time.
+                  It must be done carefully as it impacts the metric cardinality (cf https://rhobs-handbook.netlify.app/products/openshiftmonitoring/telemetry.md/#what-is-the-cardinality-of-a-metric).
+                  In general, avoid setting very high cardinality labels such as IP or MAC addresses.
+                  "SrcK8S_OwnerName" or "DstK8S_OwnerName" should be preferred over "SrcK8S_Name" or "DstK8S_Name" as much as possible.
+                  Refer to the documentation for the list of available fields: https://docs.openshift.com/container-platform/latest/observability/network_observability/json-flows-format-reference.html.
+                items:
+                  type: string
+                type: array
+              metricName:
+                description: Name of the metric. In Prometheus, it is automatically
+                  prefixed with "netobserv_".
+                type: string
+              type:
+                description: |-
+                  Metric type: "Counter" or "Histogram".
+                  Use "Counter" for any value that increases over time and on which you can compute a rate, such as Bytes or Packets.
+                  Use "Histogram" for any value that must be sampled independently, such as latencies.
+                enum:
+                - Counter
+                - Histogram
+                type: string
+              valueField:
+                description: |-
+                  `valueField` is the flow field that must be used as a value for this metric. This field must hold numeric values.
+                  Leave empty to count flows rather than a specific value per flow.
+                  Refer to the documentation for the list of available fields: https://docs.openshift.com/container-platform/latest/observability/network_observability/json-flows-format-reference.html.
+                type: string
+            required:
+            - metricName
+            - type
+            type: object
+          status:
+            description: FlowMetricStatus defines the observed state of FlowMetric
+            properties:
+              conditions:
+                description: '`conditions` represent the latest available observations
+                  of an object''s state'
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            required:
+            - conditions
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

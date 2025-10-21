@@ -1,0 +1,2293 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Backup",
+          "metadata": {
+            "name": "backup1"
+          },
+          "spec": {
+            "backupPlanRef": "backupplan1",
+            "dbclusterRef": "dbcluster-sample",
+            "manual": true,
+            "physicalBackupSpec": {
+              "backupType": "full"
+            }
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "BackupPlan",
+          "metadata": {
+            "name": "backupplan1"
+          },
+          "spec": {
+            "backupRetainDays": 14,
+            "backupSchedules": {
+              "full": "0 0 * * 0",
+              "incremental": "0 21 * * *"
+            },
+            "dbclusterRef": "dbcluster-sample",
+            "paused": false
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Restore",
+          "metadata": {
+            "name": "clone1"
+          },
+          "spec": {
+            "clonedDBClusterConfig": {
+              "dbclusterName": "new-dbcluster-sample"
+            },
+            "pointInTime": "2024-02-23T19:59:43Z",
+            "sourceDBCluster": "dbcluster-sample"
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "DBCluster",
+          "metadata": {
+            "name": "dbcluster-sample"
+          },
+          "spec": {
+            "databaseVersion": "16.3.0",
+            "primarySpec": {
+              "adminUser": {
+                "passwordRef": {
+                  "name": "db-pw-dbcluster-sample"
+                }
+              },
+              "resources": {
+                "cpu": 1,
+                "disks": [
+                  {
+                    "name": "DataDisk",
+                    "size": "10Gi"
+                  }
+                ],
+                "memory": "5Gi"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "DBInstance",
+          "metadata": {
+            "name": "dbcluster-sample-rp-1"
+          },
+          "spec": {
+            "dbcParent": {
+              "name": "dbcluster-sample"
+            },
+            "instanceType": "ReadPool",
+            "nodeCount": 2,
+            "resources": {
+              "cpu": 2,
+              "disks": [
+                {
+                  "name": "DataDisk",
+                  "size": "15Gi"
+                }
+              ],
+              "memory": "6Gi"
+            },
+            "schedulingconfig": {
+              "nodeaffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                  {
+                    "preference": {
+                      "matchExpressions": [
+                        {
+                          "key": "another-node-label-key",
+                          "operator": "In",
+                          "values": [
+                            "another-node-label-value"
+                          ]
+                        }
+                      ]
+                    },
+                    "weight": 1
+                  }
+                ]
+              },
+              "podAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                  {
+                    "podAffinityTerm": {
+                      "labelSelector": {
+                        "matchExpressions": [
+                          {
+                            "key": "app",
+                            "operator": "In",
+                            "values": [
+                              "store"
+                            ]
+                          }
+                        ]
+                      },
+                      "topologyKey": "kubernetes.io/hostname"
+                    },
+                    "weight": 1
+                  }
+                ]
+              },
+              "podAntiAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                  {
+                    "podAffinityTerm": {
+                      "labelSelector": {
+                        "matchExpressions": [
+                          {
+                            "key": "security",
+                            "operator": "In",
+                            "values": [
+                              "S1"
+                            ]
+                          }
+                        ]
+                      },
+                      "topologyKey": "topology.kubernetes.io/zone"
+                    },
+                    "weight": 1
+                  }
+                ]
+              },
+              "tolerations": [
+                {
+                  "effect": "NoSchedule",
+                  "key": "node-role.kubernetes.io/control-plane",
+                  "operator": "Exists"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Failover",
+          "metadata": {
+            "name": "failover-sample"
+          },
+          "spec": {
+            "dbclusterRef": "dbcluster-sample"
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "PgBouncer",
+          "metadata": {
+            "name": "mypgbouncer"
+          },
+          "spec": {
+            "allowSuperUserAccess": true,
+            "dbclusterRef": "dbcluster-sample",
+            "parameters": {
+              "default_pool_size": "15",
+              "ignore_startup_parameters": "extra_float_digits",
+              "max_client_conn": "800",
+              "max_db_connections": "160",
+              "pool_mode": "transaction"
+            },
+            "podSpec": {
+              "image": "gcr.io/alloydb-omni/operator/g-pgbouncer:1.4.0",
+              "resources": {
+                "cpu": 1,
+                "memory": "1Gi"
+              }
+            },
+            "replicaCount": 1,
+            "serviceOptions": {
+              "type": "ClusterIP"
+            }
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Replication",
+          "metadata": {
+            "name": "replication-downstream-sample"
+          },
+          "spec": {
+            "dbcluster": {
+              "name": "dbcluster-sample"
+            },
+            "downstream": {
+              "control": "setup",
+              "host": "10.10.10.10",
+              "password": {
+                "name": "ha-rep-pw-dbcluster-sample"
+              },
+              "port": 5432,
+              "replicationSlotName": "dbcluster_sample_replication_upstream_sample",
+              "username": "alloydbreplica"
+            }
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Replication",
+          "metadata": {
+            "name": "replication-upstream-sample"
+          },
+          "spec": {
+            "dbcluster": {
+              "name": "dbcluster-sample"
+            },
+            "upstream": {}
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Restore",
+          "metadata": {
+            "name": "restore1"
+          },
+          "spec": {
+            "backup": "backup1",
+            "sourceDBCluster": "dbcluster-sample"
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Sidecar",
+          "metadata": {
+            "name": "sidecar-sample"
+          },
+          "spec": {
+            "sidecars": [
+              {
+                "args": [
+                  "-c",
+                  "while [ true ]\ndo\ndate\nset -x\nls -lh /logs/diagnostic\nset +x\ndone\n"
+                ],
+                "command": [
+                  "/bin/sh"
+                ],
+                "image": "busybox",
+                "name": "sidecar-sample",
+                "volumeMounts": [
+                  {
+                    "mountPath": "/logs",
+                    "name": "obsdisk"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "alloydbomni.dbadmin.goog/v1",
+          "kind": "Switchover",
+          "metadata": {
+            "name": "switchover-sample"
+          },
+          "spec": {
+            "dbclusterRef": "dbcluster-sample",
+            "newPrimary": "aaaa-dbcluster-sample"
+          }
+        }
+      ]
+    capabilities: Deep Insights
+    categories: Database
+    createdAt: "2025-04-09T01:16:01Z"
+    containerImage: gcr.io/alloydb-omni/operator/fleet-operator:1.4.0
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: unknown
+    operators.operatorframework.io/internal-objects: '["backuprepositories.alloydbomni.internal.dbadmin.goog", "failovers.alloydbomni.internal.dbadmin.goog", "instancebackupplans.alloydbomni.internal.dbadmin.goog","instancebackups.alloydbomni.internal.dbadmin.goog","instancerestores.alloydbomni.internal.dbadmin.goog","instances.alloydbomni.internal.dbadmin.goog","instanceswitchovers.alloydbomni.internal.dbadmin.goog","lrojobs.alloydbomni.internal.dbadmin.goog","replicationconfigs.alloydbomni.internal.dbadmin.goog","sidecars.alloydbomni.internal.dbadmin.goog","createstandbyjobs.alloydbomni.internal.dbadmin.goog","deletestandbyjobs.alloydbomni.internal.dbadmin.goog"]'
+    operatorframework.io/suggested-namespace: alloydb-omni-system
+  name: alloydb-omni-operator.v1.4.0
+  namespace: placeholder
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/os.linux: supported
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - kind: BackupPlan
+      name: backupplans.alloydbomni.dbadmin.goog
+      displayName: Backup Plan
+      version: v1
+      description: BackupPlan is the Schema for the backupplans API.
+    - kind: Backup
+      name: backups.alloydbomni.dbadmin.goog
+      displayName: Backup
+      version: v1
+      description: Backup is the Schema for the backups API.
+    - kind: CreateStandbyJob
+      name: createstandbyjobs.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Create Standby Job
+      version: v1
+      description: CreateStandbyJob is an internal workflow tracking object. Users should not directly interact with this.
+    - kind: DBCluster
+      name: dbclusters.alloydbomni.dbadmin.goog
+      displayName: DBCluster
+      version: v1
+      description: DBCluster is the Schema for the DBClusters API.
+    - kind: DBInstance
+      name: dbinstances.alloydbomni.dbadmin.goog
+      displayName: DB Instance
+      version: v1
+      description: DBInstance is the Schema for the DBInstances API.
+    - kind: DeleteStandbyJob
+      name: deletestandbyjobs.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Delete Standby Job
+      version: v1
+      description: DeleteStandbyJob is an internal workflow tracking object. Users should not directly interact with this.
+    - kind: Failover
+      name: failovers.alloydbomni.dbadmin.goog
+      displayName: Failover
+      version: v1
+      description: Failover represents the parameters and status of a single failover operation.
+    - kind: PgBouncer
+      name: pgbouncers.alloydbomni.dbadmin.goog
+      displayName: PgBouncer
+      version: v1
+      description: PgBouncer is the Schema for the PgBouncer API.
+    - kind: Replication
+      name: replications.alloydbomni.dbadmin.goog
+      displayName: Replication
+      version: v1
+      description: Replication is the Schema for the Replications API.
+    - kind: Restore
+      name: restores.alloydbomni.dbadmin.goog
+      displayName: Restore
+      version: v1
+      description: Restore is the Schema for the restores API.
+    - kind: Sidecar
+      name: sidecars.alloydbomni.dbadmin.goog
+      displayName: Sidecar
+      version: v1
+      description: Sidecar is the Schema for the sidecar API.
+    - kind: Switchover
+      name: switchovers.alloydbomni.dbadmin.goog
+      displayName: Switchover
+      version: v1
+      description: Switchover represents the parameters and status of a single switchover.
+    - kind: BackupRepository
+      name: backuprepositories.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Backup Repository
+      version: v1
+      description: BackupRepository is the Schema for the backuprepositories API.
+    - kind: Failover
+      name: failovers.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Failover
+      version: v1
+      description: Failover is the Schema for the failover API.
+    - kind: InstanceBackupPlan
+      name: instancebackupplans.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Instance Backup Plan
+      version: v1
+      description: InstanceBackupPlan is the Schema for the InstanceBackupPlan API.
+    - kind: InstanceBackup
+      name: instancebackups.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Instance Backup
+      version: v1
+      description: InstanceBackup is the Schema for the InstanceBackup API.
+    - kind: InstanceRestore
+      name: instancerestores.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Instance Restore
+      version: v1
+      description: InstanceRestore is the Schema for the InstanceRestore API.
+    - kind: Instance
+      name: instances.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Instance
+      version: v1
+      description: Instance is the Schema for the instances API.
+    - kind: InstanceSwitchover
+      name: instanceswitchovers.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Instance Switchover
+      version: v1
+      description: InstanceSwitchover is the Schema for the switchover API.
+    - kind: LROJob
+      name: lrojobs.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) LRO Job
+      version: v1
+      description: LROJob is an internal object that helps single-thread LRO jobs.
+    - kind: ReplicationConfig
+      name: replicationconfigs.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Replication Config
+      version: v1
+      description: ReplicationConfig is the Schema for the ReplicationConfig API.
+    - kind: Sidecar
+      name: sidecars.alloydbomni.internal.dbadmin.goog
+      displayName: (Internal) Sidecar
+      version: v1
+      description: Sidecar is the Schema for the sidecar API.
+  description: |-
+    AlloyDB Omni is a database that lets you deploy a streamlined edition of AlloyDB for PostgreSQL in your own computing environment. While being 100% compatible with PostgreSQL applications and tools, AlloyDB Omni delivers higher performance for both OLTP and OLAP workloads and makes administration easy with a number of autopilots. AlloyDB AI provides powerful tools to build generative AI applications with the ability to create, store, and index vector embeddings right in your database.
+
+    ## Post-installation
+
+    After installing the operator, you need to manually create the cert-manager resources in your cluster as this is a strict dependency for our operator. For this, follow these steps:
+
+    ```
+    kubectl create ns ${NAMESPACE:?}
+    ```
+
+    ```
+    kubectl apply -f - <<EOF
+    apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: alloydbomni-selfsigned-cluster-issuer
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      name: fleet-selfsigned-issuer
+      namespace: ${NAMESPACE:?}
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: fleet-serving-cert
+      namespace: ${NAMESPACE:?}
+    spec:
+      dnsNames:
+      - fleet-webhook-service.alloydb-omni-system.svc
+      - fleet-webhook-service.alloydb-omni-system.svc.cluster.local
+      issuerRef:
+        kind: Issuer
+        name: fleet-selfsigned-issuer
+      secretName: fleet-webhook-server-cert
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      name: local-selfsigned-issuer
+      namespace: ${NAMESPACE:?}
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: local-serving-cert
+      namespace: ${NAMESPACE:?}
+    spec:
+      dnsNames:
+      - local-webhook-service.alloydb-omni-system.svc
+      - local-webhook-service.alloydb-omni-system.svc.cluster.local
+      issuerRef:
+        kind: Issuer
+        name: local-selfsigned-issuer
+      secretName: local-webhook-server-cert
+    EOF
+    ```
+
+    Replace the following:
+    * `NAMESPACE` : the namespace where you have installed your operator. Suggested namespace: `alloydb-omni-system`
+
+
+    If you are using Red Hat OpenShift, proceed with following [these][post-installation] steps after installing the operator.
+
+    ## Creating a database cluster
+
+    After you install the AlloyDB Omni operator on your Kubernetes cluster, you can create an AlloyDB Omni database cluster. For each database cluster you create, you must first create a password secret using the following format:
+
+    ```
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: db-pw-${DB_CLUSTER_NAME:s?}
+      namespace: ${DB_CLUSTER_NAMESPACE:?}
+    type: Opaque
+    data:
+      ${DB_CLUSTER_NAME:?}: "ENCODED_PASSWORD"
+    ```
+
+    Replace the following:
+    * `DB_CLUSTER_NAME`: the name of this database cluster. For example, `my-db-cluster`.
+    * `DB_CLUSTER_NAMESPACE` (Optional): the namespace where you want to create the database cluster. For example, `my-db-cluster-namespace`.
+    * `ENCODED_PASSWORD`: the database login password for the default postgres user role, encoded as a base64 string. For example, `Q2hhbmdlTWUxMjM=` for password `ChangeMe123`.
+
+    Follow [these][database-cluster] steps for creating a database cluster.
+
+    ## Connect to AlloyDB Omni running on Kubernetes
+    Follow [these][connect] steps to connect to AlloyDB Omni
+
+    [post-installation]: https://cloud.google.com/alloydb/omni/docs/deploy-kubernetes#rhel-openshift
+    [database-cluster]: https://cloud.google.com/alloydb/omni/docs/deploy-kubernetes#create
+    [connect]: https://cloud.google.com/alloydb/omni/docs/run-connect#connect-kubernetes
+  displayName: AlloyDB Omni Operator
+  icon:
+  - base64data: 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mFT8PDkJjE7ANwJDVrU75pr+10H2FyGOgBgBW+bMT7oRGCn8Fczjv1vZxqptF3X9XK5MQiUfglUUgwiJo18tPyUBEpgMAjQAk0Gd5ySBvSQQNgLHLet7bUWphRgP8FEYgdikGIGRwu9gjMJdttarv3HplF/IpVH497KAuRsJTCIBGoBJhM9Tk8DeEggbgZ5P9B1iWGohfsBiBOITYgRGCn8Z0/nuMly9esf/m/KoXAuFf29LlPuRwOQToAGY/DJgDkhgrwmEjcD05X0Ha21egBr4Keh/T1QQR1+Wzot01sCA8Jvo45eFjfIltEB8SilvzfZLpjwmmafw73URT7pIIwAAA2JJREFUckcSaBoCNABNUxTMCAnsPYGwEehevvM1poeuAaVORYtANEYgLPzFHIRf3+mZenXvJVN/Kbml8O99mXFPEmg2AjQAzVYizA8JjIFA2Aj0XFt8tVlxL8CsgY/BCCT9lfWkRcBAHIG9X35QludzlTLt2gqGRYzqv8OzrTU7Lkz+SrJH4RcK3EigtQnQALR2+TH3JOATCBuB6ct3vkpr63x8eRqi8KX20giEhD+P/gTjdqXc67dfMvXXciIKv1DgRgLtQYAGoD3KkVdBAj6BsBF421XPvDJmmjAC5mlWMp3ehREYJvxuMY85ht7tjudd/63L9/mNJEzh5w1GAu1HgAag/cqUV0QC1cV1hsQR6L76mVeY2j4Pg/dmoUUgM8QIYNhA0NSfz2Hw4GZPVW7ovXif3wpGCj9vJhJoXwI0AO1btrwyEhhhBI65uvgyz3PRIqBnY4xARhBhBcIchgdsMk3r+m0XJ38nn1H4hQI3EmhvAjQA7V2+vDoS8AmEuwa6ry68RHneYvlSm+bK3otTf5D3FH6hwI0ESIAESIAE2oyAGAER+fBlyWfyXfhz/k0CJNC+BNgC0L5lyysjgV0S8FsEHt3q//4POWQGY/XvkhS/IAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIAESIIEOI/D/AZLPZfJWXvHuAAAAAElFTkSuQmCC
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backupplans
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backupplans/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backupplans/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backups
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backups/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - backups/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbinstances
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbinstances/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - dbinstances/status
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - failovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - failovers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - pgbouncers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - pgbouncers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - pgbouncers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - replications
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - replications/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - replications/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - restores
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - restores/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - restores/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - sidecars
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - sidecars/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - sidecars/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - switchovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - switchovers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.dbadmin.goog
+          resources:
+          - switchovers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - backuprepositories
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - backuprepositories/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - createstandbyjobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - deletestandbyjobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - failovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - failovers/status
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackupplans
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackupplans/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackups
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackups/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancerestores
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancerestores/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instances
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instances/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers/status
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - replicationconfigs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - replicationconfigs/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - sidecars
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - sidecars/status
+          verbs:
+          - delete
+          - get
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - baremetal.cluster.gke.io
+          resources:
+          - clusters
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - issuers
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - network.private.gdc.goog
+          resources:
+          - dnsregistrations
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          verbs:
+          - create
+          - delete
+          - get
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: fleet-controller-manager
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - backuprepositories
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - backuprepositories/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - backuprepositories/status
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - failovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - failovers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - failovers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackupplans
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackupplans/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackupplans/status
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackups
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackups/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancebackups/status
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancerestores
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancerestores/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instancerestores/status
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instances
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instances/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instances/status
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - instanceswitchovers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - lrojobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - lrojobs/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - replicationconfigs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - replicationconfigs/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - replicationconfigs/status
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - sidecars
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - alloydbomni.internal.dbadmin.goog
+          resources:
+          - sidecars/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments/status
+          verbs:
+          - get
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets/status
+          verbs:
+          - get
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - issuers
+          verbs:
+          - create
+          - delete
+          - deletecollection
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - pods/status
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - storageclasses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: local-controller-manager
+      deployments:
+      - label:
+          fleet-control-plane: controller-manager
+        name: fleet-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              fleet-control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                fleet-control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --image-registry=gcr.io
+                - --data-plane-image-repository=
+                - --control-plane-agents-image-repository=alloydb-omni
+                - --control-plane-agents-tag=1.4.0
+                - --enable-user-defined-authentication=false
+                command:
+                - /manager
+                image: gcr.io/alloydb-omni/operator/fleet-operator:1.4.0
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 1Gi
+                  requests:
+                    cpu: 500m
+                    memory: 1Gi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.14.1
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources: {}
+              serviceAccountName: fleet-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: fleet-webhook-server-cert
+      - label:
+          app.kubernetes.io/component: controller
+          local-control-plane: controller-manager
+        name: local-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/component: controller
+              local-control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/component: controller
+                local-control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --deployment-platform=generic-k8s
+                - --enable-user-defined-authentication=false
+                image: gcr.io/alloydb-omni/operator/local-operator:1.4.0
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 1Gi
+                  requests:
+                    cpu: 500m
+                    memory: 1Gi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.14.1
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources: {}
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: local-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: local-webhook-server-cert
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: fleet-controller-manager
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: local-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - database
+  - sql
+  - postgres
+  - vector
+  - ai
+  - analytics
+  - postgresql
+  - alloydb
+  links:
+  - name: Documentation
+    url: https://cloud.google.com/alloydb/omni/docs
+  - name: Release Notes
+    url: https://cloud.google.com/alloydb/docs/release-notes
+  maintainers:
+  - email: alloydb-omni-ext@google.com
+    name: Google Cloud
+  maturity: stable
+  minKubeVersion: 1.21.0
+  replaces: alloydb-omni-operator.v1.3.0
+  provider:
+    name: Google
+    url: https://cloud.google.com/alloydb/omni
+  version: 1.4.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mbackupplan.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - backupplans
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-backupplan
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mdbcluster.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - dbclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-dbcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mdbinstance.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - dbinstances
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-dbinstance
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mfailover.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - failovers
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-failover
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: minstance.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - instances
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-internal-dbadmin-goog-v1-instance
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mreplication.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - replications
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-replication
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: mreplicationconfig.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - replicationconfigs
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-internal-dbadmin-goog-v1-replicationconfig
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: mswitchover.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - switchovers
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-alloydbomni-dbadmin-goog-v1-switchover
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: pooler.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pgbouncers
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-pooler
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vbackup.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - backups
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-backup
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vbackupplan.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - backupplans
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-backupplan
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: vbackuprepository.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - backuprepositories
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-internal-dbadmin-goog-v1-backuprepository
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vdbcluster.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - dbclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-dbcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vdbinstance.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - dbinstances
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-dbinstance
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: vinstance.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - instances
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-internal-dbadmin-goog-v1-instance
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: vinstancerestore.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - instancerestores
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-internal-dbadmin-goog-v1-instancerestore
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vreplication.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - replications
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-replication
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: local-controller-manager
+    failurePolicy: Fail
+    generateName: vreplicationconfig.alloydbomni.internal.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.internal.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - replicationconfigs
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-internal-dbadmin-goog-v1-replicationconfig
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vrestore.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - restores
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-restore
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    containerPort: 443
+    deploymentName: fleet-controller-manager
+    failurePolicy: Fail
+    generateName: vsidecar.alloydbomni.dbadmin.goog
+    rules:
+    - apiGroups:
+      - alloydbomni.dbadmin.goog
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - sidecars
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-alloydbomni-dbadmin-goog-v1-sidecar

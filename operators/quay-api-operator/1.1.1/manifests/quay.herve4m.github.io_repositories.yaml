@@ -1,0 +1,193 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: repositories.quay.herve4m.github.io
+spec:
+  group: quay.herve4m.github.io
+  names:
+    kind: Repository
+    plural: repositories
+    shortNames:
+    - repo
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Name in Quay
+      jsonPath: .spec.name
+      name: Quay name
+      type: string
+    - description: The status of the resource creation process in Quay
+      jsonPath: .status.conditions[?(@.type == 'Successful')].status
+      name: Success
+      type: string
+    - description: The error message when the resource creation process fails
+      jsonPath: .status.message
+      name: Message
+      type: string
+    - description: The state of the reconciliation process
+      jsonPath: .status.conditions[?(@.type == 'Running')].reason
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Manage Quay Container Registry repositories
+        properties:
+          apiVersion:
+            description: |
+              APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |
+              Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of Repository
+            properties:
+              append:
+                default: true
+                description: If 'true', then add the permission defined in 'perms'
+                  to the repository. If 'false', then the resource sets the permissions
+                  specified in 'perms', removing all others permissions from the repository.
+                type: boolean
+              autoPruneMethod:
+                description: The 'autoPruneMethod' parameter is deprecated and will
+                  be removed in future versions of the collection. Use the OrganizationPrune
+                  and the RepositoryPrune resources instead. Method to use for the
+                  auto-pruning tags policy. If 'none', then the resource ensures that
+                  no policy is in place. The tags are not pruned. If several policies
+                  are available, then the resource removes them all. If 'tags', then
+                  the policy keeps only the number of tags that you specify in 'autoPruneValue'.
+                  If 'date', then the policy deletes the tags older than the time
+                  period that you specify in 'autoPruneValue'. 'autoPruneValue' is
+                  required when 'autoPruneMethod' is 'tags' or 'date'.
+                enum:
+                - none
+                - tags
+                - date
+                type: string
+              autoPruneValue:
+                description: The 'autoPruneValue' parameter is deprecated and will
+                  be removed in future versions of the collection. Use the OrganizationPrune
+                  and the RepositoryPrune resources instead. Number of tags to keep
+                  when 'autoPruneMethod' is 'tags'. The value must be 1 or more. Period
+                  of time when 'autoPruneMethod' is 'date'. The value must be 1 or
+                  more, and must be followed by a suffix; s (for second), m (for minute),
+                  h (for hour), d (for day), or w (for week). 'autoPruneMethod' is
+                  required when 'autoPruneValue' is set.
+                type: string
+              connSecretRef:
+                description: |
+                  Reference to the secret resource that stores the connection parameters to the Quay Container Registry API.
+                  The secret must include the 'host', 'token' (or 'username' and 'password'), and optionally the 'validateCerts' keys.
+                properties:
+                  name:
+                    description: Name of the secret resource.
+                    type: string
+                  namespace:
+                    description: |
+                      Namespace of the secret resource. By default, the secret resource is retrieved from the same namespace as the current Repository resource.
+                    type: string
+                required:
+                - name
+                type: object
+              description:
+                description: Text in Markdown format that describes the repository.
+                type: string
+              name:
+                description: Name of the repository to create, remove, or modify.
+                  The format for the name is 'namespace'/'shortname'. The namespace
+                  can be an organization or your personal namespace. The name must
+                  be in lowercase and must not contain white spaces. If you omit the
+                  namespace part in the name, then the resource uses your personal
+                  namespace. You can manage repositories in your personal namespace,
+                  but not in the personal namespace of other users. The token you
+                  use in 'quayToken' determines the user account you are using.
+                type: string
+              perms:
+                description: User, robot, and team permissions to associate with the
+                  repository.
+                items:
+                  properties:
+                    name:
+                      description: Name of the account. The format for robot accounts
+                        is 'namespace'+'shortrobotname'.
+                      type: string
+                    role:
+                      default: read
+                      description: Type of permission to grant.
+                      enum:
+                      - read
+                      - write
+                      - admin
+                      type: string
+                    type:
+                      default: user
+                      description: Specifies the type of the account. Choose 'user'
+                        for both user and robot accounts.
+                      enum:
+                      - user
+                      - team
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              preserveInQuayOnDeletion:
+                default: false
+                description: |
+                  Whether to preserve the corresponding Quay object when you delete the Repository resource. When set to 'false' (the default), the object is deleted from Quay.
+                type: boolean
+              repoState:
+                description: If 'NORMAL', then the repository is in the default state
+                  (read/write). If 'READ_ONLY', then the repository is read-only.
+                  If 'MIRROR', then the repository is a mirror and you can configure
+                  it by using the RepositoryMirror resource. You must enable the mirroring
+                  capability of your Quay installation to use this 'repoState' parameter.
+                enum:
+                - NORMAL
+                - READ_ONLY
+                - MIRROR
+                type: string
+              star:
+                description: If 'true', then add a star to the repository. If 'false',
+                  then remove the star. To star or unstar a repository you must provide
+                  the 'quayToken' parameter to authenticate. If you are not authenticated,
+                  then the resource ignores the 'star' parameter.
+                type: boolean
+              visibility:
+                description: If 'public', then anyone can pull images from the repository.
+                  If 'private', then nobody can access the repository and you need
+                  to explicitly grant access to users, robots, and teams. If you do
+                  not set the parameter when you create a repository, then it defaults
+                  to 'private'.
+                enum:
+                - public
+                - private
+                type: string
+            required:
+            - connSecretRef
+            - name
+            type: object
+          status:
+            description: |
+              Status defines the observed state of Repository
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,439 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "wol.pillon.org/v1beta1",
+          "kind": "WolConfig",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "kubevirt-wol"
+            },
+            "name": "default"
+          },
+          "spec": {
+            "agent": {
+              "imagePullPolicy": "IfNotPresent",
+              "resources": {
+                "limits": {
+                  "cpu": "100m",
+                  "memory": "128Mi"
+                },
+                "requests": {
+                  "cpu": "50m",
+                  "memory": "64Mi"
+                }
+              }
+            },
+            "cacheTTL": 300,
+            "discoveryMode": "All",
+            "namespaceSelectors": [
+              "default"
+            ],
+            "wolPorts": [
+              9
+            ]
+          }
+        },
+        {
+          "apiVersion": "wol.pillon.org/v1beta1",
+          "kind": "WolConfig",
+          "metadata": {
+            "name": "explicit-example"
+          },
+          "spec": {
+            "agent": {
+              "resources": {
+                "limits": {
+                  "cpu": "100m",
+                  "memory": "128Mi"
+                },
+                "requests": {
+                  "cpu": "50m",
+                  "memory": "64Mi"
+                }
+              }
+            },
+            "cacheTTL": 600,
+            "discoveryMode": "Explicit",
+            "explicitMappings": [
+              {
+                "macAddress": "52:54:00:12:34:56",
+                "namespace": "default",
+                "vmName": "my-vm-1"
+              },
+              {
+                "macAddress": "52:54:00:ab:cd:ef",
+                "namespace": "production",
+                "vmName": "my-vm-2"
+              }
+            ],
+            "wolPorts": [
+              9
+            ]
+          }
+        },
+        {
+          "apiVersion": "wol.pillon.org/v1beta1",
+          "kind": "WolConfig",
+          "metadata": {
+            "name": "labelselector-example"
+          },
+          "spec": {
+            "agent": {
+              "nodeSelector": {
+                "node-role.kubernetes.io/worker": ""
+              },
+              "resources": {
+                "limits": {
+                  "cpu": "100m",
+                  "memory": "128Mi"
+                },
+                "requests": {
+                  "cpu": "50m",
+                  "memory": "64Mi"
+                }
+              }
+            },
+            "cacheTTL": 300,
+            "discoveryMode": "LabelSelector",
+            "namespaceSelectors": [
+              "production"
+            ],
+            "vmSelector": {
+              "matchLabels": {
+                "wol.pillon.org/enabled": "true"
+              }
+            },
+            "wolPorts": [
+              9,
+              7
+            ]
+          }
+        }
+      ]
+    capabilities: Deep Insights
+    categories: OpenShift Optional
+    containerImage: quay.io/kubevirtwol/kubevirt-wol-manager:v0.0.1
+    createdAt: "2025-10-27T00:12:14Z"
+    description: |
+      A Kubernetes Operator that enables Wake-on-LAN functionality for KubeVirt VirtualMachines. This operator listens for WOL magic packets on the network and automatically starts the corresponding VirtualMachines in your Kubernetes cluster.
+    operatorframework.io/suggested-namespace: kubevirt-wol-system
+    operatorframework.io/suggested-namespace-template: |
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "name": "kubevirt-wol-system",
+          "annotations": {
+            "openshift.io/node-selector": ""
+          },
+          "labels": {
+            "openshift.io/cluster-monitoring": "true"
+          }
+        }
+      }
+    operators.operatorframework.io/builder: operator-sdk-v1.41.1
+    operators.operatorframework.io/internal-objects: '["servicemonitors.monitoring.coreos.com"]'
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/gpillon/kubevirt-wol
+  name: kubevirt-wol.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - kind: WolConfig
+      name: wolconfigs.wol.pillon.org
+      resources:
+      - kind: DaemonSet
+        name: ""
+        version: apps/v1
+      - kind: ServiceAccount
+        name: ""
+        version: v1
+      - kind: Pod
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: How VMs are discovered (All, LabelSelector, Explicit)
+        displayName: Discovery Mode
+        path: discoveryMode
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select
+      - description: Time-to-live for cached mappings (seconds)
+        displayName: Cache TTL
+        path: cacheTTL
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: UDP ports for Wake-on-LAN packets
+        displayName: WOL Ports
+        path: wolPorts
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:numberList
+      statusDescriptors:
+      - description: Number of monitored VMs
+        displayName: Managed VMs
+        path: managedVMs
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:number
+      - description: Operator reconciliation status
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:conditions
+      version: v1beta1
+  description: "A Kubernetes Operator that enables Wake-on-LAN functionality for KubeVirt
+    VirtualMachines.\n\n**Installation**: This operator must be installed in the `kubevirt-wol-system`
+    namespace.\n\n**Prerequisites**: \n- **Required**: KubeVirt must be installed
+    in your cluster.\n- **Optional**: Prometheus Operator (for ServiceMonitor-based
+    metrics collection). The operator works without it, but metrics will not be automatically
+    scraped.\n\n**Features**:\n- Automatically starts VirtualMachines when WOL magic
+    packets are received\n- Supports multiple WOL ports (default: UDP 9)\n- Three
+    discovery modes: All VMs, Label Selector, or Explicit MAC mappings\n- Dynamic
+    agent deployment per WolConfig\n- Automatic cleanup via OwnerReference\n- Prometheus
+    metrics integration (ServiceMonitor optional)\n\n**Post-Installation (OpenShift)**:
+    To enable metrics collection in OpenShift cluster monitoring, run:\n```\noc label
+    namespace <operator-namespace> openshift.io/cluster-monitoring=true\n```\nReplace
+    `<operator-namespace>` with the namespace where the operator is installed (e.g.,
+    `kubevirt-wol-system`).\n\nAfter labeling the namespace, the operator metrics
+    will appear in OpenShift Console → Observe → Targets.\n\n**Note on Metrics**:
+    If Prometheus Operator is not installed, the ServiceMonitor resource will not
+    be reconciled, but the operator will continue to function normally. Metrics are
+    still available at the `/metrics` endpoint.\n\n**Usage**: After installation,
+    create a WolConfig resource to configure Wake-on-LAN for your KubeVirt VirtualMachines.\n\n**Documentation**:
+    https://github.com/gpillon/kubevirt-wol\n"
+  displayName: Kubevirt Wake on Lan
+  icon:
+  - base64data: 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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          - serviceaccounts
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets/status
+          verbs:
+          - get
+        - apiGroups:
+          - kubevirt.io
+          resources:
+          - virtualmachines
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - subresources.kubevirt.io
+          resources:
+          - virtualmachines/start
+          verbs:
+          - update
+        - apiGroups:
+          - wol.pillon.org
+          resources:
+          - wolconfigs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - wol.pillon.org
+          resources:
+          - wolconfigs/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - wol.pillon.org
+          resources:
+          - wolconfigs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: kubevirt-wol-controller-manager
+      - rules:
+        - apiGroups:
+          - security.openshift.io
+          resourceNames:
+          - privileged
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        serviceAccountName: kubevirt-wol-wol-agent
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: kubevirt-wol
+          control-plane: controller-manager
+        name: kubevirt-wol-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy:
+            type: Recreate
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                - --metrics-secure=false
+                command:
+                - /manager
+                env:
+                - name: AGENT_IMAGE
+                  value: quay.io/kubevirtwol/kubevirt-wol-agent:v0.0.1
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: quay.io/kubevirtwol/kubevirt-wol-manager:v0.0.1
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: kubevirt-wol-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: kubevirt-wol-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - kubevirt
+  - wol
+  - wake on lan
+  - wake
+  links:
+  - name: Kubevirt Wol
+    url: https://github.com/gpillon/kubevirt-wol
+  maintainers:
+  - email: gpillon@redhat.com
+    name: Giorgio Pillon
+  maturity: alpha
+  minKubeVersion: 1.14.0
+  provider:
+    name: K4all
+    url: https://github.com/gpillon/kubevirt-wol
+  version: 0.0.1

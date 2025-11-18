@@ -1,0 +1,669 @@
+apiVersion: operators.coreos.com/v1
+kind: ClusterServiceVersion
+metadata:
+  name: percona-server-mysql-operator.v1.0.0
+  namespace: default
+  annotations:
+    repository: 'https://github.com/percona/percona-server-mysql-operator'
+    support: Percona
+    alm-examples: |-
+      [
+      {
+        "apiVersion": "ps.percona.com/v1",
+        "kind": "PerconaServerMySQL",
+        "metadata": {
+          "name": "ps-cluster1",
+          "finalizers": [
+            "percona.com/delete-mysql-pods-in-order"
+          ]
+        },
+        "spec": {
+          "crVersion": "1.0.0",
+          "secretsName": "ps-cluster1-secrets",
+          "sslSecretName": "ps-cluster1-ssl",
+          "updateStrategy": "SmartUpdate",
+          "upgradeOptions": {
+            "versionServiceEndpoint": "https://check.percona.com",
+            "apply": "disabled"
+          },
+          "mysql": {
+            "clusterType": "group-replication",
+            "autoRecovery": true,
+            "image": "docker.io/percona/percona-server:8.4.6-6.1",
+            "imagePullPolicy": "Always",
+            "size": 3,
+            "podDisruptionBudget": {
+              "maxUnavailable": 1
+            },
+            "resources": {
+              "requests": {
+                "memory": "2Gi"
+              },
+              "limits": {
+                "memory": "4Gi"
+              }
+            },
+            "affinity": {
+              "antiAffinityTopologyKey": "kubernetes.io/hostname"
+            },
+            "exposePrimary": {
+              "enabled": true
+            },
+            "volumeSpec": {
+              "persistentVolumeClaim": {
+                "resources": {
+                  "requests": {
+                    "storage": "2Gi"
+                  }
+                }
+              }
+            },
+            "gracePeriod": 600
+          },
+          "proxy": {
+            "haproxy": {
+              "enabled": true,
+              "size": 3,
+              "image": "docker.io/percona/haproxy:2.8.15",
+              "imagePullPolicy": "Always",
+              "podDisruptionBudget": {
+                "maxUnavailable": 1
+              },
+              "resources": {
+                "requests": {
+                  "memory": "1Gi",
+                  "cpu": "600m"
+                }
+              },
+              "gracePeriod": 30,
+              "affinity": {
+                "antiAffinityTopologyKey": "kubernetes.io/hostname"
+              }
+            },
+            "router": {
+              "enabled": false,
+              "image": "docker.io/percona/percona-mysql-router:8.4.6",
+              "imagePullPolicy": "Always",
+              "size": 3,
+              "podDisruptionBudget": {
+                "maxUnavailable": 1
+              },
+              "resources": {
+                "requests": {
+                  "memory": "256M"
+                },
+                "limits": {
+                  "memory": "256M"
+                }
+              },
+              "affinity": {
+                "antiAffinityTopologyKey": "kubernetes.io/hostname"
+              },
+              "gracePeriod": 30
+            }
+          },
+          "orchestrator": {
+            "enabled": false,
+            "image": "docker.io/percona/percona-orchestrator:3.2.6-18",
+            "imagePullPolicy": "Always",
+            "size": 3,
+            "affinity": {
+              "antiAffinityTopologyKey": "kubernetes.io/hostname"
+            },
+            "podDisruptionBudget": {
+              "maxUnavailable": 1
+            },
+            "gracePeriod": 30,
+            "resources": {
+              "requests": {
+                "memory": "128M"
+              },
+              "limits": {
+                "memory": "256M"
+              }
+            }
+          },
+          "pmm": {
+            "enabled": false,
+            "image": "docker.io/percona/pmm-client:3.4.1",
+            "imagePullPolicy": "Always",
+            "resources": {
+              "requests": {
+                "memory": "150M",
+                "cpu": "300m"
+              }
+            },
+            "serverHost": "monitoring-service"
+          },
+          "backup": {
+            "enabled": true,
+            "image": "docker.io/percona/percona-xtrabackup:8.4.0-4.1",
+            "imagePullPolicy": "Always",
+            "storages": {
+              "s3-us-west": {
+                "type": "s3",
+                "verifyTLS": true,
+                "s3": {
+                  "bucket": "S3-BACKUP-BUCKET-NAME-HERE",
+                  "credentialsSecret": "ps-cluster1-s3-credentials",
+                  "region": "us-west-2"
+                }
+              }
+            }
+          },
+          "toolkit": {
+            "image": "docker.io/percona/percona-toolkit:3.7.0-2",
+            "imagePullPolicy": "Always"
+          }
+        }
+      },
+      {
+        "apiVersion": "ps.percona.com/v1",
+        "kind": "PerconaServerMySQLBackup",
+        "metadata": {
+          "name": "backup1",
+          "finalizers": [
+            "percona.com/delete-backup"
+          ]
+        },
+        "spec": {
+          "clusterName": "ps-cluster1",
+          "storageName": "minio"
+        }
+      },
+      {
+        "apiVersion": "ps.percona.com/v1",
+        "kind": "PerconaServerMySQLRestore",
+        "metadata": {
+          "name": "restore1"
+        },
+        "spec": {
+          "clusterName": "ps-cluster1",
+          "backupName": "backup1"
+        }
+      }
+      ]
+    capabilities: Full Lifecycle
+    containerImage: 'docker.io/percona/percona-server-mysql-operator:1.0.0'
+    categories: Database
+    description: 'Percona Operator for MySQL based on Percona Server for MySQL automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.'
+    createdAt: 2025-11-13T08:00:00.000Z
+spec:
+  customresourcedefinitions:
+    owned:
+      - description: PerconaServerMySQLBackup is the Schema for the perconaservermysqlbackups API
+        displayName: Percona Server MySQL Backup
+        kind: PerconaServerMySQLBackup
+        name: perconaservermysqlbackups.ps.percona.com
+        version: v1
+      - description: PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
+        displayName: Percona Server MySQL Restore
+        kind: PerconaServerMySQLRestore
+        name: perconaservermysqlrestores.ps.percona.com
+        version: v1
+      - description: PerconaServerMySQL is the Schema for the perconaservermysqls API
+        displayName: Percona Server MySQL
+        kind: PerconaServerMySQL
+        name: perconaservermysqls.ps.percona.com
+        version: v1
+  apiservicedefinitions: {}
+  keywords:
+    - mysql
+    - percona
+    - database
+  displayName: Percona Operator for MySQL based on Percona Server for MySQL
+  provider:
+    name: Percona
+  maturity: stable
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: true
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  version: 1.0.0
+  minKubeVersion: ''
+  icon:
+    - base64data: PHN2ZyB3aWR0aD0iMjI3IiBoZWlnaHQ9IjE5NCIgdmlld0JveD0iMCAwIDIyNyAxOTQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik01OS4yODk5IDE5My40M0w0My41NDk5IDE2NS4xMkw1Ny42NDk5IDEzOS43MUw0NS4wNjk5IDExNi45NUgxNi4zMjk5TDAuNjI5ODgzIDg5LjAxTDE2LjA1OTkgNjAuNzlINDkuMDA5OUw2Mi44Mjk5IDg1LjgzSDg4LjAxOTlMMTAyLjQxIDYwLjU2SDEzNC45NkwxNTAuMzUgODguNTJMMTM2LjI3IDExNC4wM0wxNDkuMjEgMTM2Ljc2TDE3OC4yMiAxMzYuODRMMTkzLjYzIDE2NC44OEwxNzguMSAxOTMuMDhMMTQ1Ljg4IDE5My4wNEwxMzEuMTQgMTY3LjQ4SDEwNi4wOUMxMDYuMDkgMTY3LjQ4IDkzLjAwOTkgMTkwLjQ4IDkxLjMxOTkgMTkzLjQzSDU5LjI2OTlINTkuMjg5OVpNNTEuNTA5OSAxNjguMTJMNjIuNTY5OSAxODcuNTdIODQuNjg5OUw3My41Nzk5IDE2OC4wNEw1MS41MTk5IDE2OC4xMkg1MS41MDk5Wk0xODMuODYgMTY3Ljk1QzE4Mi4xOCAxNjcuOTcgMTgwLjU3IDE2Ny45OSAxNzguOTYgMTY4TDE3My4wNSAxNjguMDVDMTY5Ljk5IDE2OC4wOCAxNjYuOTIgMTY4LjEgMTYzLjg2IDE2OC4xMkgxNjMuMzlMMTYzLjE2IDE2OC41M0MxNjAuNDEgMTczLjM5IDE1Ny42NSAxNzguMjUgMTU0Ljg4IDE4My4xMUwxNTIuNDggMTg3LjMzSDE3NC42TDE3NC44MyAxODYuOTJDMTc3LjAxIDE4My4wNiAxNzkuMjIgMTc5LjE5IDE4MS40MiAxNzUuMzFMMTgxLjM0IDE3NS4zNUMxODEuNTggMTc1LjAyIDE4MS45NCAxNzQuMzggMTgyLjYzIDE3My4xOEwxODUuNjIgMTY3LjkzTDE4My44NyAxNjcuOTVIMTgzLjg2Wk03OC40OTk5IDE2NC45Nkw4OS42OTk5IDE4NC41OUwxMDAuOTcgMTY0LjgzTDg5LjkyOTkgMTQ1LjQ4TDc4LjQ5OTkgMTY0Ljk2Wk0xMzYuMzggMTY0LjkzTDE0Ny40NSAxODQuMzRMMTU4LjM3IDE2NS4xOUwxNDcuMyAxNDUuNzdMMTM2LjM4IDE2NC45M1pNNTEuNDk5OSAxNjIuMjZMNzAuMTg5OSAxNjIuMTdMNjkuNDk5OSAxNjAuOTdDNjkuNDk5OSAxNjAuOTcgNjQuMzQ5OSAxNTEuOTMgNjEuNzQ5OSAxNDcuMzdMNjAuODY5OSAxNDUuODJMNTEuNDk5OSAxNjIuMjdWMTYyLjI2Wk0xNjYuNzggMTYyLjIyTDE4NS42NCAxNjIuMDZMMTg0Ljk3IDE2MC44N0MxODIuOCAxNTYuOTkgMTc5LjIgMTUwLjY5IDE3Ni45NSAxNDYuODFMMTc2LjI0IDE0NS41OUwxNjYuNzcgMTYyLjIySDE2Ni43OFpNMTA5LjI5IDE2MS42NkgxMzEuMjdMMTQyLjMzIDE0Mi4yMUgxMjAuOThMMTA5LjMgMTYxLjY2SDEwOS4yOVpNMTYxLjcyIDE1OS4zTDE3MS4yMiAxNDIuNkgxNTIuMkwxNjEuNzEgMTU5LjNIMTYxLjcyWk02Ni4zNTk5IDE0My40MUM2Ny4wNjk5IDE0NC42NyA2Ny45Mzk5IDE0Ni4yNSA2OC44Nzk5IDE0Ny45NEM3MC43ODk5IDE1MS4zOCA3Mi45NDk5IDE1NS4yOCA3NC40Njk5IDE1Ny44OUw3NS4xNjk5IDE1OS4wOUw3NS44Njk5IDE1Ny45Qzc3LjQxOTkgMTU1LjI1IDg0LjI3OTkgMTQzLjQzIDg0LjI3OTkgMTQzLjQzTDg0Ljk4OTkgMTQyLjIxSDY1LjY3OTlMNjYuMzU5OSAxNDMuNDJWMTQzLjQxWk0xMDQuMjEgMTU4LjhMMTE0LjE1IDE0Mi4yQzExNC4xNSAxNDIuMiAxMDkuMDQgMTQyLjIgMTA3LjIxIDE0Mi4ySDk0Ljc5OTlMMTA0LjIyIDE1OC43OUwxMDQuMjEgMTU4LjhaTTY2LjY0OTkgMTM0Ljc5TDY1LjcwOTkgMTM2LjY4TDg4LjAyOTkgMTM2LjRMOTkuMTE5OSAxMTYuOTFINzUuNDc5OUM3NS40Nzk5IDExNi45MSA2OS41Mjk5IDEyOC45NyA2Ni42NDk5IDEzNC43OVpNMTIwLjk3IDEzNi4zNkgxNDIuMzJMMTQxLjYzIDEzNS4xNUMxMzguMjUgMTI5LjIxIDEzNC44NyAxMjMuMjggMTMxLjUgMTE3LjM0TDEzMS4yNyAxMTYuOTNIMTA5LjMxTDEyMC45NyAxMzYuMzZaTTEwMy41IDEyMC45NUMxMDEuMjQgMTI0Ljg2IDk3LjYyOTkgMTMxLjIzIDk1LjQ1OTkgMTM1LjE1TDk0Ljc4OTkgMTM2LjM2SDk2LjE2OTlDMTAxLjcgMTM2LjM1IDEwNy4yMiAxMzYuMzUgMTEyLjczIDEzNi4zNUgxMTQuMTZMMTA0LjE5IDExOS43N0wxMDMuNSAxMjAuOTZWMTIwLjk1Wk02MC44Mjk5IDEzMy40Mkw2OC45Njk5IDExNi45OEg1MS43NTk5TDYwLjgyOTkgMTMzLjQyWk0yMi45OTk5IDExMS4wOUw0MS43MDk5IDExMS4wNEwzMi4zNDk5IDk0LjYyTDIyLjk4OTkgMTExLjFMMjIuOTk5OSAxMTEuMDlaTTEwOS45MiAxMTEuMDVIMTMxLjI4TDE0Mi4xNCA5MS42SDEyMS4wMkwxMDkuOTIgMTExLjA1Wk03NS40NTk5IDExMS4wNUg5OS4xMjk5TDg4LjA2OTkgOTEuNkg2NS44NTk5TDc1LjQ1OTkgMTExLjA1Wk01MS44NTk5IDExMS4wMkg2OC45Mzk5TDYxLjAxOTkgOTQuOTFMNTEuODU5OSAxMTEuMDJaTTk0Ljc3OTkgOTEuNjhMMTA0LjUgMTA4Ljc3TDExNC4zIDkxLjZMOTQuNzc5OSA5MS42OFpNNi45Mzk4OCA4OC43MkwxNy45ODk5IDEwOC4xTDI5LjA1OTkgODguNjhMMTcuOTg5OSA2OS4yOEw2LjkzOTg4IDg4LjcyWk00Ni43ODk5IDEwOC4wOUw1Ni4xNDk5IDkxLjY1SDM3LjQxOTlMNDYuNzc5OSAxMDguMDlINDYuNzg5OVpNMzQuMDg5OSA4NS43OUg1Ni4xNzk5TDQ1LjExOTkgNjYuMzRIMjMuMDM5OUwzNC4wODk5IDg1Ljc5Wk0xMjAuOTkgODUuNzZIMTQyLjM0TDEzMS4yOSA2Ni4zM0gxMDkuMzRMMTIwLjk5IDg1Ljc2Wk05NC44MDk5IDg1LjczSDExNC4xOEwxMDQuMjQgNjkuMTdMOTQuODA5OSA4NS43M1oiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xMjAyXzExNDU3KSIvPgo8cGF0aCBvcGFjaXR5PSIwLjUiIGQ9Ik0xMDkuNzcgMTc1LjA5SDEyNy41OEwxMzMuNDMgMTg1LjIySDEwNC4wNEwxMDkuNzcgMTc1LjA5WiIgZmlsbD0iIzYyQUVGRiIvPgo8cGF0aCBvcGFjaXR5PSIwLjUiIGQ9Ik00OS45NDk5IDE0MC4wNkwyOS43Mjk5IDE3NS4wOUg0MS4wNjk5TDQ2Ljc1OTkgMTg1LjIySDEyLjE1OTlMNDQuMjA5OSAxMjkuNzNMNDkuOTQ5OSAxNDAuMDZaIiBmaWxsPSIjNjJBRUZGIi8+CjxwYXRoIG9wYWNpdHk9IjAuNSIgZD0iTTE5NS45NiAxNzUuMDlIMjA4LjVMMTE5LjEyIDIwLjI3TDg1LjI5OTggNzguODRMNzMuNTk5OSA3OC44M0wxMTkuMTIgMEwyMjYuMDYgMTg1LjIySDE5MC4zNEwxOTUuOTYgMTc1LjA5WiIgZmlsbD0iIzYyQUVGRiIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzEyMDJfMTE0NTciIHgxPSIxNjMuNjIiIHkxPSI2MC40IiB4Mj0iMjAuOTE5OSIgeTI9IjIwMy4xMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBvZmZzZXQ9IjAuMDMiIHN0b3AtY29sb3I9IiM0MzlFRkYiLz4KPHN0b3Agb2Zmc2V0PSIwLjE2IiBzdG9wLWNvbG9yPSIjM0I5NEY0Ii8+CjxzdG9wIG9mZnNldD0iMC4zOSIgc3RvcC1jb2xvcj0iIzI2N0NENyIvPgo8c3RvcCBvZmZzZXQ9IjAuNjIiIHN0b3AtY29sb3I9IiMwRTVGQjUiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4=
+      mediatype: image/svg+xml
+  links:
+    - name: Percona
+      url: 'https://www.percona.com/'
+    - name: Percona Kubernetes Operators Landing Page
+      url: 'https://www.percona.com/software/percona-kubernetes-operators'
+    - name: Documentation
+      url: 'https://docs.percona.com/percona-operator-for-mysql/ps/'
+    - name: Github
+      url: 'https://github.com/percona/percona-server-mysql-operator'
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+              - ""
+              resources:
+              - configmaps
+              verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+            - apiGroups:
+              - coordination.k8s.io
+              resources:
+              - leases
+              verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+            - apiGroups:
+              - ""
+              resources:
+              - events
+              verbs:
+              - create
+              - patch
+          serviceAccountName: percona-server-mysql-operator
+        - rules:
+            - apiGroups:
+              - ""
+              resources:
+              - configmaps
+              - persistentvolumeclaims
+              - secrets
+              - services
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - ""
+              resources:
+              - events
+              - serviceaccounts
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+            - apiGroups:
+              - ""
+              resources:
+              - pods
+              - pods/exec
+              verbs:
+              - create
+              - delete
+              - deletecollection
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - apps
+              resources:
+              - deployments
+              - statefulsets
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - batch
+              resources:
+              - jobs
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - cert-manager.io
+              - certmanager.k8s.io
+              resources:
+              - certificates
+              - issuers
+              verbs:
+              - create
+              - delete
+              - deletecollection
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - events.k8s.io
+              resources:
+              - events
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+            - apiGroups:
+              - policy
+              resources:
+              - poddisruptionbudgets
+              - poddisruptionbudgets/finalizers
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - ps.percona.com
+              resources:
+              - perconaservermysqlbackups
+              - perconaservermysqlbackups/finalizers
+              - perconaservermysqlbackups/status
+              - perconaservermysqlrestores
+              - perconaservermysqlrestores/finalizers
+              - perconaservermysqlrestores/status
+              - perconaservermysqls
+              - perconaservermysqls/finalizers
+              - perconaservermysqls/status
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - rbac.authorization.k8s.io
+              resources:
+              - rolebindings
+              - roles
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+            - apiGroups:
+              - admissionregistration.k8s.io
+              resources:
+              - validatingwebhookconfigurations
+              verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+          serviceAccountName: percona-server-mysql-operator
+      permissions:
+        - rules:
+            - apiGroups:
+              - ""
+              resources:
+              - configmaps
+              verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+            - apiGroups:
+              - coordination.k8s.io
+              resources:
+              - leases
+              verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+            - apiGroups:
+              - ""
+              resources:
+              - events
+              verbs:
+              - create
+              - patch
+          serviceAccountName: percona-server-mysql-operator
+        - rules:
+            - apiGroups:
+              - ""
+              resources:
+              - configmaps
+              - persistentvolumeclaims
+              - secrets
+              - services
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - ""
+              resources:
+              - events
+              - serviceaccounts
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+            - apiGroups:
+              - ""
+              resources:
+              - pods
+              - pods/exec
+              verbs:
+              - create
+              - delete
+              - deletecollection
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - apps
+              resources:
+              - deployments
+              - statefulsets
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - batch
+              resources:
+              - jobs
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - cert-manager.io
+              - certmanager.k8s.io
+              resources:
+              - certificates
+              - issuers
+              verbs:
+              - create
+              - delete
+              - deletecollection
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - events.k8s.io
+              resources:
+              - events
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+            - apiGroups:
+              - policy
+              resources:
+              - poddisruptionbudgets
+              - poddisruptionbudgets/finalizers
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - ps.percona.com
+              resources:
+              - perconaservermysqlbackups
+              - perconaservermysqlbackups/finalizers
+              - perconaservermysqlbackups/status
+              - perconaservermysqlrestores
+              - perconaservermysqlrestores/finalizers
+              - perconaservermysqlrestores/status
+              - perconaservermysqls
+              - perconaservermysqls/finalizers
+              - perconaservermysqls/status
+              verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+            - apiGroups:
+              - rbac.authorization.k8s.io
+              resources:
+              - rolebindings
+              - roles
+              verbs:
+              - create
+              - get
+              - list
+              - patch
+              - watch
+          serviceAccountName: percona-server-mysql-operator
+      deployments:
+        - name: percona-server-mysql-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: percona-server-mysql-operator
+            strategy:
+              rollingUpdate:
+                maxUnavailable: 1
+              type: RollingUpdate
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: percona-server-mysql-operator
+              spec:
+                containers:
+                - args:
+                  - --leader-elect
+                  command:
+                  - /usr/local/bin/percona-server-mysql-operator
+                  env:
+                  - name: LOG_STRUCTURED
+                    value: "false"
+                  - name: LOG_LEVEL
+                    value: INFO
+                  - name: DISABLE_TELEMETRY
+                    value: "false"
+                  - name: WATCH_NAMESPACE
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.annotations['olm.targetNamespaces']
+                  image: docker.io/percona/percona-server-mysql-operator:1.0.0
+                  imagePullPolicy: Always
+                  livenessProbe:
+                    httpGet:
+                      path: /healthz
+                      port: 8081
+                    initialDelaySeconds: 15
+                    periodSeconds: 20
+                  name: manager
+                  readinessProbe:
+                    httpGet:
+                      path: /readyz
+                      port: 8081
+                    initialDelaySeconds: 5
+                    periodSeconds: 10
+                  resources:
+                    limits:
+                      cpu: 200m
+                      memory: 500Mi
+                    requests:
+                      cpu: 100m
+                      memory: 20Mi
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                securityContext:
+                  runAsNonRoot: true
+                serviceAccountName: percona-server-mysql-operator
+                terminationGracePeriodSeconds: 10
+    strategy: deployment
+  maintainers:
+    - email: info@percona.com
+      name: Percona
+  description: |+
+
+    ## Percona is Cloud Native
+
+    Percona Operator for MySQL based on Percona Server for MySQL follows our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
+    * Deploy group replication MySQL clusters with HAProxy or MySQL Router
+    * Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
+    * Expose clusters with regular Kubernetes Services
+    * Monitor the cluster with Percona Monitoring and Management
+    * Customize MySQL configuration
+    * Manage system user passwords
+
+  selector: {}

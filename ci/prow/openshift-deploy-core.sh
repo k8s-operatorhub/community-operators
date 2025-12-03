@@ -279,7 +279,7 @@ echo "Installing ansible plugins"
 ansible-galaxy collection install ansible.utils
 set +e
 echo "Op_info started"
-ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, local.yml -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false --tags operator_info -e operator_dir=$TARGET_PATH/$OP_NAME -e cluster_type=ocp -e strict_cluster_version_labels=true -e strict_k8s_bundles=true -e production_registry_namespace=""\
+ANSIBLE_CALLBACK_RESULT_FORMAT=yaml ansible-playbook -i localhost, local.yml -e ansible_connection=local -e run_upstream=true -e run_prepare_catalog_repo_upstream=false -e run_remove_catalog_repo=false --tags operator_info -e operator_dir=$TARGET_PATH/$OP_NAME -e cluster_type=ocp -e strict_cluster_version_labels=true -e strict_k8s_bundles=true -e production_registry_namespace=""\
  -e stream_kind=openshift_upstream -e operator_bundle_src_dir=/tmp/operators_bundle_dir -e operator_info_output_file=/tmp/op_info.yaml -e oi_failed_labels_output_file=/tmp/op_failed_labels.yaml -e oi_auto_labels_output_file=/tmp/op_auto_labels.yaml -e automatic_cluster_version_label=true
 ANSIBLE_STATUS=$?
 
@@ -292,7 +292,7 @@ ANSIBLE_STATUS=$?
 fi
 
 echo "Ansible initiated"
-ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS\
+ANSIBLE_CALLBACK_RESULT_FORMAT=yaml ansible-playbook -i localhost, deploy-olm-operator-openshift-upstream.yml -e ansible_connection=local -e package_name=$OP_NAME -e operator_dir=$TARGET_PATH/$OP_NAME -e op_version=$OP_VER -e oc_bin_path="/tmp/oc-$OC_DIR_CORE/bin/oc" -e commit_tag=$QUAY_HASH -e dir_suffix_part=$OC_DIR_CORE -e current_openshift_run=$CURRENT_OPENSHIFT_RUN $SUBDIR_ARG $EXTRA_ARGS\
  -e fast_op_info=true -e skip_operator_info_consistency=true -e operator_bundle_version_for_upgrade=$OP_VER -e test_registry_namespace=quay.io/operator_testing -e external_production_registry_namespace=$EXTERNAL_PROD_REG_NAMESPACE -e operator_sdk_bin_path=$SDK_BIN_PATH -e tou_olm_namespace=openshift-operator-lifecycle-manager -v
 ANSIBLE_STATUS=$(($ANSIBLE_STATUS+$?))
 echo "Reporting ..."

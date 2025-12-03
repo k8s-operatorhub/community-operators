@@ -454,6 +454,223 @@ spec:
                       Defaults to "default" which exists in all namespaces
                       The mutating webhook will inject this default if not specified
                     type: string
+                  volumeMounts:
+                    description: |-
+                      VolumeMounts defines where to mount volumes in the validation container
+                      Each mount must reference a volume defined in the volumes field
+                    items:
+                      description: |-
+                        VolumeMount describes a mount point for a Volume in the validation container
+                        ADR-045: Mount volumes at specific paths for notebook access to storage
+                      properties:
+                        mountPath:
+                          description: |-
+                            MountPath is the path within the container where the volume should be mounted
+                            Must be an absolute path starting with '/'
+                          pattern: ^/.*$
+                          type: string
+                        name:
+                          description: Name must match the Name of a Volume defined
+                            in spec.podConfig.volumes
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        readOnly:
+                          description: |-
+                            ReadOnly mounts the volume as read-only when true (default false)
+                            Use this for input data that should not be modified
+                          type: boolean
+                        subPath:
+                          description: |-
+                            SubPath is an optional sub-path inside the volume to mount instead of the root
+                            Use this to mount only a specific directory from a volume
+                          type: string
+                      required:
+                      - mountPath
+                      - name
+                      type: object
+                    type: array
+                  volumes:
+                    description: |-
+                      Volumes defines volumes to mount in the validation pod
+                      ADR-045: Supports PersistentVolumeClaim, ConfigMap, Secret, and EmptyDir volume types
+                      Use this to mount storage for model outputs, shared datasets, or configuration files
+                      Example use case: Save trained model to PVC for KServe to serve via pvc:// storageUri
+                    items:
+                      description: |-
+                        Volume represents a named volume in a pod
+                        ADR-045: Full Kubernetes Volume Support for validation pods
+                        Supports PersistentVolumeClaim, ConfigMap, Secret, and EmptyDir volume types
+                      properties:
+                        configMap:
+                          description: |-
+                            ConfigMap represents a ConfigMap to mount as a volume
+                            Use this to mount configuration files into the validation pod
+                          properties:
+                            defaultMode:
+                              description: |-
+                                DefaultMode is the mode bits used to set permissions on created files (default 0644)
+                                Must be a value between 0 and 0777 (octal)
+                              format: int32
+                              maximum: 511
+                              minimum: 0
+                              type: integer
+                            items:
+                              description: |-
+                                Items if unspecified, each key-value pair in the ConfigMap becomes a file
+                                with the key as the filename and the value as the file contents
+                              items:
+                                description: KeyToPath maps a key from a ConfigMap
+                                  or Secret to a file path
+                                properties:
+                                  key:
+                                    description: Key is the key to project from the
+                                      ConfigMap or Secret
+                                    minLength: 1
+                                    type: string
+                                  mode:
+                                    description: |-
+                                      Mode is the file mode bits used to set permissions on this file
+                                      Must be a value between 0 and 0777 (octal)
+                                      If not specified, the volume defaultMode is used
+                                    format: int32
+                                    maximum: 511
+                                    minimum: 0
+                                    type: integer
+                                  path:
+                                    description: |-
+                                      Path is the relative path of the file to map the key to
+                                      May not be an absolute path, may not contain '..', and may not start with '..'
+                                    minLength: 1
+                                    pattern: ^[^/].*$
+                                    type: string
+                                required:
+                                - key
+                                - path
+                                type: object
+                              type: array
+                            name:
+                              description: Name is the name of the ConfigMap in the
+                                same namespace
+                              minLength: 1
+                              type: string
+                            optional:
+                              description: |-
+                                Optional specifies whether the ConfigMap must exist
+                                If true, the volume will not be mounted if the ConfigMap doesn't exist
+                              type: boolean
+                          required:
+                          - name
+                          type: object
+                        emptyDir:
+                          description: |-
+                            EmptyDir represents a temporary directory that shares a pod's lifetime
+                            Use this for scratch space during notebook execution
+                          properties:
+                            medium:
+                              description: |-
+                                Medium is the storage medium type
+                                "" (empty string) uses the node's default medium
+                                "Memory" uses tmpfs (RAM-backed filesystem)
+                              enum:
+                              - ""
+                              - Memory
+                              type: string
+                            sizeLimit:
+                              description: |-
+                                SizeLimit is the maximum size of the emptyDir volume
+                                If Medium is "Memory", this limits the tmpfs size
+                                Accepts Kubernetes quantity format (e.g., "10Gi", "500Mi")
+                              pattern: ^([0-9]+(\.[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$
+                              type: string
+                          type: object
+                        name:
+                          description: Name is the volume name, must match a VolumeMount
+                            name
+                          maxLength: 63
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        persistentVolumeClaim:
+                          description: |-
+                            PersistentVolumeClaim represents a reference to a PVC in the same namespace
+                            Use this for persistent storage such as trained model outputs or shared datasets
+                          properties:
+                            claimName:
+                              description: ClaimName is the name of a PersistentVolumeClaim
+                                in the same namespace
+                              minLength: 1
+                              type: string
+                            readOnly:
+                              description: |-
+                                ReadOnly will force the volume to be mounted read-only
+                                Default is false (read/write)
+                              type: boolean
+                          required:
+                          - claimName
+                          type: object
+                        secret:
+                          description: |-
+                            Secret represents a Secret to mount as a volume
+                            Use this to mount certificates or other sensitive files
+                          properties:
+                            defaultMode:
+                              description: |-
+                                DefaultMode is the mode bits used to set permissions on created files (default 0644)
+                                Must be a value between 0 and 0777 (octal)
+                              format: int32
+                              maximum: 511
+                              minimum: 0
+                              type: integer
+                            items:
+                              description: |-
+                                Items if unspecified, each key-value pair in the Secret becomes a file
+                                with the key as the filename and the value as the file contents
+                              items:
+                                description: KeyToPath maps a key from a ConfigMap
+                                  or Secret to a file path
+                                properties:
+                                  key:
+                                    description: Key is the key to project from the
+                                      ConfigMap or Secret
+                                    minLength: 1
+                                    type: string
+                                  mode:
+                                    description: |-
+                                      Mode is the file mode bits used to set permissions on this file
+                                      Must be a value between 0 and 0777 (octal)
+                                      If not specified, the volume defaultMode is used
+                                    format: int32
+                                    maximum: 511
+                                    minimum: 0
+                                    type: integer
+                                  path:
+                                    description: |-
+                                      Path is the relative path of the file to map the key to
+                                      May not be an absolute path, may not contain '..', and may not start with '..'
+                                    minLength: 1
+                                    pattern: ^[^/].*$
+                                    type: string
+                                required:
+                                - key
+                                - path
+                                type: object
+                              type: array
+                            optional:
+                              description: |-
+                                Optional specifies whether the Secret must exist
+                                If true, the volume will not be mounted if the Secret doesn't exist
+                              type: boolean
+                            secretName:
+                              description: SecretName is the name of the Secret in
+                                the same namespace
+                              minLength: 1
+                              type: string
+                          required:
+                          - secretName
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
                 required:
                 - containerImage
                 type: object

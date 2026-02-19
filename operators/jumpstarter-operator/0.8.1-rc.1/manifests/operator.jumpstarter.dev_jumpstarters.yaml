@@ -1,0 +1,1911 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: jumpstarters.operator.jumpstarter.dev
+spec:
+  group: operator.jumpstarter.dev
+  names:
+    kind: Jumpstarter
+    listKind: JumpstarterList
+    plural: jumpstarters
+    singular: jumpstarter
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Jumpstarter is the Schema for the jumpstarters API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              JumpstarterSpec defines the desired state of a Jumpstarter deployment. A deployment
+              can be created in a namespace of the cluster, and that's where all the Jumpstarter
+              resources and services will reside.
+            properties:
+              authentication:
+                description: |-
+                  Authentication configuration for client and exporter authentication.
+                  Supports multiple authentication methods including internal tokens, Kubernetes tokens, and JWT.
+                properties:
+                  autoProvisioning:
+                    description: |-
+                      Automatic user provisioning configuration, this is useful for creating
+                      users authenticated by external identity providers in Jumpstarter.
+                    properties:
+                      enabled:
+                        default: false
+                        description: |-
+                          Enable auto provisioning.
+                          When disabled, users authenticated by external identity providers will
+                          not be automatically created in Jumpstarter.
+                        type: boolean
+                    type: object
+                  internal:
+                    description: |-
+                      Internal authentication configuration.
+                      Built-in authenticator that issues tokens for clients and exporters.
+                      This is the simplest authentication method and is enabled by default.
+                    properties:
+                      enabled:
+                        default: true
+                        description: |-
+                          Enable the internal authentication method.
+                          When disabled, clients cannot use internal tokens for authentication.
+                        type: boolean
+                      prefix:
+                        default: 'internal:'
+                        description: |-
+                          Prefix to add to the subject claim of issued tokens.
+                          Helps distinguish internal tokens from other authentication methods.
+                          Example: "internal:" will result in subjects like "internal:user123"
+                        maxLength: 50
+                        type: string
+                      tokenLifetime:
+                        default: 43800h
+                        description: |-
+                          Token validity duration for issued tokens.
+                          After this duration, tokens expire and must be renewed.
+                        type: string
+                    type: object
+                  jwt:
+                    description: |-
+                      JWT authentication configuration.
+                      Enables authentication using external JWT tokens from OIDC providers.
+                      Supports multiple JWT authenticators for different identity providers.
+                    items:
+                      description: JWTAuthenticator provides the configuration for
+                        a single JWT authenticator.
+                      properties:
+                        claimMappings:
+                          description: claimMappings points claims of a token to be
+                            treated as user attributes.
+                          properties:
+                            extra:
+                              description: |-
+                                extra represents an option for the extra attribute.
+                                expression must produce a string or string array value.
+                                If the value is empty, the extra mapping will not be present.
+
+                                hard-coded extra key/value
+                                - key: "foo"
+                                  valueExpression: "'bar'"
+                                This will result in an extra attribute - foo: ["bar"]
+
+                                hard-coded key, value copying claim value
+                                - key: "foo"
+                                  valueExpression: "claims.some_claim"
+                                This will result in an extra attribute - foo: [value of some_claim]
+
+                                hard-coded key, value derived from claim value
+                                - key: "admin"
+                                  valueExpression: '(has(claims.is_admin) && claims.is_admin) ? "true":""'
+                                This will result in:
+                                 - if is_admin claim is present and true, extra attribute - admin: ["true"]
+                                 - if is_admin claim is present and false or is_admin claim is not present, no extra attribute will be added
+                              items:
+                                description: ExtraMapping provides the configuration
+                                  for a single extra mapping.
+                                properties:
+                                  key:
+                                    description: |-
+                                      key is a string to use as the extra attribute key.
+                                      key must be a domain-prefix path (e.g. example.org/foo). All characters before the first "/" must be a valid
+                                      subdomain as defined by RFC 1123. All characters trailing the first "/" must
+                                      be valid HTTP Path characters as defined by RFC 3986.
+                                      key must be lowercase.
+                                      Required to be unique.
+                                    type: string
+                                  valueExpression:
+                                    description: |-
+                                      valueExpression is a CEL expression to extract extra attribute value.
+                                      valueExpression must produce a string or string array value.
+                                      "", [], and null values are treated as the extra mapping not being present.
+                                      Empty string values contained within a string array are filtered out.
+
+                                      CEL expressions have access to the contents of the token claims, organized into CEL variable:
+                                      - 'claims' is a map of claim names to claim values.
+                                        For example, a variable named 'sub' can be accessed as 'claims.sub'.
+                                        Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+
+                                      Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+                                    type: string
+                                required:
+                                - key
+                                - valueExpression
+                                type: object
+                              type: array
+                            groups:
+                              description: |-
+                                groups represents an option for the groups attribute.
+                                The claim's value must be a string or string array claim.
+                                If groups.claim is set, the prefix must be specified (and can be the empty string).
+                                If groups.expression is set, the expression must produce a string or string array value.
+                                 "", [], and null values are treated as the group mapping not being present.
+                              properties:
+                                claim:
+                                  description: |-
+                                    claim is the JWT claim to use.
+                                    Mutually exclusive with expression.
+                                  type: string
+                                expression:
+                                  description: |-
+                                    expression represents the expression which will be evaluated by CEL.
+
+                                    CEL expressions have access to the contents of the token claims, organized into CEL variable:
+                                    - 'claims' is a map of claim names to claim values.
+                                      For example, a variable named 'sub' can be accessed as 'claims.sub'.
+                                      Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+
+                                    Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+
+                                    Mutually exclusive with claim and prefix.
+                                  type: string
+                                prefix:
+                                  description: |-
+                                    prefix is prepended to claim's value to prevent clashes with existing names.
+                                    prefix needs to be set if claim is set and can be the empty string.
+                                    Mutually exclusive with expression.
+                                  type: string
+                              type: object
+                            uid:
+                              description: |-
+                                uid represents an option for the uid attribute.
+                                Claim must be a singular string claim.
+                                If uid.expression is set, the expression must produce a string value.
+                              properties:
+                                claim:
+                                  description: |-
+                                    claim is the JWT claim to use.
+                                    Either claim or expression must be set.
+                                    Mutually exclusive with expression.
+                                  type: string
+                                expression:
+                                  description: |-
+                                    expression represents the expression which will be evaluated by CEL.
+
+                                    CEL expressions have access to the contents of the token claims, organized into CEL variable:
+                                    - 'claims' is a map of claim names to claim values.
+                                      For example, a variable named 'sub' can be accessed as 'claims.sub'.
+                                      Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+
+                                    Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+
+                                    Mutually exclusive with claim.
+                                  type: string
+                              type: object
+                            username:
+                              description: |-
+                                username represents an option for the username attribute.
+                                The claim's value must be a singular string.
+                                Same as the --oidc-username-claim and --oidc-username-prefix flags.
+                                If username.expression is set, the expression must produce a string value.
+                                If username.expression uses 'claims.email', then 'claims.email_verified' must be used in
+                                username.expression or extra[*].valueExpression or claimValidationRules[*].expression.
+                                An example claim validation rule expression that matches the validation automatically
+                                applied when username.claim is set to 'email' is 'claims.?email_verified.orValue(true) == true'. By explicitly comparing
+                                the value to true, we let type-checking see the result will be a boolean, and to make sure a non-boolean email_verified
+                                claim will be caught at runtime.
+
+                                In the flag based approach, the --oidc-username-claim and --oidc-username-prefix are optional. If --oidc-username-claim is not set,
+                                the default value is "sub". For the authentication config, there is no defaulting for claim or prefix. The claim and prefix must be set explicitly.
+                                For claim, if --oidc-username-claim was not set with legacy flag approach, configure username.claim="sub" in the authentication config.
+                                For prefix:
+                                    (1) --oidc-username-prefix="-", no prefix was added to the username. For the same behavior using authentication config,
+                                        set username.prefix=""
+                                    (2) --oidc-username-prefix="" and  --oidc-username-claim != "email", prefix was "<value of --oidc-issuer-url>#". For the same
+                                        behavior using authentication config, set username.prefix="<value of issuer.url>#"
+                                    (3) --oidc-username-prefix="<value>". For the same behavior using authentication config, set username.prefix="<value>"
+                              properties:
+                                claim:
+                                  description: |-
+                                    claim is the JWT claim to use.
+                                    Mutually exclusive with expression.
+                                  type: string
+                                expression:
+                                  description: |-
+                                    expression represents the expression which will be evaluated by CEL.
+
+                                    CEL expressions have access to the contents of the token claims, organized into CEL variable:
+                                    - 'claims' is a map of claim names to claim values.
+                                      For example, a variable named 'sub' can be accessed as 'claims.sub'.
+                                      Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+
+                                    Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+
+                                    Mutually exclusive with claim and prefix.
+                                  type: string
+                                prefix:
+                                  description: |-
+                                    prefix is prepended to claim's value to prevent clashes with existing names.
+                                    prefix needs to be set if claim is set and can be the empty string.
+                                    Mutually exclusive with expression.
+                                  type: string
+                              type: object
+                          required:
+                          - username
+                          type: object
+                        claimValidationRules:
+                          description: claimValidationRules are rules that are applied
+                            to validate token claims to authenticate users.
+                          items:
+                            description: ClaimValidationRule provides the configuration
+                              for a single claim validation rule.
+                            properties:
+                              claim:
+                                description: |-
+                                  claim is the name of a required claim.
+                                  Same as --oidc-required-claim flag.
+                                  Only string claim keys are supported.
+                                  Mutually exclusive with expression and message.
+                                type: string
+                              expression:
+                                description: |-
+                                  expression represents the expression which will be evaluated by CEL.
+                                  Must produce a boolean.
+
+                                  CEL expressions have access to the contents of the token claims, organized into CEL variable:
+                                  - 'claims' is a map of claim names to claim values.
+                                    For example, a variable named 'sub' can be accessed as 'claims.sub'.
+                                    Nested claims can be accessed using dot notation, e.g. 'claims.foo.bar'.
+                                  Must return true for the validation to pass.
+
+                                  Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+
+                                  Mutually exclusive with claim and requiredValue.
+                                type: string
+                              message:
+                                description: |-
+                                  message customizes the returned error message when expression returns false.
+                                  message is a literal string.
+                                  Mutually exclusive with claim and requiredValue.
+                                type: string
+                              requiredValue:
+                                description: |-
+                                  requiredValue is the value of a required claim.
+                                  Same as --oidc-required-claim flag.
+                                  Only string claim values are supported.
+                                  If claim is set and requiredValue is not set, the claim must be present with a value set to the empty string.
+                                  Mutually exclusive with expression and message.
+                                type: string
+                            type: object
+                          type: array
+                        issuer:
+                          description: issuer contains the basic OIDC provider connection
+                            options.
+                          properties:
+                            audienceMatchPolicy:
+                              description: |-
+                                audienceMatchPolicy defines how the "audiences" field is used to match the "aud" claim in the presented JWT.
+                                Allowed values are:
+                                1. "MatchAny" when multiple audiences are specified and
+                                2. empty (or unset) or "MatchAny" when a single audience is specified.
+
+                                - MatchAny: the "aud" claim in the presented JWT must match at least one of the entries in the "audiences" field.
+                                For example, if "audiences" is ["foo", "bar"], the "aud" claim in the presented JWT must contain either "foo" or "bar" (and may contain both).
+
+                                - "": The match policy can be empty (or unset) when a single audience is specified in the "audiences" field. The "aud" claim in the presented JWT must contain the single audience (and may contain others).
+
+                                For more nuanced audience validation, use claimValidationRules.
+                                  example: claimValidationRule[].expression: 'sets.equivalent(claims.aud, ["bar", "foo", "baz"])' to require an exact match.
+                              type: string
+                            audiences:
+                              description: |-
+                                audiences is the set of acceptable audiences the JWT must be issued to.
+                                At least one of the entries must match the "aud" claim in presented JWTs.
+                                Same value as the --oidc-client-id flag (though this field supports an array).
+                                Required to be non-empty.
+                              items:
+                                type: string
+                              type: array
+                            certificateAuthority:
+                              description: |-
+                                certificateAuthority contains PEM-encoded certificate authority certificates
+                                used to validate the connection when fetching discovery information.
+                                If unset, the system verifier is used.
+                                Same value as the content of the file referenced by the --oidc-ca-file flag.
+                              type: string
+                            discoveryURL:
+                              description: |-
+                                discoveryURL, if specified, overrides the URL used to fetch discovery
+                                information instead of using "{url}/.well-known/openid-configuration".
+                                The exact value specified is used, so "/.well-known/openid-configuration"
+                                must be included in discoveryURL if needed.
+
+                                The "issuer" field in the fetched discovery information must match the "issuer.url" field
+                                in the AuthenticationConfiguration and will be used to validate the "iss" claim in the presented JWT.
+                                This is for scenarios where the well-known and jwks endpoints are hosted at a different
+                                location than the issuer (such as locally in the cluster).
+
+                                Example:
+                                A discovery url that is exposed using kubernetes service 'oidc' in namespace 'oidc-namespace'
+                                and discovery information is available at '/.well-known/openid-configuration'.
+                                discoveryURL: "https://oidc.oidc-namespace/.well-known/openid-configuration"
+                                certificateAuthority is used to verify the TLS connection and the hostname on the leaf certificate
+                                must be set to 'oidc.oidc-namespace'.
+
+                                curl https://oidc.oidc-namespace/.well-known/openid-configuration (.discoveryURL field)
+                                {
+                                    issuer: "https://oidc.example.com" (.url field)
+                                }
+
+                                discoveryURL must be different from url.
+                                Required to be unique across all JWT authenticators.
+                                Note that egress selection configuration is not used for this network connection.
+                              type: string
+                            egressSelectorType:
+                              description: |-
+                                egressSelectorType is an indicator of which egress selection should be used for sending all traffic related
+                                to this issuer (discovery, JWKS, distributed claims, etc).  If unspecified, no custom dialer is used.
+                                When specified, the valid choices are "controlplane" and "cluster".  These correspond to the associated
+                                values in the --egress-selector-config-file.
+
+                                - controlplane: for traffic intended to go to the control plane.
+
+                                - cluster: for traffic intended to go to the system being managed by Kubernetes.
+                              type: string
+                            url:
+                              description: |-
+                                url points to the issuer URL in a format https://url or https://url/path.
+                                This must match the "iss" claim in the presented JWT, and the issuer returned from discovery.
+                                Same value as the --oidc-issuer-url flag.
+                                Discovery information is fetched from "{url}/.well-known/openid-configuration" unless overridden by discoveryURL.
+                                Required to be unique across all JWT authenticators.
+                                Note that egress selection configuration is not used for this network connection.
+                              type: string
+                          required:
+                          - audiences
+                          - url
+                          type: object
+                        userValidationRules:
+                          description: |-
+                            userValidationRules are rules that are applied to final user before completing authentication.
+                            These allow invariants to be applied to incoming identities such as preventing the
+                            use of the system: prefix that is commonly used by Kubernetes components.
+                            The validation rules are logically ANDed together and must all return true for the validation to pass.
+                          items:
+                            description: UserValidationRule provides the configuration
+                              for a single user info validation rule.
+                            properties:
+                              expression:
+                                description: |-
+                                  expression represents the expression which will be evaluated by CEL.
+                                  Must return true for the validation to pass.
+
+                                  CEL expressions have access to the contents of UserInfo, organized into CEL variable:
+                                  - 'user' - authentication.k8s.io/v1, Kind=UserInfo object
+                                     Refer to https://github.com/kubernetes/api/blob/release-1.28/authentication/v1/types.go#L105-L122 for the definition.
+                                     API documentation: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/#userinfo-v1-authentication-k8s-io
+
+                                  Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+                                type: string
+                              message:
+                                description: |-
+                                  message customizes the returned error message when rule returns false.
+                                  message is a literal string.
+                                type: string
+                            required:
+                            - expression
+                            type: object
+                          type: array
+                      required:
+                      - claimMappings
+                      - issuer
+                      type: object
+                    type: array
+                  k8s:
+                    description: |-
+                      Kubernetes authentication configuration.
+                      Enables authentication using Kubernetes service account tokens.
+                      Useful for integrating with existing Kubernetes RBAC policies.
+                    properties:
+                      enabled:
+                        default: false
+                        description: |-
+                          Enable Kubernetes authentication.
+                          When enabled, clients can authenticate using Kubernetes service account tokens.
+                        type: boolean
+                    type: object
+                type: object
+              baseDomain:
+                description: |-
+                  Base domain used to construct FQDNs for all service endpoints.
+                  This domain will be used to generate the default hostnames for Routes, Ingresses, and certificates.
+                  Example: "example.com" will generate endpoints like "grpc.example.com", "router.example.com"
+                pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                type: string
+              certManager:
+                description: |-
+                  CertManager configuration for automatic TLS certificate management.
+                  When enabled, jumpstarter will interact with cert-manager to automatically provision
+                  and renew TLS certificates for all endpoints. Requires cert-manager to be installed in the cluster.
+                properties:
+                  enabled:
+                    default: false
+                    description: |-
+                      Enable cert-manager integration for automatic TLS certificate management.
+                      When disabled, TLS certificates must be provided manually via secrets.
+                    type: boolean
+                  server:
+                    description: |-
+                      Server certificate configuration for controller and router endpoints.
+                      Defines how server TLS certificates are issued.
+                    properties:
+                      issuerRef:
+                        description: |-
+                          Reference an existing cert-manager Issuer or ClusterIssuer.
+                          Use this to integrate with existing PKI infrastructure (ACME, Vault, etc.).
+                          This overrides SelfSigned.Enabled = true which is the default setting
+                        properties:
+                          caBundle:
+                            description: |-
+                              CABundle is an optional base64-encoded PEM CA certificate bundle for this issuer.
+                              Required when using external issuers with non-publicly-trusted CAs.
+                              This will be published to the {name}-service-ca-cert ConfigMap for clients to use.
+                              For self-signed CA mode, this is automatically calculated from the CA secret.
+                            format: byte
+                            type: string
+                          group:
+                            default: cert-manager.io
+                            description: |-
+                              Group of the issuer resource. Defaults to cert-manager.io.
+                              Only change this if using a custom issuer from a different API group.
+                            type: string
+                          kind:
+                            default: Issuer
+                            description: 'Kind of the issuer: "Issuer" for namespace-scoped
+                              or "ClusterIssuer" for cluster-scoped.'
+                            enum:
+                            - Issuer
+                            - ClusterIssuer
+                            type: string
+                          name:
+                            description: Name of the Issuer or ClusterIssuer resource.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      selfSigned:
+                        description: |-
+                          Create a self-signed CA managed by the operator.
+                          The operator will create a self-signed Issuer and CA certificate,
+                          then use that CA to issue server certificates.
+                        properties:
+                          caDuration:
+                            default: 87600h
+                            description: |-
+                              Duration of the CA certificate validity.
+                              The CA certificate is used to sign server certificates.
+                            type: string
+                          certDuration:
+                            default: 8760h
+                            description: |-
+                              Duration of server certificate validity.
+                              Server certificates are issued for controller and router endpoints.
+                            type: string
+                          enabled:
+                            default: true
+                            description: Enable self-signed CA mode.
+                            type: boolean
+                          renewBefore:
+                            default: 360h
+                            description: |-
+                              Time before certificate expiration to trigger renewal.
+                              Certificates will be renewed this duration before they expire.
+                            type: string
+                        type: object
+                    type: object
+                type: object
+              controller:
+                default: {}
+                description: |-
+                  Controller configuration for the main Jumpstarter API and gRPC services.
+                  The controller handles gRPC and REST API requests from clients and exporters.
+                properties:
+                  exporterOptions:
+                    description: |-
+                      Exporter options configuration.
+                      Controls how exporters connect and behave when communicating with the controller.
+                    properties:
+                      offlineTimeout:
+                        default: 180s
+                        description: |-
+                          Offline timeout duration for exporters.
+                          After this duration without communication, an exporter is considered offline.
+                          This drives the online/offline status field of exporters, and offline exporters
+                          won't be considered for leases.
+                        type: string
+                    type: object
+                  grpc:
+                    description: |-
+                      gRPC configuration for controller endpoints.
+                      Defines how controller gRPC services are exposed and configured.
+                    properties:
+                      endpoints:
+                        description: |-
+                          List of gRPC endpoints to expose.
+                          Each endpoint can use different networking methods (Route, Ingress, NodePort, or LoadBalancer)
+                          based on your cluster setup. Example: Use Route for OpenShift, Ingress for standard Kubernetes.
+                        items:
+                          description: |-
+                            Endpoint defines a single endpoint configuration.
+                            An endpoint can use one or more networking methods: Route, Ingress, NodePort, or LoadBalancer.
+                            Multiple methods can be configured simultaneously for the same address.
+                          properties:
+                            address:
+                              description: |-
+                                Address for this endpoint in the format "hostname", "hostname:port", "IPv4", "IPv4:port", "[IPv6]", or "[IPv6]:port".
+                                Required for Route and Ingress endpoints. Optional for NodePort and LoadBalancer endpoints.
+                                When optional, the address is used for certificate generation and DNS resolution.
+                                Supports templating with $(replica) for replica-specific addresses.
+                                Examples: "grpc.example.com", "grpc.example.com:9090", "192.168.1.1:8080", "[2001:db8::1]:8443", "router-$(replica).example.com"
+                              pattern: ^(\[[0-9a-fA-F:\.]+\]|[0-9]+(\.[0-9]+){3}|[a-z0-9$]([a-z0-9\-\.\$\(\)]*[a-z0-9\)])?)(:[0-9]+)?$
+                              type: string
+                            clusterIP:
+                              description: |-
+                                ClusterIP configuration for internal service access.
+                                Creates a ClusterIP service for this endpoint.
+                                Useful for internal service-to-service communication or when
+                                using a different method to expose the service externally.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the ClusterIP service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the ClusterIP service for this endpoint.
+                                    When disabled, no ClusterIP service will be created for this endpoint.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the ClusterIP service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            ingress:
+                              description: |-
+                                Ingress configuration for standard Kubernetes clusters.
+                                Creates an Ingress resource for this endpoint.
+                                Requires an ingress controller to be installed.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the Kubernetes Ingress resource.
+                                    Useful for configuring ingress-specific behavior, TLS settings, and load balancer options.
+                                  type: object
+                                class:
+                                  default: default
+                                  description: |-
+                                    Ingress class name for the Kubernetes Ingress.
+                                    Specifies which ingress controller should handle this ingress.
+                                  type: string
+                                enabled:
+                                  description: |-
+                                    Enable the Kubernetes Ingress for this endpoint.
+                                    When disabled, no Ingress resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the Kubernetes Ingress resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            loadBalancer:
+                              description: |-
+                                LoadBalancer configuration for cloud environments.
+                                Creates a LoadBalancer service for this endpoint.
+                                Requires cloud provider support for LoadBalancer services.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the LoadBalancer service.
+                                    Useful for configuring cloud provider-specific load balancer options.
+                                    Example: "service.beta.kubernetes.io/aws-load-balancer-type: nlb"
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the LoadBalancer service for this endpoint.
+                                    When disabled, no LoadBalancer service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the LoadBalancer service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    Port number for the LoadBalancer service.
+                                    Must be a valid port number (1-65535).
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            nodeport:
+                              description: |-
+                                NodePort configuration for direct node access.
+                                Exposes the service on a specific port on each node.
+                                Useful for bare-metal or simple cluster setups.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the NodePort service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the NodePort service for this endpoint.
+                                    When disabled, no NodePort service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the NodePort service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    NodePort port number to expose on each node.
+                                    Must be in the range 30000-32767 for most Kubernetes clusters.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            route:
+                              description: |-
+                                Route configuration for OpenShift clusters.
+                                Creates an OpenShift Route resource for this endpoint.
+                                Only applicable in OpenShift environments.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the OpenShift Route resource.
+                                    Useful for configuring route-specific behavior and TLS settings.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the OpenShift Route for this endpoint.
+                                    When disabled, no Route resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the OpenShift Route resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                          type: object
+                        type: array
+                      keepalive:
+                        description: |-
+                          Keepalive configuration for gRPC connections.
+                          Controls connection health checks and idle connection management.
+                          Helps maintain stable connections in load-balanced environments.
+                        properties:
+                          intervalTime:
+                            default: 10s
+                            description: |-
+                              Interval between keepalive pings.
+                              How often to send keepalive pings to check connection health. This is important
+                              to keep TCP gRPC connections alive when traversing load balancers and proxies.
+                            type: string
+                          maxConnectionAge:
+                            description: |-
+                              Maximum age of a connection before it is closed and recreated.
+                              Helps prevent issues with long-lived connections. It defaults to infinity.
+                            type: string
+                          maxConnectionAgeGrace:
+                            description: |-
+                              Grace period for closing connections that exceed MaxConnectionAge.
+                              Allows ongoing RPCs to complete before closing the connection.
+                            type: string
+                          maxConnectionIdle:
+                            description: |-
+                              Maximum time a connection can remain idle before being closed.
+                              It defaults to infinity.
+                            type: string
+                          minTime:
+                            default: 1s
+                            description: |-
+                              Minimum time between keepalives that the connection will accept, under this threshold
+                              the other side will get a GOAWAY signal.
+                              Prevents excessive keepalive traffic on the network.
+                            type: string
+                          permitWithoutStream:
+                            default: true
+                            description: |-
+                              Allow keepalive pings even when there are no active RPC streams.
+                              Useful for detecting connection issues in idle connections.
+                              This is important to keep TCP gRPC connections alive when traversing
+                              load balancers and proxies.
+                            type: boolean
+                          timeout:
+                            default: 180s
+                            description: |-
+                              Timeout for keepalive ping acknowledgment.
+                              If a ping is not acknowledged within this time, the connection is considered broken.
+                              The default is high to avoid issues when the network on a exporter is overloaded, i.e.
+                              during flashing.
+                            type: string
+                        type: object
+                      tls:
+                        description: |-
+                          TLS configuration for secure gRPC communication.
+                          Requires a Kubernetes secret containing the TLS certificate and private key.
+                          If spec.certManager.enabled is true, this secret will be automatically managed and
+                          configured by cert-manager.
+                        properties:
+                          certSecret:
+                            description: |-
+                              Name of the Kubernetes secret containing the TLS certificate and private key.
+                              The secret must contain 'tls.crt' and 'tls.key' keys.
+                              If useCertManager is enabled, this secret will be automatically managed and
+                              configured by cert-manager.
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  image:
+                    default: quay.io/jumpstarter-dev/jumpstarter-controller:latest
+                    description: |-
+                      Container image for the controller pods in 'registry/repository/image:tag' format.
+                      If not specified, defaults to the latest stable version of the Jumpstarter controller.
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: |-
+                      Image pull policy for the controller container.
+                      Controls when the container image should be pulled from the registry.
+                    enum:
+                    - Always
+                    - IfNotPresent
+                    - Never
+                    type: string
+                  login:
+                    description: |-
+                      Login endpoint configuration for simplified CLI login.
+                      Provides authentication configuration discovery for the jmp login command.
+                      The login service runs on HTTP and expects TLS to be terminated at the Route/Ingress level.
+                    properties:
+                      endpoints:
+                        description: |-
+                          List of login endpoints to expose.
+                          Each endpoint can use different networking methods (Route, Ingress, NodePort, or LoadBalancer)
+                          based on your cluster setup.
+                          Note: Unlike gRPC endpoints, login endpoints use edge TLS termination (not passthrough).
+                        items:
+                          description: |-
+                            Endpoint defines a single endpoint configuration.
+                            An endpoint can use one or more networking methods: Route, Ingress, NodePort, or LoadBalancer.
+                            Multiple methods can be configured simultaneously for the same address.
+                          properties:
+                            address:
+                              description: |-
+                                Address for this endpoint in the format "hostname", "hostname:port", "IPv4", "IPv4:port", "[IPv6]", or "[IPv6]:port".
+                                Required for Route and Ingress endpoints. Optional for NodePort and LoadBalancer endpoints.
+                                When optional, the address is used for certificate generation and DNS resolution.
+                                Supports templating with $(replica) for replica-specific addresses.
+                                Examples: "grpc.example.com", "grpc.example.com:9090", "192.168.1.1:8080", "[2001:db8::1]:8443", "router-$(replica).example.com"
+                              pattern: ^(\[[0-9a-fA-F:\.]+\]|[0-9]+(\.[0-9]+){3}|[a-z0-9$]([a-z0-9\-\.\$\(\)]*[a-z0-9\)])?)(:[0-9]+)?$
+                              type: string
+                            clusterIP:
+                              description: |-
+                                ClusterIP configuration for internal service access.
+                                Creates a ClusterIP service for this endpoint.
+                                Useful for internal service-to-service communication or when
+                                using a different method to expose the service externally.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the ClusterIP service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the ClusterIP service for this endpoint.
+                                    When disabled, no ClusterIP service will be created for this endpoint.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the ClusterIP service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            ingress:
+                              description: |-
+                                Ingress configuration for standard Kubernetes clusters.
+                                Creates an Ingress resource for this endpoint.
+                                Requires an ingress controller to be installed.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the Kubernetes Ingress resource.
+                                    Useful for configuring ingress-specific behavior, TLS settings, and load balancer options.
+                                  type: object
+                                class:
+                                  default: default
+                                  description: |-
+                                    Ingress class name for the Kubernetes Ingress.
+                                    Specifies which ingress controller should handle this ingress.
+                                  type: string
+                                enabled:
+                                  description: |-
+                                    Enable the Kubernetes Ingress for this endpoint.
+                                    When disabled, no Ingress resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the Kubernetes Ingress resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            loadBalancer:
+                              description: |-
+                                LoadBalancer configuration for cloud environments.
+                                Creates a LoadBalancer service for this endpoint.
+                                Requires cloud provider support for LoadBalancer services.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the LoadBalancer service.
+                                    Useful for configuring cloud provider-specific load balancer options.
+                                    Example: "service.beta.kubernetes.io/aws-load-balancer-type: nlb"
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the LoadBalancer service for this endpoint.
+                                    When disabled, no LoadBalancer service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the LoadBalancer service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    Port number for the LoadBalancer service.
+                                    Must be a valid port number (1-65535).
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            nodeport:
+                              description: |-
+                                NodePort configuration for direct node access.
+                                Exposes the service on a specific port on each node.
+                                Useful for bare-metal or simple cluster setups.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the NodePort service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the NodePort service for this endpoint.
+                                    When disabled, no NodePort service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the NodePort service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    NodePort port number to expose on each node.
+                                    Must be in the range 30000-32767 for most Kubernetes clusters.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            route:
+                              description: |-
+                                Route configuration for OpenShift clusters.
+                                Creates an OpenShift Route resource for this endpoint.
+                                Only applicable in OpenShift environments.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the OpenShift Route resource.
+                                    Useful for configuring route-specific behavior and TLS settings.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the OpenShift Route for this endpoint.
+                                    When disabled, no Route resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the OpenShift Route resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                          type: object
+                        type: array
+                      tls:
+                        description: |-
+                          TLS configuration for the login endpoint.
+                          Specifies the Kubernetes secret containing the TLS certificate for edge termination.
+                          If not specified and certManager is enabled, a default secret name will be generated.
+                        properties:
+                          secretName:
+                            description: |-
+                              Name of the Kubernetes secret containing the TLS certificate and private key.
+                              The secret must contain 'tls.crt' and 'tls.key' keys.
+                              Used for edge TLS termination at the Ingress/Route level.
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  replicas:
+                    default: 2
+                    description: |-
+                      Number of controller replicas to run.
+                      Must be a positive integer. Minimum recommended value is 2 for high availability.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: |-
+                      Resource requirements for controller pods.
+                      Defines CPU and memory requests and limits for each controller pod.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  restApi:
+                    description: |-
+                      REST API configuration for HTTP-based clients.
+                      Enables non-gRPC clients to interact with Jumpstarter for listing leases,
+                      managing exporters, and creating new leases. Use this when you need HTTP/JSON access.
+                    properties:
+                      endpoints:
+                        description: |-
+                          List of REST API endpoints to expose.
+                          Each endpoint can use different networking methods (Route, Ingress, NodePort, or LoadBalancer)
+                          based on your cluster setup.
+                        items:
+                          description: |-
+                            Endpoint defines a single endpoint configuration.
+                            An endpoint can use one or more networking methods: Route, Ingress, NodePort, or LoadBalancer.
+                            Multiple methods can be configured simultaneously for the same address.
+                          properties:
+                            address:
+                              description: |-
+                                Address for this endpoint in the format "hostname", "hostname:port", "IPv4", "IPv4:port", "[IPv6]", or "[IPv6]:port".
+                                Required for Route and Ingress endpoints. Optional for NodePort and LoadBalancer endpoints.
+                                When optional, the address is used for certificate generation and DNS resolution.
+                                Supports templating with $(replica) for replica-specific addresses.
+                                Examples: "grpc.example.com", "grpc.example.com:9090", "192.168.1.1:8080", "[2001:db8::1]:8443", "router-$(replica).example.com"
+                              pattern: ^(\[[0-9a-fA-F:\.]+\]|[0-9]+(\.[0-9]+){3}|[a-z0-9$]([a-z0-9\-\.\$\(\)]*[a-z0-9\)])?)(:[0-9]+)?$
+                              type: string
+                            clusterIP:
+                              description: |-
+                                ClusterIP configuration for internal service access.
+                                Creates a ClusterIP service for this endpoint.
+                                Useful for internal service-to-service communication or when
+                                using a different method to expose the service externally.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the ClusterIP service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the ClusterIP service for this endpoint.
+                                    When disabled, no ClusterIP service will be created for this endpoint.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the ClusterIP service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            ingress:
+                              description: |-
+                                Ingress configuration for standard Kubernetes clusters.
+                                Creates an Ingress resource for this endpoint.
+                                Requires an ingress controller to be installed.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the Kubernetes Ingress resource.
+                                    Useful for configuring ingress-specific behavior, TLS settings, and load balancer options.
+                                  type: object
+                                class:
+                                  default: default
+                                  description: |-
+                                    Ingress class name for the Kubernetes Ingress.
+                                    Specifies which ingress controller should handle this ingress.
+                                  type: string
+                                enabled:
+                                  description: |-
+                                    Enable the Kubernetes Ingress for this endpoint.
+                                    When disabled, no Ingress resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the Kubernetes Ingress resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            loadBalancer:
+                              description: |-
+                                LoadBalancer configuration for cloud environments.
+                                Creates a LoadBalancer service for this endpoint.
+                                Requires cloud provider support for LoadBalancer services.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the LoadBalancer service.
+                                    Useful for configuring cloud provider-specific load balancer options.
+                                    Example: "service.beta.kubernetes.io/aws-load-balancer-type: nlb"
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the LoadBalancer service for this endpoint.
+                                    When disabled, no LoadBalancer service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the LoadBalancer service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    Port number for the LoadBalancer service.
+                                    Must be a valid port number (1-65535).
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            nodeport:
+                              description: |-
+                                NodePort configuration for direct node access.
+                                Exposes the service on a specific port on each node.
+                                Useful for bare-metal or simple cluster setups.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the NodePort service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the NodePort service for this endpoint.
+                                    When disabled, no NodePort service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the NodePort service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    NodePort port number to expose on each node.
+                                    Must be in the range 30000-32767 for most Kubernetes clusters.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            route:
+                              description: |-
+                                Route configuration for OpenShift clusters.
+                                Creates an OpenShift Route resource for this endpoint.
+                                Only applicable in OpenShift environments.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the OpenShift Route resource.
+                                    Useful for configuring route-specific behavior and TLS settings.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the OpenShift Route for this endpoint.
+                                    When disabled, no Route resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the OpenShift Route resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                          type: object
+                        type: array
+                      tls:
+                        description: |-
+                          TLS configuration for secure HTTP communication.
+                          Requires a Kubernetes secret containing the TLS certificate and private key.
+                        properties:
+                          certSecret:
+                            description: |-
+                              Name of the Kubernetes secret containing the TLS certificate and private key.
+                              The secret must contain 'tls.crt' and 'tls.key' keys.
+                              If useCertManager is enabled, this secret will be automatically managed and
+                              configured by cert-manager.
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                type: object
+              routers:
+                default: {}
+                description: |-
+                  Router configuration for the Jumpstarter router service.
+                  Routers handle gRPC traffic routing and load balancing.
+                properties:
+                  grpc:
+                    description: |-
+                      gRPC configuration for router endpoints.
+                      Defines how router gRPC services are exposed and configured.
+                    properties:
+                      endpoints:
+                        description: |-
+                          List of gRPC endpoints to expose.
+                          Each endpoint can use different networking methods (Route, Ingress, NodePort, or LoadBalancer)
+                          based on your cluster setup. Example: Use Route for OpenShift, Ingress for standard Kubernetes.
+                        items:
+                          description: |-
+                            Endpoint defines a single endpoint configuration.
+                            An endpoint can use one or more networking methods: Route, Ingress, NodePort, or LoadBalancer.
+                            Multiple methods can be configured simultaneously for the same address.
+                          properties:
+                            address:
+                              description: |-
+                                Address for this endpoint in the format "hostname", "hostname:port", "IPv4", "IPv4:port", "[IPv6]", or "[IPv6]:port".
+                                Required for Route and Ingress endpoints. Optional for NodePort and LoadBalancer endpoints.
+                                When optional, the address is used for certificate generation and DNS resolution.
+                                Supports templating with $(replica) for replica-specific addresses.
+                                Examples: "grpc.example.com", "grpc.example.com:9090", "192.168.1.1:8080", "[2001:db8::1]:8443", "router-$(replica).example.com"
+                              pattern: ^(\[[0-9a-fA-F:\.]+\]|[0-9]+(\.[0-9]+){3}|[a-z0-9$]([a-z0-9\-\.\$\(\)]*[a-z0-9\)])?)(:[0-9]+)?$
+                              type: string
+                            clusterIP:
+                              description: |-
+                                ClusterIP configuration for internal service access.
+                                Creates a ClusterIP service for this endpoint.
+                                Useful for internal service-to-service communication or when
+                                using a different method to expose the service externally.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the ClusterIP service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the ClusterIP service for this endpoint.
+                                    When disabled, no ClusterIP service will be created for this endpoint.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the ClusterIP service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            ingress:
+                              description: |-
+                                Ingress configuration for standard Kubernetes clusters.
+                                Creates an Ingress resource for this endpoint.
+                                Requires an ingress controller to be installed.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the Kubernetes Ingress resource.
+                                    Useful for configuring ingress-specific behavior, TLS settings, and load balancer options.
+                                  type: object
+                                class:
+                                  default: default
+                                  description: |-
+                                    Ingress class name for the Kubernetes Ingress.
+                                    Specifies which ingress controller should handle this ingress.
+                                  type: string
+                                enabled:
+                                  description: |-
+                                    Enable the Kubernetes Ingress for this endpoint.
+                                    When disabled, no Ingress resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the Kubernetes Ingress resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                            loadBalancer:
+                              description: |-
+                                LoadBalancer configuration for cloud environments.
+                                Creates a LoadBalancer service for this endpoint.
+                                Requires cloud provider support for LoadBalancer services.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the LoadBalancer service.
+                                    Useful for configuring cloud provider-specific load balancer options.
+                                    Example: "service.beta.kubernetes.io/aws-load-balancer-type: nlb"
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the LoadBalancer service for this endpoint.
+                                    When disabled, no LoadBalancer service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the LoadBalancer service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    Port number for the LoadBalancer service.
+                                    Must be a valid port number (1-65535).
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            nodeport:
+                              description: |-
+                                NodePort configuration for direct node access.
+                                Exposes the service on a specific port on each node.
+                                Useful for bare-metal or simple cluster setups.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the NodePort service.
+                                    Useful for configuring service-specific behavior and load balancer options.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the NodePort service for this endpoint.
+                                    When disabled, no NodePort service will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the NodePort service.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                                port:
+                                  description: |-
+                                    NodePort port number to expose on each node.
+                                    Must be in the range 30000-32767 for most Kubernetes clusters.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              type: object
+                            route:
+                              description: |-
+                                Route configuration for OpenShift clusters.
+                                Creates an OpenShift Route resource for this endpoint.
+                                Only applicable in OpenShift environments.
+                              properties:
+                                annotations:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Annotations to add to the OpenShift Route resource.
+                                    Useful for configuring route-specific behavior and TLS settings.
+                                  type: object
+                                enabled:
+                                  description: |-
+                                    Enable the OpenShift Route for this endpoint.
+                                    When disabled, no Route resource will be created for this endpoint.
+                                    When not specified, the operator will determine the best networking option for your cluster.
+                                  type: boolean
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels to add to the OpenShift Route resource.
+                                    Useful for monitoring, cost allocation, and resource organization.
+                                  type: object
+                              type: object
+                          type: object
+                        type: array
+                      keepalive:
+                        description: |-
+                          Keepalive configuration for gRPC connections.
+                          Controls connection health checks and idle connection management.
+                          Helps maintain stable connections in load-balanced environments.
+                        properties:
+                          intervalTime:
+                            default: 10s
+                            description: |-
+                              Interval between keepalive pings.
+                              How often to send keepalive pings to check connection health. This is important
+                              to keep TCP gRPC connections alive when traversing load balancers and proxies.
+                            type: string
+                          maxConnectionAge:
+                            description: |-
+                              Maximum age of a connection before it is closed and recreated.
+                              Helps prevent issues with long-lived connections. It defaults to infinity.
+                            type: string
+                          maxConnectionAgeGrace:
+                            description: |-
+                              Grace period for closing connections that exceed MaxConnectionAge.
+                              Allows ongoing RPCs to complete before closing the connection.
+                            type: string
+                          maxConnectionIdle:
+                            description: |-
+                              Maximum time a connection can remain idle before being closed.
+                              It defaults to infinity.
+                            type: string
+                          minTime:
+                            default: 1s
+                            description: |-
+                              Minimum time between keepalives that the connection will accept, under this threshold
+                              the other side will get a GOAWAY signal.
+                              Prevents excessive keepalive traffic on the network.
+                            type: string
+                          permitWithoutStream:
+                            default: true
+                            description: |-
+                              Allow keepalive pings even when there are no active RPC streams.
+                              Useful for detecting connection issues in idle connections.
+                              This is important to keep TCP gRPC connections alive when traversing
+                              load balancers and proxies.
+                            type: boolean
+                          timeout:
+                            default: 180s
+                            description: |-
+                              Timeout for keepalive ping acknowledgment.
+                              If a ping is not acknowledged within this time, the connection is considered broken.
+                              The default is high to avoid issues when the network on a exporter is overloaded, i.e.
+                              during flashing.
+                            type: string
+                        type: object
+                      tls:
+                        description: |-
+                          TLS configuration for secure gRPC communication.
+                          Requires a Kubernetes secret containing the TLS certificate and private key.
+                          If spec.certManager.enabled is true, this secret will be automatically managed and
+                          configured by cert-manager.
+                        properties:
+                          certSecret:
+                            description: |-
+                              Name of the Kubernetes secret containing the TLS certificate and private key.
+                              The secret must contain 'tls.crt' and 'tls.key' keys.
+                              If useCertManager is enabled, this secret will be automatically managed and
+                              configured by cert-manager.
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  image:
+                    default: quay.io/jumpstarter-dev/jumpstarter-controller:latest
+                    description: |-
+                      Container image for the router pods in 'registry/repository/image:tag' format.
+                      If not specified, defaults to the latest stable version of the Jumpstarter router.
+                    type: string
+                  imagePullPolicy:
+                    default: IfNotPresent
+                    description: |-
+                      Image pull policy for the router container.
+                      Controls when the container image should be pulled from the registry.
+                    enum:
+                    - Always
+                    - IfNotPresent
+                    - Never
+                    type: string
+                  replicas:
+                    default: 3
+                    description: |-
+                      Number of router replicas to run.
+                      Must be a positive integer. Minimum recommended value is 3 for high availability.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: |-
+                      Resource requirements for router pods.
+                      Defines CPU and memory requests and limits for each router pod.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  topologySpreadConstraints:
+                    description: |-
+                      Topology spread constraints for router pod distribution.
+                      Ensures router pods are distributed evenly across nodes and zones.
+                      Useful for high availability and fault tolerance.
+                    items:
+                      description: TopologySpreadConstraint specifies how to spread
+                        matching pods among the given topology.
+                      properties:
+                        labelSelector:
+                          description: |-
+                            LabelSelector is used to find matching pods.
+                            Pods that match this label selector are counted to determine the number of pods
+                            in their corresponding topology domain.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        matchLabelKeys:
+                          description: |-
+                            MatchLabelKeys is a set of pod label keys to select the pods over which
+                            spreading will be calculated. The keys are used to lookup values from the
+                            incoming pod labels, those key-value labels are ANDed with labelSelector
+                            to select the group of existing pods over which spreading will be calculated
+                            for the incoming pod. The same key is forbidden to exist in both MatchLabelKeys and LabelSelector.
+                            MatchLabelKeys cannot be set when LabelSelector isn't set.
+                            Keys that don't exist in the incoming pod labels will
+                            be ignored. A null or empty list means only match against labelSelector.
+
+                            This is a beta field and requires the MatchLabelKeysInPodTopologySpread feature gate to be enabled (enabled by default).
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        maxSkew:
+                          description: |-
+                            MaxSkew describes the degree to which pods may be unevenly distributed.
+                            When `whenUnsatisfiable=DoNotSchedule`, it is the maximum permitted difference
+                            between the number of matching pods in the target topology and the global minimum.
+                            The global minimum is the minimum number of matching pods in an eligible domain
+                            or zero if the number of eligible domains is less than MinDomains.
+                            For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same
+                            labelSelector spread as 2/2/1:
+                            In this case, the global minimum is 1.
+                            | zone1 | zone2 | zone3 |
+                            |  P P  |  P P  |   P   |
+                            - if MaxSkew is 1, incoming pod can only be scheduled to zone3 to become 2/2/2;
+                            scheduling it onto zone1(zone2) would make the ActualSkew(3-1) on zone1(zone2)
+                            violate MaxSkew(1).
+                            - if MaxSkew is 2, incoming pod can be scheduled onto any zone.
+                            When `whenUnsatisfiable=ScheduleAnyway`, it is used to give higher precedence
+                            to topologies that satisfy it.
+                            It's a required field. Default value is 1 and 0 is not allowed.
+                          format: int32
+                          type: integer
+                        minDomains:
+                          description: |-
+                            MinDomains indicates a minimum number of eligible domains.
+                            When the number of eligible domains with matching topology keys is less than minDomains,
+                            Pod Topology Spread treats "global minimum" as 0, and then the calculation of Skew is performed.
+                            And when the number of eligible domains with matching topology keys equals or greater than minDomains,
+                            this value has no effect on scheduling.
+                            As a result, when the number of eligible domains is less than minDomains,
+                            scheduler won't schedule more than maxSkew Pods to those domains.
+                            If value is nil, the constraint behaves as if MinDomains is equal to 1.
+                            Valid values are integers greater than 0.
+                            When value is not nil, WhenUnsatisfiable must be DoNotSchedule.
+
+                            For example, in a 3-zone cluster, MaxSkew is set to 2, MinDomains is set to 5 and pods with the same
+                            labelSelector spread as 2/2/2:
+                            | zone1 | zone2 | zone3 |
+                            |  P P  |  P P  |  P P  |
+                            The number of domains is less than 5(MinDomains), so "global minimum" is treated as 0.
+                            In this situation, new pod with the same labelSelector cannot be scheduled,
+                            because computed skew will be 3(3 - 0) if new Pod is scheduled to any of the three zones,
+                            it will violate MaxSkew.
+                          format: int32
+                          type: integer
+                        nodeAffinityPolicy:
+                          description: |-
+                            NodeAffinityPolicy indicates how we will treat Pod's nodeAffinity/nodeSelector
+                            when calculating pod topology spread skew. Options are:
+                            - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations.
+                            - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
+
+                            If this value is nil, the behavior is equivalent to the Honor policy.
+                          type: string
+                        nodeTaintsPolicy:
+                          description: |-
+                            NodeTaintsPolicy indicates how we will treat node taints when calculating
+                            pod topology spread skew. Options are:
+                            - Honor: nodes without taints, along with tainted nodes for which the incoming pod
+                            has a toleration, are included.
+                            - Ignore: node taints are ignored. All nodes are included.
+
+                            If this value is nil, the behavior is equivalent to the Ignore policy.
+                          type: string
+                        topologyKey:
+                          description: |-
+                            TopologyKey is the key of node labels. Nodes that have a label with this key
+                            and identical values are considered to be in the same topology.
+                            We consider each <key, value> as a "bucket", and try to put balanced number
+                            of pods into each bucket.
+                            We define a domain as a particular instance of a topology.
+                            Also, we define an eligible domain as a domain whose nodes meet the requirements of
+                            nodeAffinityPolicy and nodeTaintsPolicy.
+                            e.g. If TopologyKey is "kubernetes.io/hostname", each Node is a domain of that topology.
+                            And, if TopologyKey is "topology.kubernetes.io/zone", each zone is a domain of that topology.
+                            It's a required field.
+                          type: string
+                        whenUnsatisfiable:
+                          description: |-
+                            WhenUnsatisfiable indicates how to deal with a pod if it doesn't satisfy
+                            the spread constraint.
+                            - DoNotSchedule (default) tells the scheduler not to schedule it.
+                            - ScheduleAnyway tells the scheduler to schedule the pod in any location,
+                              but giving higher precedence to topologies that would help reduce the
+                              skew.
+                            A constraint is considered "Unsatisfiable" for an incoming pod
+                            if and only if every possible node assignment for that pod would violate
+                            "MaxSkew" on some topology.
+                            For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same
+                            labelSelector spread as 3/1/1:
+                            | zone1 | zone2 | zone3 |
+                            | P P P |   P   |   P   |
+                            If WhenUnsatisfiable is set to DoNotSchedule, incoming pod can only be scheduled
+                            to zone2(zone3) to become 3/2/1(3/1/2) as ActualSkew(2-1) on zone2(zone3) satisfies
+                            MaxSkew(1). In other words, the cluster can still be imbalanced, but scheduler
+                            won't make it *more* imbalanced.
+                            It's a required field.
+                          type: string
+                      required:
+                      - maxSkew
+                      - topologyKey
+                      - whenUnsatisfiable
+                      type: object
+                    type: array
+                type: object
+            type: object
+          status:
+            description: |-
+              JumpstarterStatus defines the observed state of Jumpstarter.
+              Status information is reported through conditions following Kubernetes conventions.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the Jumpstarter state.
+                  Condition types include:
+                  - CertManagerAvailable: cert-manager CRDs are installed in the cluster
+                  - IssuerReady: The referenced or created issuer is ready to issue certificates
+                  - ControllerCertificateReady: Controller TLS certificate is issued and secret exists
+                  - RouterCertificatesReady: All router TLS certificates are issued and secrets exist
+                  - ControllerDeploymentReady: Controller deployment is available
+                  - RouterDeploymentsReady: All router deployments are available
+                  - Ready: Overall system ready (aggregates all other conditions)
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

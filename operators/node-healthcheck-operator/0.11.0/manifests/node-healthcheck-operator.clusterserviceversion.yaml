@@ -1,0 +1,682 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "remediation.medik8s.io/v1alpha1",
+          "kind": "NodeHealthCheck",
+          "metadata": {
+            "name": "nodehealthcheck-sample"
+          },
+          "spec": {
+            "minHealthy": "51%",
+            "remediationTemplate": {
+              "apiVersion": "self-node-remediation.medik8s.io/v1alpha1",
+              "kind": "SelfNodeRemediationTemplate",
+              "name": "self-node-remediation-automatic-strategy-template",
+              "namespace": "openshift-operators"
+            },
+            "selector": {
+              "matchExpressions": [
+                {
+                  "key": "node-role.kubernetes.io/worker",
+                  "operator": "Exists"
+                }
+              ]
+            },
+            "unhealthyConditions": [
+              {
+                "duration": "300s",
+                "status": "False",
+                "type": "Ready"
+              },
+              {
+                "duration": "300s",
+                "status": "Unknown",
+                "type": "Ready"
+              }
+            ]
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: OpenShift Optional
+    containerImage: quay.io/medik8s/node-healthcheck-operator:v0.11.0
+    createdAt: "2026-02-26T10:36:45Z"
+    description: Detect failed Nodes and trigger remediation with a remediation operator.
+    olm.skipRange: '>=0.10.0 <0.11.0'
+    operatorframework.io/suggested-namespace: openshift-workload-availability
+    operatorframework.io/suggested-namespace-template: '{"kind":"Namespace","apiVersion":"v1","metadata":{"name":"openshift-workload-availability","annotations":{"openshift.io/node-selector":""}}}'
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/medik8s/node-healthcheck-operator
+    support: Medik8s
+  name: node-healthcheck-operator.v0.11.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: NodeHealthCheck is the Schema for the nodehealthchecks API
+      displayName: Node Health Check
+      kind: NodeHealthCheck
+      name: nodehealthchecks.remediation.medik8s.io
+      resources:
+      - kind: NodeHealthCheck
+        name: nodehealthchecks
+        version: v1alpha1
+      specDescriptors:
+      - description: |-
+          EscalatingRemediations contain a list of ordered remediation templates with a timeout.
+          The remediation templates will be used one after another, until the unhealthy node
+          gets healthy within the timeout of the currently processed remediation. The order of
+          remediation is defined by the "order" field of each "escalatingRemediation".
+
+
+          Mutually exclusive with RemediationTemplate
+        displayName: Escalating Remediations
+        path: escalatingRemediations
+      - description: |-
+          Order defines the order for this remediation.
+          Remediations with lower order will be used before remediations with higher order.
+          Remediations must not have the same order.
+        displayName: Order
+        path: escalatingRemediations[0].order
+      - description: |-
+          RemediationTemplate is a reference to a remediation template
+          provided by a remediation provider.
+
+
+          If a node needs remediation the controller will create an object from this template
+          and then it should be picked up by a remediation provider.
+        displayName: Remediation Template
+        path: escalatingRemediations[0].remediationTemplate
+      - description: |-
+          Timeout defines how long NHC will wait for the node getting healthy
+          before the next remediation (if any) will be used. When the last remediation times out,
+          the overall remediation is considered as failed.
+          As a safeguard for preventing parallel remediations, a minimum of 60s is enforced.
+
+
+          Expects a string of decimal numbers each with optional
+          fraction and a unit suffix, eg "300ms", "1.5h" or "2h45m".
+          Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+        displayName: Timeout
+        path: escalatingRemediations[0].timeout
+      - description: |-
+          HealthyDelay is the time before NHC would allow a node to be healthy again.
+          A negative value means that NHC will never consider the node healthy and a manual intervention is expected
+        displayName: Healthy Delay
+        path: healthyDelay
+      - description: |-
+          Remediation is allowed if no more than "MaxUnhealthy" nodes selected by "selector" are not healthy.
+          Expects either a non-negative integer value or a percentage value.
+          Percentage values must be positive whole numbers and are capped at 100%.
+          0% is valid and will block all remediation.
+          MaxUnhealthy should not be used with remediators that delete nodes (e.g. MachineDeletionRemediation),
+          as this breaks the logic for counting healthy and unhealthy nodes.
+          MinHealthy and MaxUnhealthy are configuring the same aspect,
+          and they cannot be used at the same time.
+        displayName: Max Unhealthy
+        path: maxUnhealthy
+      - description: |-
+          Remediation is allowed if at least "MinHealthy" nodes selected by "selector" are healthy.
+          Expects either a non-negative integer value or a percentage value.
+          Percentage values must be positive whole numbers and are capped at 100%.
+          100% is valid and will block all remediation.
+          MinHealthy and MaxUnhealthy are configuring the same aspect,
+          and they cannot be used at the same time.
+        displayName: Min Healthy
+        path: minHealthy
+      - description: |-
+          PauseRequests will prevent any new remediation to start, while in-flight remediations
+          keep running. Each entry is free form, and ideally represents the requested party reason
+          for this pausing - i.e:
+              "imaginary-cluster-upgrade-manager-operator"
+        displayName: Pause Requests
+        path: pauseRequests
+      - description: |-
+          RemediationTemplate is a reference to a remediation template
+          provided by an infrastructure provider.
+
+
+          If a node needs remediation the controller will create an object from this template
+          and then it should be picked up by a remediation provider.
+
+
+          Mutually exclusive with EscalatingRemediations
+        displayName: Remediation Template
+        path: remediationTemplate
+      - description: |-
+          Label selector to match nodes whose health will be exercised.
+
+
+          Selecting both control-plane and worker nodes in one NHC CR is
+          highly discouraged and can result in undesired behaviour.
+
+
+          Note: mandatory now for above reason, but for backwards compatibility existing
+          CRs will continue to work with an empty selector, which matches all nodes.
+        displayName: Selector
+        path: selector
+      - description: |-
+          StormCooldownDuration defines the duration of an optional cooldown phase after a storm.
+          A "storm" happens when the number of (un)healthy nodes exceeds the threshold defined by minHealthy or maxUnhealthy.
+          Sometimes this is triggered by a single root cause.
+          When that cause is fixed, there is a risk to remediate healthy nodes:
+          the async nature of node status updates would result in only some nodes being detected as healthy by NHC in a first round of updates,
+          which results in minHealthy or maxUnhealthy threshold being fulfilled (the storm ends) and triggering unneeded new remediation.
+          The storm cooldown phase will prevent creation of new remediation for the given duration by giving NHC some time to get the latest node statuses.
+
+
+          Expects a string of decimal numbers each with optional fraction and a unit
+          suffix, e.g. "300ms", "1.5h" or "2h45m". Valid time units are "ns", "us"
+          (or "µs"), "ms", "s", "m", "h".
+        displayName: Storm Cooldown Duration
+        path: stormCooldownDuration
+      - description: |-
+          UnhealthyConditions contains a list of the conditions that determine
+          whether a node is considered unhealthy.  The conditions are combined in a
+          logical OR, i.e. if any of the conditions is met, the node is unhealthy.
+        displayName: Unhealthy Conditions
+        path: unhealthyConditions
+      - description: |-
+          Duration of the condition specified when a node is considered unhealthy.
+
+
+          Expects a string of decimal numbers each with optional
+          fraction and a unit suffix, eg "300ms", "1.5h" or "2h45m".
+          Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+        displayName: Duration
+        path: unhealthyConditions[0].duration
+      - description: |-
+          The condition status in the node's status to watch for.
+          Typically False, True or Unknown.
+        displayName: Status
+        path: unhealthyConditions[0].status
+      - description: The condition type in the node's status to watch for.
+        displayName: Type
+        path: unhealthyConditions[0].type
+      statusDescriptors:
+      - description: |-
+          Represents the observations of a NodeHealthCheck's current state.
+          Known .status.conditions.type are: "Disabled"
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      - description: HealthyNodes specified the number of healthy nodes observed
+        displayName: Healthy Nodes
+        path: healthyNodes
+      - description: |-
+          InFlightRemediations records the timestamp when remediation triggered per node.
+          Deprecated in favour of UnhealthyNodes.
+        displayName: In Flight Remediations
+        path: inFlightRemediations
+      - description: LastUpdateTime is the last time the status was updated.
+        displayName: Last Update Time
+        path: lastUpdateTime
+      - description: ObservedNodes specified the number of nodes observed by using
+          the NHC spec.selector
+        displayName: Observed Nodes
+        path: observedNodes
+      - description: |-
+          Phase represents the current phase of this Config.
+          Known phases are Disabled, Paused, Remediating and Enabled, based on:\n
+          - the status of the Disabled condition\n
+          - the value of PauseRequests\n
+          - the value of InFlightRemediations
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - description: Reason explains the current phase in more detail.
+        displayName: Reason
+        path: reason
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase:reason
+      - description: UnhealthyNodes tracks currently unhealthy nodes and their remediations.
+        displayName: Unhealthy Nodes
+        path: unhealthyNodes
+      - description: |-
+          ConditionsHealthyTimestamp is RFC 3339 date and time at which the unhealthy conditions didn't match anymore.
+          The remediation CR will be deleted at that time, but the node will still be tracked as unhealthy until all
+          remediation CRs are actually deleted, when remediators finished cleanup and removed their finalizers.
+        displayName: Conditions Healthy Timestamp
+        path: unhealthyNodes[0].conditionsHealthyTimestamp
+      - description: HealthyDelayed notes whether a node should be considered healthy,
+          but isn't due to NodeHealthCheckSpec.HealthyDelay configuration.
+        displayName: Healthy Delayed
+        path: unhealthyNodes[0].healthyDelayed
+      - description: Name is the name of the unhealthy node
+        displayName: Name
+        path: unhealthyNodes[0].name
+      - description: Remediations tracks the remediations created for this node
+        displayName: Remediations
+        path: unhealthyNodes[0].remediations
+      - description: Resource is the reference to the remediation CR which was created
+        displayName: Resource
+        path: unhealthyNodes[0].remediations[0].resource
+      - description: Started is the creation time of the remediation CR
+        displayName: Started
+        path: unhealthyNodes[0].remediations[0].started
+      - description: TemplateName is required when using several templates of the
+          same kind
+        displayName: Template Name
+        path: unhealthyNodes[0].remediations[0].templateName
+      - description: |-
+          TimedOut is the time when the remediation timed out.
+          Applicable for escalating remediations only.
+        displayName: Timed Out
+        path: unhealthyNodes[0].remediations[0].timedOut
+      version: v1alpha1
+  description: |
+    ### Introduction
+    Hardware is imperfect, and software contains bugs. When node level failures such as kernel hangs or dead NICs
+    occur, the work required from the cluster does not decrease - workloads from affected nodes need to be
+    restarted somewhere.
+
+    However some workloads, such as RWO volumes and StatefulSets, may require at-most-one semantics.
+    Failures affecting these kind of workloads risk data loss and/or corruption if nodes (and the workloads
+    running on them) are assumed to be dead whenever we stop hearing from them. For this reason it is important
+    to know that the node has reached a safe state before initiating recovery of the workload.
+
+    Unfortunately it is not always practical to require admin intervention in order to confirm the node’s true status.
+    In order to automate the recovery of exclusive workloads, we provide operators for failure detection
+    and remediation.
+
+    ### Failure detection: Node Health Check operator
+    The “Node Health Check” (NHC) operator checks each Node’s set of
+    NodeConditions (eg. NotReady) against the criteria and thresholds defined in
+    NodeHealthCheck configuration. If the Node is deemed to be in a failed
+    state, NHC will initiate recovery by using the SIG Cluster API's “External
+    Remediation” API to instantiate the configured remediation template which
+    specifies the mechanism/controller to be used.
+
+    ### Failure handling: External remediators
+    There are multiple remediators for handling node failure that we recommend:
+    - Self Node Remediation (SNR)
+    - Fence Agents Remediation (FAR)
+    - Machine Deletion Remediation (MDR)
+
+    #### Self Node Remediation (SNR)
+    SNR uses watchdog timers and heuristics to ensure nodes enter a safe state
+    (no longer hosting workloads) within a known and finite period of time,
+    before signaling to the system that all Pods on the failed Node are no longer active
+    and can be relocated elsewhere.
+    In the case of transient errors, the watchdog’s actions will also result in
+    the node rebooting and rejoining the cluster - restoring capacity.
+
+    #### Fence Agents Remediation (FAR)
+    FAR uses well-known agents to fence unhealthy nodes, and eventually FAR remediates the nodes.
+    The remediation includes rebooting the unhealthy node using a fence agent,
+    and then evicting workloads from the unhealthy node.
+
+    #### Machine Deletion Remediation (MDR)
+    MDR is limited to OpenShift, and it uses Machine API for reprovisioning unhealthy nodes by deleting their machines.
+  displayName: Node Health Check Operator - Community Edition
+  icon:
+  - base64data: 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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - create
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusterversions
+          - featuregates
+          - infrastructures
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - machine.openshift.io
+          resources:
+          - machinehealthchecks
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - machine.openshift.io
+          resources:
+          - machinehealthchecks/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - machine.openshift.io
+          resources:
+          - machines
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          verbs:
+          - '*'
+        - apiGroups:
+          - remediation.medik8s.io
+          resources:
+          - nodehealthchecks
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - remediation.medik8s.io
+          resources:
+          - nodehealthchecks/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - remediation.medik8s.io
+          resources:
+          - nodehealthchecks/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: node-healthcheck-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/component: controller-manager
+          app.kubernetes.io/name: node-healthcheck-operator
+        name: node-healthcheck-controller-manager
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              app.kubernetes.io/component: controller-manager
+              app.kubernetes.io/name: node-healthcheck-operator
+          strategy:
+            rollingUpdate:
+              maxSurge: 0
+              maxUnavailable: 1
+            type: RollingUpdate
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/component: controller-manager
+                app.kubernetes.io/name: node-healthcheck-operator
+            spec:
+              affinity:
+                nodeAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/infra
+                        operator: Exists
+                    weight: 3
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/master
+                        operator: Exists
+                    weight: 1
+                  - preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: Exists
+                    weight: 1
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --http2-disable
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=0
+                image: quay.io/brancz/kube-rbac-proxy:v0.15.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                command:
+                - /manager
+                env:
+                - name: DEPLOYMENT_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: quay.io/medik8s/node-healthcheck-operator:v0.11.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 20Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              priorityClassName: system-cluster-critical
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: node-healthcheck-controller-manager
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/master
+                operator: Exists
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/control-plane
+                operator: Exists
+              - effect: NoSchedule
+                key: node-role.kubernetes.io/infra
+                operator: Exists
+              - effect: NoExecute
+                key: node-role.kubernetes.io/infra
+                operator: Exists
+              topologySpreadConstraints:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: controller-manager
+                    app.kubernetes.io/name: node-healthcheck-operator
+                maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: DoNotSchedule
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: node-healthcheck-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - NHC
+  - Self Node Remediation
+  - SNR
+  - Remediation
+  - Fencing
+  - medik8s
+  - k8s
+  links:
+  - name: Node Healthcheck Operator
+    url: https://medik8s.io
+  - name: Source Code
+    url: https://github.com/medik8s/node-healthcheck-operator
+  maintainers:
+  - email: medik8s@googlegroups.com
+    name: Medik8s Team
+  maturity: alpha
+  minKubeVersion: 1.20.0
+  provider:
+    name: Medik8s
+    url: https://github.com/medik8s
+  version: 0.11.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: node-healthcheck-controller-manager
+    failurePolicy: Fail
+    generateName: vnodehealthcheck.kb.io
+    rules:
+    - apiGroups:
+      - remediation.medik8s.io
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - nodehealthchecks
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-remediation-medik8s-io-v1alpha1-nodehealthcheck

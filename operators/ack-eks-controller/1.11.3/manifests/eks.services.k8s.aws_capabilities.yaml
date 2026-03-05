@@ -1,0 +1,300 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: capabilities.eks.services.k8s.aws
+spec:
+  group: eks.services.k8s.aws
+  names:
+    kind: Capability
+    listKind: CapabilityList
+    plural: capabilities
+    singular: capability
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Capability is the Schema for the Capabilities API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              CapabilitySpec defines the desired state of Capability.
+
+              An object representing a managed capability in an Amazon EKS cluster. This
+              includes all configuration, status, and health information for the capability.
+            properties:
+              clusterName:
+                description: The name of the Amazon EKS cluster where you want to
+                  create the capability.
+                type: string
+                x-kubernetes-validations:
+                - message: Value is immutable once set
+                  rule: self == oldSelf
+              configuration:
+                description: |-
+                  The configuration settings for the capability. The structure of this object
+                  varies depending on the capability type. For Argo CD capabilities, you can
+                  configure IAM Identity CenterIAM; Identity Center integration, RBAC role
+                  mappings, and network access settings.
+                properties:
+                  argoCD:
+                    description: |-
+                      Configuration settings for an Argo CD capability. This includes the Kubernetes
+                      namespace, IAM Identity CenterIAM; Identity Center integration, RBAC role
+                      mappings, and network access configuration.
+                    properties:
+                      awsIDC:
+                        description: |-
+                          Configuration for integrating Argo CD with IAM Identity CenterIAM; Identity
+                          Center. This allows you to use your organization's identity provider for
+                          authentication to Argo CD.
+                        properties:
+                          idcInstanceARN:
+                            type: string
+                          idcRegion:
+                            type: string
+                        type: object
+                      namespace:
+                        type: string
+                      networkAccess:
+                        description: |-
+                          Configuration for network access to the Argo CD capability's managed API
+                          server endpoint. When VPC endpoint IDs are specified, public access is blocked
+                          and the Argo CD server is only accessible through the specified VPC endpoints.
+                        properties:
+                          vpceIDs:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      rbacRoleMappings:
+                        items:
+                          description: |-
+                            A mapping between an Argo CD role and IAM Identity CenterIAM; Identity Center
+                            identities. This defines which users or groups have specific permissions
+                            in Argo CD.
+                          properties:
+                            identities:
+                              items:
+                                description: |-
+                                  An IAM Identity CenterIAM; Identity Center identity (user or group) that
+                                  can be assigned permissions in a capability.
+                                properties:
+                                  id:
+                                    type: string
+                                  type:
+                                    type: string
+                                type: object
+                              type: array
+                            role:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                type: object
+              deletePropagationPolicy:
+                description: |-
+                  Specifies how Kubernetes resources managed by the capability should be handled
+                  when the capability is deleted. Currently, the only supported value is RETAIN
+                  which retains all Kubernetes resources managed by the capability when the
+                  capability is deleted.
+
+                  Because resources are retained, all Kubernetes resources created by the capability
+                  should be deleted from the cluster before deleting the capability itself.
+                  After the capability is deleted, these resources become difficult to manage
+                  because the controller is no longer available.
+                type: string
+              name:
+                description: |-
+                  A unique name for the capability. The name must be unique within your cluster
+                  and can contain alphanumeric characters, hyphens, and underscores.
+                type: string
+                x-kubernetes-validations:
+                - message: Value is immutable once set
+                  rule: self == oldSelf
+              roleARN:
+                description: |-
+                  The Amazon Resource Name (ARN) of the IAM role that the capability uses to
+                  interact with Amazon Web Services services. This role must have a trust policy
+                  that allows the EKS service principal to assume it, and it must have the
+                  necessary permissions for the capability type you're creating.
+
+                  For ACK capabilities, the role needs permissions to manage the resources
+                  you want to control through Kubernetes. For Argo CD capabilities, the role
+                  needs permissions to access Git repositories and Secrets Manager. For KRO
+                  capabilities, the role needs permissions based on the resources you'll be
+                  orchestrating.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                type: object
+              type:
+                description: |-
+                  The type of capability to create. Valid values are:
+
+                     * ACK – Amazon Web Services Controllers for Kubernetes (ACK), which
+                     lets you manage resources directly from Kubernetes.
+
+                     * ARGOCD – Argo CD for GitOps-based continuous delivery.
+
+                     * KRO – Kube Resource Orchestrator (KRO) for composing and managing
+                     custom Kubernetes resources.
+                type: string
+                x-kubernetes-validations:
+                - message: Value is immutable once set
+                  rule: self == oldSelf
+            required:
+            - clusterName
+            - deletePropagationPolicy
+            - name
+            - roleARN
+            - type
+            type: object
+          status:
+            description: CapabilityStatus defines the observed state of Capability
+            properties:
+              ackResourceMetadata:
+                description: |-
+                  All CRs managed by ACK have a common `Status.ACKResourceMetadata` member
+                  that is used to contain resource sync state, account ownership,
+                  constructed ARN for the resource
+                properties:
+                  arn:
+                    description: |-
+                      ARN is the Amazon Resource Name for the resource. This is a
+                      globally-unique identifier and is set only by the ACK service controller
+                      once the controller has orchestrated the creation of the resource OR
+                      when it has verified that an "adopted" resource (a resource where the
+                      ARN annotation was set by the Kubernetes user on the CR) exists and
+                      matches the supplied CR's Spec field values.
+                      https://github.com/aws/aws-controllers-k8s/issues/270
+                    type: string
+                  ownerAccountID:
+                    description: |-
+                      OwnerAccountID is the AWS Account ID of the account that owns the
+                      backend AWS service API resource.
+                    type: string
+                  region:
+                    description: Region is the AWS region in which the resource exists
+                      or will exist.
+                    type: string
+                required:
+                - ownerAccountID
+                - region
+                type: object
+              conditions:
+                description: |-
+                  All CRs managed by ACK have a common `Status.Conditions` member that
+                  contains a collection of `ackv1alpha1.Condition` objects that describe
+                  the various terminal states of the CR and its backend AWS service API
+                  resource
+                items:
+                  description: |-
+                    Condition is the common struct used by all CRDs managed by ACK service
+                    controllers to indicate terminal states  of the CR and its backend AWS
+                    service API resource
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type is the type of the Condition
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                description: The Unix epoch timestamp in seconds for when the capability
+                  was created.
+                format: date-time
+                type: string
+              health:
+                description: |-
+                  Health information for the capability, including any issues that may be affecting
+                  its operation.
+                properties:
+                  issues:
+                    items:
+                      description: An issue affecting a capability's health or operation.
+                      properties:
+                        code:
+                          type: string
+                        message:
+                          type: string
+                      type: object
+                    type: array
+                type: object
+              modifiedAt:
+                description: The Unix epoch timestamp in seconds for when the capability
+                  was last modified.
+                format: date-time
+                type: string
+              status:
+                description: |-
+                  The current status of the capability. Valid values include:
+
+                     * CREATING – The capability is being created.
+
+                     * ACTIVE – The capability is running and available.
+
+                     * UPDATING – The capability is being updated.
+
+                     * DELETING – The capability is being deleted.
+
+                     * CREATE_FAILED – The capability creation failed.
+
+                     * UPDATE_FAILED – The capability update failed.
+
+                     * DELETE_FAILED – The capability deletion failed.
+                type: string
+              version:
+                description: The version of the capability software that is currently
+                  running.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

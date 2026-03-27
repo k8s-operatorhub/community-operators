@@ -1,0 +1,1601 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: gko.v4.10.9
+  namespace: placeholder
+  annotations:
+    capabilities: Full Lifecycle
+    categories: Integration & Delivery, Networking
+    containerImage: graviteeio/kubernetes-operator:4.10.9
+    repository: https://github.com/gravitee-io/gravitee-kubernetes-operator
+    support: Gravitee.io
+    description: Manage Gravitee.io API Management resources natively in Kubernetes
+      using declarative custom resources.
+    alm-examples: >-
+      [
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "ManagementContext",
+          "metadata": {
+            "name": "dev-ctx"
+          },
+          "spec": {
+            "baseUrl": "http://apim-apim3-api.default.svc:83",
+            "environmentId": "DEFAULT",
+            "organizationId": "DEFAULT",
+            "auth": {
+              "credentials": {
+                "username": "admin",
+                "password": "admin"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "ApiDefinition",
+          "metadata": {
+            "name": "basic-api-example"
+          },
+          "spec": {
+            "name": "K8s Basic Example",
+            "version": "1.0",
+            "description": "Basic api managed by Gravitee Kubernetes Operator",
+            "plans": [
+              {
+                "name": "KEY_LESS",
+                "description": "FREE",
+                "security": "KEY_LESS"
+              }
+            ],
+            "proxy": {
+              "virtual_hosts": [
+                {
+                  "path": "/k8s-basic"
+                }
+              ],
+              "groups": [
+                {
+                  "endpoints": [
+                    {
+                      "name": "Default",
+                      "target": "https://api.gravitee.io/echo"
+                    }
+                  ]
+                }
+              ]
+            },
+            "local": true
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "ApiV4Definition",
+          "metadata": {
+            "name": "api-v4"
+          },
+          "spec": {
+            "contextRef": {
+              "name": "dev-ctx"
+            },
+            "name": "api-v4",
+            "description": "API v4 managed by Gravitee Kubernetes Operator",
+            "version": "1.0",
+            "type": "PROXY",
+            "listeners": [
+              {
+                "type": "HTTP",
+                "paths": [
+                  {
+                    "path": "/echo-v4"
+                  }
+                ],
+                "entrypoints": [
+                  {
+                    "type": "http-proxy",
+                    "qos": "AUTO"
+                  }
+                ]
+              }
+            ],
+            "endpointGroups": [
+              {
+                "name": "Default HTTP proxy group",
+                "type": "http-proxy",
+                "endpoints": [
+                  {
+                    "name": "Default HTTP proxy",
+                    "type": "http-proxy",
+                    "inheritConfiguration": false,
+                    "configuration": {
+                      "target": "https://api.gravitee.io/echo"
+                    },
+                    "secondary": false
+                  }
+                ]
+              }
+            ],
+            "flowExecution": {
+              "mode": "DEFAULT",
+              "matchRequired": false
+            },
+            "plans": {
+              "KeyLess": {
+                "name": "Free plan",
+                "description": "This plan does not require any authentication",
+                "security": {
+                  "type": "KEY_LESS"
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "Application",
+          "metadata": {
+            "name": "simple-application"
+          },
+          "spec": {
+            "contextRef": {
+              "name": "dev-ctx"
+            },
+            "name": "simple-app",
+            "domain": "https://example.com",
+            "description": "A hands-free application.\nUsing this type, you will be able to define the client_id by your own.\n",
+            "settings": {
+              "app": {
+                "type": "WEB"
+              }
+            },
+            "metadata": [
+              {
+                "name": "test metadata 1",
+                "format": "STRING"
+              },
+              {
+                "name": "test metadata 2",
+                "format": "STRING"
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "Subscription",
+          "metadata": {
+            "name": "echo-subscription"
+          },
+          "spec": {
+            "api": {
+              "name": "api-v4-with-jwt-plan"
+            },
+            "application": {
+              "name": "simple-application-with-client-id"
+            },
+            "plan": "JWT",
+            "endingAt": "2040-12-25T09:12:28Z"
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "ApiResource",
+          "metadata": {
+            "name": "reusable-resource-cache"
+          },
+          "spec": {
+            "name": "cache-resource",
+            "type": "cache",
+            "enabled": true,
+            "configuration": {
+              "timeToIdleSeconds": 0,
+              "timeToLiveSeconds": 0,
+              "maxEntriesLocalHeap": 1000
+            }
+          }
+        },
+        {
+          "apiVersion": "gravitee.io/v1alpha1",
+          "kind": "SharedPolicyGroup",
+          "metadata": {
+            "name": "simple-shared-policy-groups"
+          },
+          "spec": {
+            "contextRef": {
+              "name": "dev-ctx"
+            },
+            "name": "simple-shared-policy-groups",
+            "description": "Simple shared policy groups",
+            "apiType": "PROXY",
+            "phase": "REQUEST",
+            "steps": [
+              {
+                "name": "Rate Limit",
+                "description": "k8s rate limit",
+                "enabled": true,
+                "policy": "rate-limit",
+                "configuration": {
+                  "async": false,
+                  "addHeaders": true,
+                  "rate": {
+                    "useKeyOnly": false,
+                    "periodTime": 1,
+                    "limit": 10,
+                    "periodTimeUnit": "MINUTES",
+                    "key": ""
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+spec:
+  displayName: Gravitee Kubernetes Operator
+  description: >-
+    The **Gravitee Kubernetes Operator** (GKO) brings [Gravitee API
+    Management](https://gravitee.io)
+
+    into the Kubernetes ecosystem, enabling teams to manage API configurations
+    as
+
+    Kubernetes custom resources.
+
+
+    ### Multi-generation API support
+
+
+    Define and manage APIs across all Gravitee API definition formats:
+
+
+    - **v2 APIs** – proxy-based APIs with traditional policies and plans
+
+    - **v4 APIs** – next-generation APIs supporting HTTP proxy, message
+    (event-driven),
+      and native protocols (TCP, Kafka)
+
+    ### Declarative GitOps workflow
+
+
+    Store API definitions, applications, and subscriptions as YAML manifests in
+    Git.
+
+    The operator reconciles the desired state with your Gravitee API Management
+    instance,
+
+    enabling version-controlled, auditable API management.
+
+
+    ### Management Context
+
+
+    Connect to one or more Gravitee API Management consoles or Cloud
+    environments.
+
+    The operator syncs custom resources with the target management API,
+    supporting
+
+    multi-environment and multi-organization topologies.
+
+
+    ### Reusable resources and policies
+
+
+    Share API resources (caches, OAuth2 providers) and policy groups across APIs
+    using
+
+    dedicated CRDs, reducing duplication and promoting consistency.
+
+
+    ### Kubernetes Gateway API integration
+
+
+    Optionally use the standard [Kubernetes Gateway
+    API](https://gateway-api.sigs.k8s.io/)
+
+    to expose APIs through the Gravitee Gateway, with support for HTTPRoute and
+    custom
+
+    KafkaRoute resources.
+
+
+    > **Note:** On OpenShift 4.19+ the platform ships its own Gateway API CRDs.
+
+    > GKO does **not** bundle Gateway API CRDs; it uses whatever version is
+    already
+
+    > installed on the cluster.
+
+
+    ### Templating support
+
+
+    Reference Kubernetes ConfigMaps and Secrets in your API definitions using
+    Go-style
+
+    template syntax, keeping sensitive data out of manifests.
+
+
+    ### Prerequisites
+
+
+    - Kubernetes 1.18+
+
+    - A running Gravitee API Management instance (for synced resources)
+  maturity: alpha
+  version: 4.10.9
+  minKubeVersion: 1.18.0
+  keywords:
+    - api
+    - api-management
+    - api-gateway
+    - gateway
+    - gravitee
+    - kubernetes-operator
+    - api-lifecycle
+  provider:
+    name: Gravitee.io
+    url: https://gravitee.io
+  maintainers:
+    - name: Gravitee.io
+      email: team-devex@graviteesource.com
+  links:
+    - name: Documentation
+      url: https://documentation.gravitee.io/gravitee-kubernetes-operator-gko
+    - name: Gravitee.io
+      url: https://gravitee.io
+    - name: GitHub
+      url: https://github.com/gravitee-io/gravitee-kubernetes-operator
+    - name: Blog
+      url: https://www.gravitee.io/blog
+  icon:
+    - base64data: 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
+      mediatype: image/png
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: true
+    - type: AllNamespaces
+      supported: true
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+        - name: gko-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            template:
+              metadata:
+                annotations:
+                  checksum/config: d6b9fa55133836dbc7c47dc4615fe2676741171ea5658e3b071a6a43e0655faf
+                labels:
+                  control-plane: controller-manager
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                containers:
+                  - args: []
+                    command:
+                      - /manager
+                    image: graviteeio/kubernetes-operator:4.10.9
+                    imagePullPolicy: IfNotPresent
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 256Mi
+                      requests:
+                        cpu: 50m
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                    ports:
+                      - containerPort: 8081
+                        name: probes
+                        protocol: TCP
+                      - containerPort: 8080
+                        name: metrics
+                        protocol: TCP
+                      - containerPort: 9443
+                        name: webhook
+                        protocol: TCP
+                    env:
+                      - name: ENABLE_LEADER_ELECTION
+                        value: "true"
+                      - name: RECONCILE_STRATEGY
+                        value: onSpecChange
+                      - name: LOGS_FORMAT
+                        value: json
+                      - name: LOGS_LEVEL
+                        value: info
+                      - name: LOGS_LEVEL_CASE
+                        value: upper
+                      - name: LOGS_TIMESTAMP_FIELD
+                        value: timestamp
+                      - name: LOGS_TIMESTAMP_FORMAT
+                        value: epoch-second
+                      - name: PROBES_PORT
+                        value: "8081"
+                      - name: ENABLE_METRICS
+                        value: "true"
+                      - name: METRICS_PORT
+                        value: "8080"
+                      - name: SECURE_METRICS
+                        value: "true"
+                      - name: ENABLE_INGRESS
+                        value: "true"
+                      - name: ENABLE_GATEWAY_API
+                        value: "true"
+                      - name: APPLY_GATEWAY_API_CRDS
+                        value: "true"
+                      - name: INGRESS_CLASSES
+                        value: graviteeio
+                      - name: HTTP_CLIENT_TIMEOUT_SECONDS
+                        value: "5"
+                      - name: ENABLE_WEBHOOK
+                        value: "true"
+                      - name: WEBHOOK_SERVICE_PORT
+                        value: "9443"
+                      - name: ENABLE_TEMPLATING
+                        value: "true"
+                      - name: NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.annotations['olm.targetNamespaces']
+                hostNetwork: false
+                serviceAccountName: gko-controller-manager
+                terminationGracePeriodSeconds: 10
+      clusterPermissions:
+        - serviceAccountName: gko-controller-manager
+          rules:
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - validatingwebhookconfigurations
+              verbs:
+                - get
+                - update
+              resourceNames:
+                - gko-validating-webhook-configurations
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - mutatingwebhookconfigurations
+              verbs:
+                - get
+                - update
+              resourceNames:
+                - gko-mutating-webhook-configurations
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              resourceNames:
+                - gko-webhook-cert
+              verbs:
+                - get
+                - create
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apidefinitions
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apidefinitions/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apidefinitions/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiv4definitions
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiv4definitions/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiv4definitions/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiresources
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiresources/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - apiresources/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - notifications
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - notifications/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - notifications/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - managementcontexts
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - managementcontexts/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - managementcontexts/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingresses
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - applications
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - applications/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - applications/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - subscriptions
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - subscriptions/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - subscriptions/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - groups
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - groups/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - groups/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - sharedpolicygroups
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - sharedpolicygroups/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - sharedpolicygroups/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - gatewayclassparameters
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - gatewayclassparameters/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - gatewayclassparameters/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - kafkaroutes
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - kafkaroutes/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gravitee.io
+              resources:
+                - kafkaroutes/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - backendtlspolicies
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - backendtlspolicies/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - backendtlspolicies/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gateways
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gateways/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gateways/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - referencegrants
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - services
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - serviceaccounts
+                - namespaces
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterroles
+                - clusterrolebindings
+                - roles
+                - rolebindings
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - httproutes
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - httproutes/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - httproutes/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - nonResourceURLs:
+                - /metrics
+              verbs:
+                - get
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+                - services
+                - endpoints
+              verbs:
+                - list
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+      permissions:
+        - serviceAccountName: gko-controller-manager
+          rules:
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+  customresourcedefinitions:
+    owned:
+      - name: managementcontexts.gravitee.io
+        version: v1alpha1
+        kind: ManagementContext
+        displayName: Management Context
+        description: Connection settings for a Gravitee API Management console or cloud
+          environment. Required for any resource that syncs with APIM.
+        specDescriptors:
+          - path: baseUrl
+            displayName: Base URL
+            description: URL of the Gravitee API Management REST API.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: environmentId
+            displayName: Environment ID
+            description: Target environment identifier.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: organizationId
+            displayName: Organization ID
+            description: Target organization identifier.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+      - name: apidefinitions.gravitee.io
+        version: v1alpha1
+        kind: ApiDefinition
+        displayName: API Definition
+        description: Defines a v2 proxy API managed by Gravitee API Management. Supports
+          plans, policies, rate-limiting and backend endpoint groups.
+        specDescriptors:
+          - path: name
+            displayName: API Name
+            description: Human-readable API name.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: version
+            displayName: API Version
+            description: Semantic version of the API.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: description
+            displayName: Description
+            description: Short description of the API.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: state
+            displayName: Desired State
+            description: Desired lifecycle state (STARTED / STOPPED).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: local
+            displayName: Local Mode
+            description: When true the API is managed locally without syncing to APIM.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: API ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: crossId
+            displayName: Cross ID
+            description: Cross-environment correlation identifier.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: state
+            displayName: Observed State
+            description: Current lifecycle state reported by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: apiv4definitions.gravitee.io
+        version: v1alpha1
+        kind: ApiV4Definition
+        displayName: API V4 Definition
+        description: Defines a v4 API (proxy, message, or native) managed by Gravitee
+          API Management. Supports listeners, endpoint groups, flow execution,
+          and plans.
+        specDescriptors:
+          - path: name
+            displayName: API Name
+            description: Human-readable API name.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: version
+            displayName: API Version
+            description: Semantic version of the API.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: description
+            displayName: Description
+            description: Short description of the API.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: type
+            displayName: API Type
+            description: API type (PROXY, MESSAGE, or NATIVE).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: state
+            displayName: Desired State
+            description: Desired lifecycle state (STARTED / STOPPED).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: API ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: crossId
+            displayName: Cross ID
+            description: Cross-environment correlation identifier.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: state
+            displayName: Observed State
+            description: Current lifecycle state reported by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: applications.gravitee.io
+        version: v1alpha1
+        kind: Application
+        displayName: Application
+        description: Represents an application that consumes APIs in Gravitee API
+          Management. Supports metadata, settings, and member management.
+        specDescriptors:
+          - path: name
+            displayName: Application Name
+            description: Human-readable application name.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: description
+            displayName: Description
+            description: Short description of the application.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: domain
+            displayName: Domain
+            description: Application domain URL.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: Application ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: subscriptions.gravitee.io
+        version: v1alpha1
+        kind: Subscription
+        displayName: Subscription
+        description: Subscribes an Application to an API plan in Gravitee API Management.
+        specDescriptors:
+          - path: plan
+            displayName: Plan
+            description: Name of the API plan to subscribe to.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: endingAt
+            displayName: Ending At
+            description: Subscription expiration date (RFC 3339).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: Subscription ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: apiresources.gravitee.io
+        version: v1alpha1
+        kind: ApiResource
+        displayName: API Resource
+        description: Defines a reusable API resource (cache, OAuth2, LDAP, etc.) that
+          can be referenced by multiple Gravitee APIs.
+        specDescriptors:
+          - path: name
+            displayName: Resource Name
+            description: Logical name of the resource.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: type
+            displayName: Resource Type
+            description: Type of the resource (e.g. cache, oauth2).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: enabled
+            displayName: Enabled
+            description: Whether the resource is active.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - name: sharedpolicygroups.gravitee.io
+        version: v1alpha1
+        kind: SharedPolicyGroup
+        displayName: Shared Policy Group
+        description: A reusable group of policies that can be applied across multiple
+          APIs in Gravitee API Management.
+        specDescriptors:
+          - path: name
+            displayName: Name
+            description: Name of the shared policy group.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: description
+            displayName: Description
+            description: Short description of the shared policy group.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: apiType
+            displayName: API Type
+            description: Target API type (PROXY or MESSAGE).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: phase
+            displayName: Phase
+            description: Execution phase (REQUEST or RESPONSE).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: groups.gravitee.io
+        version: v1alpha1
+        kind: Group
+        displayName: Group
+        description: Manages user groups and membership in Gravitee API Management.
+        specDescriptors:
+          - path: name
+            displayName: Group Name
+            description: Name of the group.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: notifyMembers
+            displayName: Notify Members
+            description: Whether to notify members on changes.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: id
+            displayName: Group ID
+            description: Identifier assigned by APIM.
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: processingStatus
+            displayName: Processing Status
+            description: Reconciliation processing status.
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: notifications.gravitee.io
+        version: v1alpha1
+        kind: Notification
+        displayName: Notification
+        description: Configures notification settings for Gravitee API events.
+        specDescriptors:
+          - path: eventType
+            displayName: Event Type
+            description: Type of event that triggers the notification.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: target
+            displayName: Target
+            description: Notification target (e.g. webhook URL).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+      - name: gatewayclassparameters.gravitee.io
+        version: v1alpha1
+        kind: GatewayClassParameters
+        displayName: Gateway Class Parameters
+        description: Parameters for the Gravitee GatewayClass when using the Kubernetes
+          Gateway API integration.
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            description: Latest observed conditions.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+      - name: kafkaroutes.gravitee.io
+        version: v1alpha1
+        kind: KafkaRoute
+        displayName: Kafka Route
+        description: Defines Kafka routing rules for the Gravitee Gateway via the
+          Kubernetes Gateway API.
+        specDescriptors:
+          - path: hostname
+            displayName: Hostname
+            description: Kafka hostname for this route.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+  webhookdefinitions:
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.apidefinition.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-apidefinition
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - apidefinitions
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.apiv4definition.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-apiv4definition
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - apiv4definitions
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.application.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-application
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - applications
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.apiresource.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-apiresource
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - apiresources
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.managementcontext.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-managementcontext
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - managementcontexts
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.subscription.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-subscription
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - subscriptions
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.group.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-group
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - groups
+          scope: "*"
+    - type: ValidatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.sharedpolicygroups.validate
+      webhookPath: /validate-gravitee-io-v1alpha1-sharedpolicygroup
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          resources:
+            - sharedpolicygroups
+          scope: "*"
+    - type: MutatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.managementcontext.mutate
+      webhookPath: /mutate-gravitee-io-v1alpha1-managementcontext
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - managementcontexts
+          scope: "*"
+    - type: MutatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.subscription.mutate
+      webhookPath: /mutate-gravitee-io-v1alpha1-subscription
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - subscriptions
+          scope: "*"
+    - type: MutatingAdmissionWebhook
+      deploymentName: gko-controller-manager
+      containerPort: 443
+      targetPort: 9443
+      generateName: v1alpha1.gravitee.io.group.mutate
+      webhookPath: /mutate-gravitee-io-v1alpha1-group
+      admissionReviewVersions:
+        - v1
+      failurePolicy: Fail
+      sideEffects: None
+      rules:
+        - apiGroups:
+            - gravitee.io
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - groups
+          scope: "*"

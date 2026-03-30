@@ -1,0 +1,171 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  labels:
+    name: splunk-operator
+  name: queues.enterprise.splunk.com
+spec:
+  group: enterprise.splunk.com
+  names:
+    kind: Queue
+    listKind: QueueList
+    plural: queues
+    shortNames:
+    - queue
+    singular: queue
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Status of queue
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: Age of queue resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
+    name: v4
+    schema:
+      openAPIV3Schema:
+        description: Queue is the Schema for the queues API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: QueueSpec defines the desired state of Queue
+            properties:
+              provider:
+                description: Provider of queue resources
+                enum:
+                - sqs
+                - sqs_cp
+                type: string
+              sqs:
+                description: sqs specific inputs
+                properties:
+                  authRegion:
+                    description: Auth Region of the resources
+                    pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
+                    type: string
+                  dlq:
+                    description: Name of the dead letter queue resource
+                    minLength: 1
+                    type: string
+                  endpoint:
+                    description: Amazon SQS Service endpoint
+                    pattern: ^https?://[^\s/$.?#].[^\s]*$
+                    type: string
+                  name:
+                    description: Name of the queue
+                    minLength: 1
+                    type: string
+                  volumes:
+                    description: List of remote storage volumes
+                    items:
+                      description: VolumeSpec defines remote volume config
+                      properties:
+                        endpoint:
+                          description: Remote volume URI
+                          type: string
+                        name:
+                          description: Remote volume name
+                          type: string
+                        path:
+                          description: Remote volume path
+                          type: string
+                        provider:
+                          description: 'App Package Remote Store provider. Supported
+                            values: aws, minio, azure, gcp.'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
+                          type: string
+                        secretRef:
+                          description: Secret object name
+                          type: string
+                        storageType:
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob, gcs. s3 works with aws or minio providers, whereas
+                            blob works with azure provider, gcs works for gcp.'
+                          type: string
+                      type: object
+                    type: array
+                required:
+                - dlq
+                - name
+                type: object
+            required:
+            - provider
+            - sqs
+            type: object
+            x-kubernetes-validations:
+            - message: provider is immutable once created
+              rule: self.provider == oldSelf.provider
+            - message: sqs.name is immutable once created
+              rule: self.sqs.name == oldSelf.sqs.name
+            - message: sqs.authRegion is immutable once created
+              rule: self.sqs.authRegion == oldSelf.sqs.authRegion
+            - message: sqs.dlq is immutable once created
+              rule: self.sqs.dlq == oldSelf.sqs.dlq
+            - message: sqs.endpoint is immutable once created
+              rule: self.sqs.endpoint == oldSelf.sqs.endpoint
+            - message: sqs must be provided when provider is sqs or sqs_cp
+              rule: (self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)
+          status:
+            description: QueueStatus defines the observed state of Queue
+            properties:
+              message:
+                description: Auxillary message describing CR status
+                type: string
+              phase:
+                description: Phase of the queue
+                enum:
+                - Pending
+                - Ready
+                - Updating
+                - ScalingUp
+                - ScalingDown
+                - Terminating
+                - Error
+                type: string
+              resourceRevMap:
+                additionalProperties:
+                  type: string
+                description: Resource revision tracker
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

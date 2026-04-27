@@ -1,0 +1,334 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: ntnslices.ntn.operators.dev
+spec:
+  group: ntn.operators.dev
+  names:
+    kind: NTNSlice
+    listKind: NTNSliceList
+    plural: ntnslices
+    shortNames:
+    - nts
+    singular: ntnslice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.tenant
+      name: Tenant
+      type: string
+    - jsonPath: .status.activePathType
+      name: Active Path
+      type: string
+    - jsonPath: .status.failoverCount
+      name: Failovers
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NTNSlice manages terrestrial-satellite network slice failover,
+          QoS mapping, and session continuity for NTN enterprise services.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              NTNSliceSpec defines the desired state of an NTN network slice
+              with terrestrial-satellite failover policy.
+            properties:
+              billing:
+                description: billing defines CDR generation parameters.
+                properties:
+                  satelliteRate:
+                    description: satelliteRate is the charging model for satellite
+                      path.
+                    enum:
+                    - per-volume
+                    - per-time
+                    - per-minute
+                    - flat
+                    type: string
+                  terrestrialRate:
+                    description: terrestrialRate is the charging model for terrestrial
+                      path.
+                    enum:
+                    - per-volume
+                    - per-time
+                    - flat
+                    type: string
+                type: object
+              failoverPolicy:
+                description: failoverPolicy defines when and how to switch between
+                  paths.
+                properties:
+                  hysteresisMargin:
+                    description: |-
+                      hysteresisMargin is a dead-band applied to trigger thresholds
+                      during switchback evaluation, preventing flapping when metrics
+                      oscillate near the threshold. The value uses the same unit as
+                      the trigger (dB for RSRP, ms for latency, percent for packetLoss).
+                      Example: with trigger "rsrp < -120" and hysteresisMargin "10",
+                      failover fires at RSRP < -120, but switchback requires RSRP >= -110.
+                    pattern: ^[0-9]+\.?[0-9]*$
+                    type: string
+                  sessionContinuity:
+                    default: true
+                    description: sessionContinuity preserves active sessions during
+                      failover.
+                    type: boolean
+                  switchbackDelay:
+                    default: 60s
+                    description: |-
+                      switchbackDelay is how long to wait after terrestrial recovers
+                      before switching back (prevents flapping).
+                    format: duration
+                    type: string
+                  triggers:
+                    description: |-
+                      triggers defines conditions that initiate failover (OR logic).
+                      Format: "metric operator value" (e.g., "rsrp < -120").
+                      Validated at runtime by the failover engine (pkg/slice.ParseTrigger).
+                      Order is intentionally not significant; set merge semantics are desired.
+                    items:
+                      type: string
+                    maxItems: 10
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - triggers
+                type: object
+              qosMapping:
+                description: qosMapping defines QoS parameter mapping between paths.
+                properties:
+                  maxLatencyBudget:
+                    default: 150ms
+                    description: |-
+                      maxLatencyBudget is the maximum acceptable latency including
+                      satellite propagation delay.
+                    format: duration
+                    type: string
+                  satelliteQCI:
+                    default: best-effort
+                    description: satelliteQCI is the QoS class for the satellite path.
+                    enum:
+                    - conversational
+                    - streaming
+                    - interactive
+                    - background
+                    - best-effort
+                    type: string
+                  terrestrial5QI:
+                    description: terrestrial5QI is the 5G QoS Identifier for the terrestrial
+                      path.
+                    maximum: 255
+                    minimum: 1
+                    type: integer
+                type: object
+              satellitePath:
+                description: satellitePath defines the failover satellite connectivity.
+                properties:
+                  apn:
+                    description: apn is the Access Point Name.
+                    type: string
+                  ephemerisRef:
+                    description: |-
+                      ephemerisRef is the name of the SatelliteEphemeris resource
+                      used to determine satellite pass availability.
+                    minLength: 1
+                    type: string
+                  priority:
+                    description: priority is the path priority.
+                    enum:
+                    - primary
+                    - failover
+                    type: string
+                  provider:
+                    description: provider is the network operator name (e.g., "chunghwa-telecom").
+                    minLength: 1
+                    type: string
+                required:
+                - ephemerisRef
+                - priority
+                - provider
+                type: object
+              security:
+                description: security defines handover security requirements.
+                properties:
+                  authOnHandover:
+                    default: re-authenticate
+                    description: authOnHandover defines authentication behavior during
+                      path switch.
+                    enum:
+                    - re-authenticate
+                    - continue
+                    type: string
+                  encryptionLevel:
+                    default: AES-256
+                    description: encryptionLevel specifies the encryption standard.
+                    enum:
+                    - AES-128
+                    - AES-256
+                    - SNOW3G
+                    - ZUC
+                    type: string
+                type: object
+              tenant:
+                description: tenant is the organization or entity that owns this slice.
+                minLength: 1
+                type: string
+              terrestrialPath:
+                description: terrestrialPath defines the primary terrestrial connectivity.
+                properties:
+                  apn:
+                    description: apn is the Access Point Name.
+                    type: string
+                  priority:
+                    description: priority is the path priority.
+                    enum:
+                    - primary
+                    - failover
+                    type: string
+                  provider:
+                    description: provider is the network operator name (e.g., "chunghwa-telecom").
+                    minLength: 1
+                    type: string
+                required:
+                - priority
+                - provider
+                type: object
+            required:
+            - failoverPolicy
+            - satellitePath
+            - tenant
+            - terrestrialPath
+            type: object
+            x-kubernetes-validations:
+            - message: terrestrialPath.priority must be 'primary'
+              rule: self.terrestrialPath.priority == 'primary'
+            - message: satellitePath.priority must be 'failover'
+              rule: self.satellitePath.priority == 'failover'
+          status:
+            description: NTNSliceStatus defines the observed state of NTNSlice.
+            properties:
+              activePathType:
+                description: activePathType is the currently active network path.
+                enum:
+                - terrestrial
+                - satellite
+                - unavailable
+                type: string
+              appliedEncryption:
+                description: appliedEncryption is the encryption level in effect for
+                  the current path.
+                type: string
+              appliedQoS:
+                description: appliedQoS summarizes the QoS mapping in effect for the
+                  current path.
+                type: string
+              billingMode:
+                description: billingMode is the billing model active for the current
+                  path.
+                type: string
+              conditions:
+                description: conditions represent the current state of the slice.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              failoverCount:
+                description: failoverCount is the total number of failover events
+                  since creation.
+                type: integer
+              lastFailover:
+                description: lastFailover is the timestamp of the last failover event.
+                format: date-time
+                type: string
+              sessionCount:
+                description: sessionCount is the number of active sessions on this
+                  slice.
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

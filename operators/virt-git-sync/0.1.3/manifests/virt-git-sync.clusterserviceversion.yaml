@@ -1,0 +1,302 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "virt.mathianasj.github.com/v1alpha1",
+          "kind": "VirtGitSync",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "virt-git-sync"
+            },
+            "name": "virtgitsync-sample"
+          },
+          "spec": {
+            "gitRepository": {
+              "branch": "main",
+              "url": "https://github.com/yourusername/vm-manifests.git"
+            },
+            "syncPath": "vms"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: OpenShift Optional,Integration & Delivery
+    com.redhat.openshift.versions: v4.13-v4.20
+    containerImage: quay.io/mathianasj/virt-git-sync:v0.1.0
+    createdAt: "2026-04-28T03:37:25Z"
+    description: GitOps for KubeVirt VirtualMachines with ArgoCD integration
+    operators.operatorframework.io/builder: operator-sdk-v1.39.2
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/mathianasj/virt-git-sync
+    support: Joshua Mathianas
+  name: virt-git-sync.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: VirtGitSync is the Schema for the virtgitsyncs API
+      displayName: Virt Git Sync
+      kind: VirtGitSync
+      name: virtgitsyncs.virt.mathianasj.github.com
+      version: v1alpha1
+  description: |
+    # VirtGitSync Operator
+
+    The VirtGitSync operator enables complete GitOps workflows for KubeVirt VirtualMachines.
+    It watches VirtualMachine resources, syncs them to git, and integrates with ArgoCD to
+    maintain a single source of truth in your git repository.
+
+    ## Features
+
+    - **Automatic VM sync to git** - Watches VirtualMachine resources and commits changes to git
+    - **Clean YAML generation** - Strips runtime metadata for zero-drift GitOps
+    - **ArgoCD integration** - Automatically creates and manages ArgoCD Applications
+    - **Manual sync control** - Prevents race conditions with manual trigger approach
+    - **Pause/resume per-VM** - Use annotations to pause ArgoCD reconciliation for specific VMs
+    - **SSH and HTTPS auth** - Support for private repositories
+    - **Multi-namespace** - Sync VMs across namespaces with label selectors
+
+    ## Use Cases
+
+    - GitOps workflows for virtual machine management
+    - Disaster recovery - VMs backed up to git
+    - VM template management
+    - Change tracking and audit trail
+    - Multi-cluster VM deployment with ArgoCD
+
+    ## Getting Started
+
+    Create a VirtGitSync resource to sync VirtualMachines to git:
+
+    ```yaml
+    apiVersion: virt.mathianasj.github.com/v1alpha1
+    kind: VirtGitSync
+    metadata:
+      name: vm-sync
+    spec:
+      gitRepository:
+        url: https://github.com/yourusername/vm-manifests.git
+        branch: main
+        secretRef:
+          name: git-credentials
+      argocd:
+        namespace: openshift-gitops
+        applicationName: my-vms
+    ```
+
+    The operator will sync all VirtualMachines to git and create an ArgoCD Application
+    to deploy them from git back to the cluster.
+  displayName: VirtGitSync Operator
+  icon:
+  - base64data: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - argoproj.io
+          resources:
+          - applications
+          - repositories
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kubevirt.io
+          resources:
+          - virtualmachines
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kubevirt.io
+          resources:
+          - virtualmachines/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kubevirt.io
+          resources:
+          - virtualmachines/status
+          verbs:
+          - get
+        - apiGroups:
+          - virt.mathianasj.github.com
+          resources:
+          - virtgitsyncs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - virt.mathianasj.github.com
+          resources:
+          - virtgitsyncs/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - virt.mathianasj.github.com
+          resources:
+          - virtgitsyncs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: virt-git-sync-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: virt-git-sync
+          control-plane: controller-manager
+        name: virt-git-sync-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: quay.io/mathianasj/virt-git-sync:v0.1.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: virt-git-sync-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: virt-git-sync-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: false
+    type: AllNamespaces
+  keywords:
+  - kubevirt
+  - virtualmachine
+  - git
+  - gitops
+  - argocd
+  links:
+  - name: VirtGitSync Repository
+    url: https://github.com/mathianasj/virt-git-sync
+  - name: Documentation
+    url: https://github.com/mathianasj/virt-git-sync/blob/main/README.md
+  maintainers:
+  - email: mathianasj@github.com
+    name: Joshua Mathianas
+  maturity: alpha
+  minKubeVersion: 1.26.0
+  provider:
+    name: Joshua Mathianas
+  version: 0.1.0

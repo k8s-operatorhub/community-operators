@@ -1,0 +1,224 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jrolebindings.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    categories:
+    - neo4j
+    kind: Neo4jRoleBinding
+    listKind: Neo4jRoleBindingList
+    plural: neo4jrolebindings
+    shortNames:
+    - n4jrb
+    - n4jrolebindings
+    singular: neo4jrolebinding
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .spec.username
+      name: User
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Neo4jRoleBinding is the Schema for the neo4jrolebindings API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Neo4jRoleBindingSpec defines a desired set of role grants for a username
+              the operator does NOT manage as a Neo4jUser.
+
+              The use case is SSO/LDAP/OIDC users provisioned externally (e.g. on first
+              login by Neo4j's user-auth provider integration, or by a bulk import
+              pipeline outside the operator's control). The operator does not create
+              or drop the user, but does keep the role grants for that user in sync
+              with .spec.roles.
+
+              Don't use Neo4jRoleBinding for users you also manage with Neo4jUser —
+              the validator rejects that overlap to prevent two CRs fighting over the
+              same role set. The Neo4jUser CR already manages role bindings via
+              .spec.roles.
+            properties:
+              clusterRef:
+                description: |-
+                  ClusterRef is the name of the Neo4jEnterpriseCluster or
+                  Neo4jEnterpriseStandalone in the same namespace whose security graph
+                  owns the user.
+                type: string
+              deletionPolicy:
+                default: Revoke
+                description: |-
+                  DeletionPolicy controls what happens when this CR is deleted.
+                    Revoke (default): REVOKE every role this binding granted.
+                    Retain:           leave grants in place; only remove the finalizer.
+                enum:
+                - Revoke
+                - Retain
+                type: string
+              enforceExclusive:
+                default: false
+                description: |-
+                  EnforceExclusive, when true, makes .spec.roles authoritative for the
+                  user's full role set: roles granted out-of-band that are not listed
+                  here will be REVOKEd on every reconcile. Default is false — the
+                  binding only adds and removes the roles it knows about, and tolerates
+                  roles granted via other mechanisms (manual, other tools, LDAP-mapped).
+                type: boolean
+              roles:
+                description: |-
+                  Roles is the desired set of Neo4j role names to grant to the user.
+                  Built-ins (reader, editor, publisher, architect, admin) are accepted
+                  directly; custom role names must correspond to existing roles in
+                  Neo4j (typically managed by Neo4jRole CRs in the same namespace).
+                  PUBLIC is implicit and is never granted/revoked.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              username:
+                description: |-
+                  Username is the Neo4j username to manage role grants for. Must already
+                  exist in Neo4j (created externally — e.g. via SSO first-login
+                  provisioning) by the time the cluster is Ready. If absent, the binding
+                  enters the UserNotFound condition and reconciles when the user appears.
+                maxLength: 65
+                pattern: ^[a-zA-Z][a-zA-Z0-9_.\-]*$
+                type: string
+            required:
+            - clusterRef
+            - roles
+            - username
+            type: object
+          status:
+            description: Neo4jRoleBindingStatus describes the observed state of a
+              Neo4jRoleBinding.
+            properties:
+              conditions:
+                description: |-
+                  Conditions reflects the latest reconcile state. Conditions used:
+                    Ready                — the user exists and the desired grants are in place
+                    RolesSynced          — granted roles include all of .spec.roles
+                    UserNotFound         — the referenced user does not exist in Neo4j
+                    PendingDependencies  — one or more .spec.roles do not yet exist
+                    ClusterNotReady      — the referenced cluster is not Ready
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              grantedRoles:
+                description: |-
+                  GrantedRoles is the subset of .spec.roles that the controller has
+                  successfully granted (and observed via SHOW USERS YIELD roles).
+                items:
+                  type: string
+                type: array
+              message:
+                description: Message carries a short human-readable explanation of
+                  the current Phase.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation observed by the
+                  controller during the last successful reconcile.
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase is a coarse summary: Pending, Ready, Failed.'
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,525 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jbackups.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    kind: Neo4jBackup
+    listKind: Neo4jBackupList
+    plural: neo4jbackups
+    singular: neo4jbackup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.target.kind
+      name: Target
+      type: string
+    - jsonPath: .spec.schedule
+      name: Schedule
+      type: string
+    - jsonPath: .status.lastRunTime
+      name: LastRun
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Neo4jBackup is the Schema for the neo4jbackups API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Neo4jBackupSpec defines the desired state of Neo4jBackup
+            properties:
+              cloud:
+                description: Cloud configuration for cloud storage
+                properties:
+                  credentialsSecretRef:
+                    description: |-
+                      CredentialsSecretRef is the name of a Kubernetes Secret containing
+                      cloud provider credentials as environment variables. Optional when
+                      using workload identity / IAM instance profiles.
+                      For S3:    keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+                      For GCS:   key  GOOGLE_APPLICATION_CREDENTIALS_JSON (base64 service-account JSON)
+                      For Azure: keys AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY
+                    type: string
+                  endpointURL:
+                    description: |-
+                      EndpointURL overrides the S3 API endpoint URL. Use this to target
+                      S3-compatible stores such as MinIO, Ceph RGW, or Cloudflare R2.
+                      Example: "http://minio.minio-ns.svc:9000"
+                      Only applies to the "aws" provider; ignored for gcp and azure.
+                    type: string
+                  forcePathStyle:
+                    description: |-
+                      ForcePathStyle forces S3 path-style addressing, where the bucket name
+                      appears in the URL path (e.g. http://endpoint/bucket/key) rather than
+                      the subdomain (e.g. http://bucket.endpoint/key).
+                      Required for MinIO and most self-hosted S3-compatible stores.
+                      Only effective when EndpointURL is set.
+                    type: boolean
+                  identity:
+                    description: CloudIdentity defines cloud identity configuration
+                    properties:
+                      autoCreate:
+                        description: AutoCreateSpec defines auto-creation of service
+                          accounts
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          enabled:
+                            default: true
+                            type: boolean
+                        type: object
+                      provider:
+                        enum:
+                        - aws
+                        - gcp
+                        - azure
+                        type: string
+                      serviceAccount:
+                        type: string
+                    required:
+                    - provider
+                    type: object
+                  provider:
+                    enum:
+                    - aws
+                    - gcp
+                    - azure
+                    type: string
+                type: object
+              options:
+                description: Backup options
+                properties:
+                  additionalArgs:
+                    description: Additional neo4j-admin backup arguments
+                    items:
+                      type: string
+                    type: array
+                  backupType:
+                    default: AUTO
+                    description: Backup type
+                    enum:
+                    - FULL
+                    - DIFF
+                    - AUTO
+                    type: string
+                  compress:
+                    default: true
+                    description: 'Compress the backup (default: true)'
+                    type: boolean
+                  encryption:
+                    description: Encryption configuration
+                    properties:
+                      algorithm:
+                        default: AES256
+                        description: Encryption algorithm
+                        enum:
+                        - AES256
+                        - ChaCha20Poly1305
+                        type: string
+                      enabled:
+                        description: Enable encryption
+                        type: boolean
+                      keySecret:
+                        description: Secret containing encryption key
+                        type: string
+                      keySecretKey:
+                        default: key
+                        description: Key within the secret containing the encryption
+                          key
+                        type: string
+                    type: object
+                  includeMetadata:
+                    description: |-
+                      IncludeMetadata controls which metadata (users, roles) is included in the backup.
+                      Supported values: "all" (default), "none", "users", "roles".
+                      Requires Neo4j 5.26+.
+                    enum:
+                    - all
+                    - none
+                    - users
+                    - roles
+                    type: string
+                  keepFailed:
+                    description: KeepFailed preserves failed backup artifacts for
+                      debugging instead of deleting them.
+                    type: boolean
+                  pageCache:
+                    description: Page cache size for backup operation (e.g., "4G")
+                    pattern: ^[0-9]+[KMG]?$
+                    type: string
+                  parallelDownload:
+                    description: Enable parallel download for remote backups
+                    type: boolean
+                  parallelRecovery:
+                    description: ParallelRecovery enables multi-threaded transaction
+                      application during backup.
+                    type: boolean
+                  preferDiffAsParent:
+                    description: |-
+                      PreferDiffAsParent instructs the backup to use the latest differential
+                      backup as the parent instead of the latest full backup when creating a
+                      differential backup. Requires CalVer 2025.04+.
+                    type: boolean
+                  remoteAddressResolution:
+                    description: Resolve remote addresses for backups (useful in multi-homed
+                      environments)
+                    type: boolean
+                  skipRecovery:
+                    description: Skip recovery step after backup (advanced; use when
+                      recovery is handled separately)
+                    type: boolean
+                  tempPath:
+                    description: |-
+                      TempPath is a local directory for temporary files during the backup.
+                      When TempStorage is configured, this is set automatically to the mount path.
+                      Only set manually if you are mounting your own volume via other means.
+                    type: string
+                  tempStorage:
+                    description: |-
+                      TempStorage provisions a PVC for temporary staging files during cloud backups.
+                      Without this, cloud backups stage to the container's ephemeral disk which may
+                      be too small for large databases. The operator mounts this PVC and passes
+                      --temp-path automatically.
+                    properties:
+                      size:
+                        description: |-
+                          Size of the temporary PVC (e.g., "50Gi"). Should be at least as large
+                          as the expected backup/restore artifact.
+                        pattern: ^[0-9]+(Ki|Mi|Gi|Ti)?$
+                        type: string
+                      storageClassName:
+                        description: StorageClassName for the temporary PVC. If empty,
+                          uses the cluster default.
+                        type: string
+                    required:
+                    - size
+                    type: object
+                  verify:
+                    description: Verify backup integrity after creation
+                    type: boolean
+                type: object
+              retention:
+                description: Retention policy for backup cleanup
+                properties:
+                  deletePolicy:
+                    default: Delete
+                    description: Delete policy for expired backups
+                    enum:
+                    - Delete
+                    - Archive
+                    type: string
+                  maxAge:
+                    description: Maximum age of backups to keep
+                    type: string
+                  maxCount:
+                    description: Maximum number of backups to keep
+                    format: int32
+                    type: integer
+                type: object
+              schedule:
+                description: Schedule for automated backups (cron format)
+                type: string
+              storage:
+                description: Storage defines where to store the backup
+                properties:
+                  bucket:
+                    type: string
+                  cloud:
+                    description: Cloud provider configuration
+                    properties:
+                      credentialsSecretRef:
+                        description: |-
+                          CredentialsSecretRef is the name of a Kubernetes Secret containing
+                          cloud provider credentials as environment variables. Optional when
+                          using workload identity / IAM instance profiles.
+                          For S3:    keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+                          For GCS:   key  GOOGLE_APPLICATION_CREDENTIALS_JSON (base64 service-account JSON)
+                          For Azure: keys AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY
+                        type: string
+                      endpointURL:
+                        description: |-
+                          EndpointURL overrides the S3 API endpoint URL. Use this to target
+                          S3-compatible stores such as MinIO, Ceph RGW, or Cloudflare R2.
+                          Example: "http://minio.minio-ns.svc:9000"
+                          Only applies to the "aws" provider; ignored for gcp and azure.
+                        type: string
+                      forcePathStyle:
+                        description: |-
+                          ForcePathStyle forces S3 path-style addressing, where the bucket name
+                          appears in the URL path (e.g. http://endpoint/bucket/key) rather than
+                          the subdomain (e.g. http://bucket.endpoint/key).
+                          Required for MinIO and most self-hosted S3-compatible stores.
+                          Only effective when EndpointURL is set.
+                        type: boolean
+                      identity:
+                        description: CloudIdentity defines cloud identity configuration
+                        properties:
+                          autoCreate:
+                            description: AutoCreateSpec defines auto-creation of service
+                              accounts
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              enabled:
+                                default: true
+                                type: boolean
+                            type: object
+                          provider:
+                            enum:
+                            - aws
+                            - gcp
+                            - azure
+                            type: string
+                          serviceAccount:
+                            type: string
+                        required:
+                        - provider
+                        type: object
+                      provider:
+                        enum:
+                        - aws
+                        - gcp
+                        - azure
+                        type: string
+                    type: object
+                  path:
+                    type: string
+                  pvc:
+                    description: PVC configuration
+                    properties:
+                      name:
+                        description: Name of the PVC to use (for referencing existing
+                          PVCs)
+                        type: string
+                      size:
+                        type: string
+                      storageClassName:
+                        type: string
+                    type: object
+                  type:
+                    enum:
+                    - s3
+                    - gcs
+                    - azure
+                    - pvc
+                    type: string
+                required:
+                - type
+                type: object
+              suspend:
+                description: Suspend the backup schedule
+                type: boolean
+              target:
+                description: Target defines what to backup
+                properties:
+                  clusterRef:
+                    description: |-
+                      ClusterRef is the name of the Neo4jEnterpriseCluster (or Neo4jEnterpriseStandalone)
+                      that owns the database. Required when Kind=Database; unused when Kind=Cluster.
+                    type: string
+                  kind:
+                    enum:
+                    - Cluster
+                    - Database
+                    type: string
+                  name:
+                    description: Name of the target resource
+                    type: string
+                  namespace:
+                    description: Namespace of the target resource (defaults to backup
+                      namespace)
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+            required:
+            - storage
+            - target
+            type: object
+          status:
+            description: Neo4jBackupStatus defines the observed state of Neo4jBackup
+            properties:
+              conditions:
+                description: Conditions represent the current state of the backup
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              history:
+                description: History of recent backup runs
+                items:
+                  description: BackupRun represents a single backup execution
+                  properties:
+                    completionTime:
+                      description: Completion time of the backup run
+                      format: date-time
+                      type: string
+                    error:
+                      description: Error message if the backup failed
+                      type: string
+                    startTime:
+                      description: Start time of the backup run
+                      format: date-time
+                      type: string
+                    stats:
+                      description: Statistics for this backup run
+                      properties:
+                        duration:
+                          description: Duration of the backup
+                          type: string
+                        fileCount:
+                          description: Number of files in the backup
+                          format: int32
+                          type: integer
+                        size:
+                          description: Size of the backup
+                          type: string
+                        throughput:
+                          description: Throughput of the backup
+                          type: string
+                      type: object
+                    status:
+                      description: Status of the backup run
+                      type: string
+                  required:
+                  - startTime
+                  - status
+                  type: object
+                type: array
+              lastRunTime:
+                description: LastRunTime shows when the last backup was started
+                format: date-time
+                type: string
+              lastSuccessTime:
+                description: LastSuccessTime shows when the last successful backup
+                  completed
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  state
+                type: string
+              nextRunTime:
+                description: NextRunTime shows when the next backup is scheduled
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation most recently
+                  observed by the controller
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase of the backup
+                type: string
+              stats:
+                description: Backup statistics
+                properties:
+                  duration:
+                    description: Duration of the backup
+                    type: string
+                  fileCount:
+                    description: Number of files in the backup
+                    format: int32
+                    type: integer
+                  size:
+                    description: Size of the backup
+                    type: string
+                  throughput:
+                    description: Throughput of the backup
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

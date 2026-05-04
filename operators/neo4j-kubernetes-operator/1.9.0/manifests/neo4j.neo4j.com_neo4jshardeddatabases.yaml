@@ -1,0 +1,622 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jshardeddatabases.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    kind: Neo4jShardedDatabase
+    listKind: Neo4jShardedDatabaseList
+    plural: neo4jshardeddatabases
+    singular: neo4jshardeddatabase
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .spec.propertySharding.propertyShards
+      name: Shards
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Neo4jShardedDatabase is the Schema for the neo4jshardeddatabases
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Neo4jShardedDatabaseSpec defines the desired state of Neo4jShardedDatabase
+            properties:
+              backupConfig:
+                description: |-
+                  Backup configuration for sharded database
+
+                  Defines how backups are coordinated across graph and property shards.
+                  The operator ensures consistent backup snapshots across all shards.
+                properties:
+                  consistencyMode:
+                    default: strict
+                    description: |-
+                      Consistency mode for cross-shard backups
+
+                      - strict: All shards backed up simultaneously (consistent point-in-time)
+                      - eventual: Shards backed up sequentially (faster, less consistent)
+                    enum:
+                    - strict
+                    - eventual
+                    type: string
+                  enabled:
+                    default: true
+                    description: Enable coordinated backups across all shards
+                    type: boolean
+                  retention:
+                    default: 168h
+                    description: Backup retention policy (e.g., "168h" for 7 days)
+                    type: string
+                  schedule:
+                    description: |-
+                      Backup schedule using cron syntax
+                      Applies to all shards simultaneously for consistency
+                    type: string
+                  storage:
+                    description: Storage location for sharded database backups
+                    properties:
+                      bucket:
+                        type: string
+                      cloud:
+                        description: Cloud provider configuration
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef is the name of a Kubernetes Secret containing
+                              cloud provider credentials as environment variables. Optional when
+                              using workload identity / IAM instance profiles.
+                              For S3:    keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+                              For GCS:   key  GOOGLE_APPLICATION_CREDENTIALS_JSON (base64 service-account JSON)
+                              For Azure: keys AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY
+                            type: string
+                          endpointURL:
+                            description: |-
+                              EndpointURL overrides the S3 API endpoint URL. Use this to target
+                              S3-compatible stores such as MinIO, Ceph RGW, or Cloudflare R2.
+                              Example: "http://minio.minio-ns.svc:9000"
+                              Only applies to the "aws" provider; ignored for gcp and azure.
+                            type: string
+                          forcePathStyle:
+                            description: |-
+                              ForcePathStyle forces S3 path-style addressing, where the bucket name
+                              appears in the URL path (e.g. http://endpoint/bucket/key) rather than
+                              the subdomain (e.g. http://bucket.endpoint/key).
+                              Required for MinIO and most self-hosted S3-compatible stores.
+                              Only effective when EndpointURL is set.
+                            type: boolean
+                          identity:
+                            description: CloudIdentity defines cloud identity configuration
+                            properties:
+                              autoCreate:
+                                description: AutoCreateSpec defines auto-creation
+                                  of service accounts
+                                properties:
+                                  annotations:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                  enabled:
+                                    default: true
+                                    type: boolean
+                                type: object
+                              provider:
+                                enum:
+                                - aws
+                                - gcp
+                                - azure
+                                type: string
+                              serviceAccount:
+                                type: string
+                            required:
+                            - provider
+                            type: object
+                          provider:
+                            enum:
+                            - aws
+                            - gcp
+                            - azure
+                            type: string
+                        type: object
+                      path:
+                        type: string
+                      pvc:
+                        description: PVC configuration
+                        properties:
+                          name:
+                            description: Name of the PVC to use (for referencing existing
+                              PVCs)
+                            type: string
+                          size:
+                            type: string
+                          storageClassName:
+                            type: string
+                        type: object
+                      type:
+                        enum:
+                        - s3
+                        - gcs
+                        - azure
+                        - pvc
+                        type: string
+                    required:
+                    - type
+                    type: object
+                  timeout:
+                    default: 30m
+                    description: Maximum backup operation timeout
+                    type: string
+                type: object
+              clusterRef:
+                description: Reference to the Neo4j cluster that will host this sharded
+                  database
+                type: string
+              defaultCypherLanguage:
+                description: |-
+                  Default Cypher language version for sharded database (Neo4j 2025.12+ only)
+
+                  Property sharding requires Cypher 25 syntax for multi-database operations.
+                  This field ensures compatibility with sharded database queries.
+                enum:
+                - "25"
+                type: string
+              ifNotExists:
+                default: true
+                description: Create database only if it doesn't exist
+                type: boolean
+              name:
+                description: Name of the sharded database to create
+                type: string
+              propertySharding:
+                description: Property sharding configuration
+                properties:
+                  graphShard:
+                    description: |-
+                      Graph shard topology specification
+
+                      Defines the replication topology for the graph shard database.
+                      This database contains nodes, relationships, and labels without properties.
+                    properties:
+                      primaries:
+                        description: |-
+                          Number of primary replicas for this database
+
+                          Primaries handle both read and write operations for the database.
+                          At least 1 primary is required for database operation.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      secondaries:
+                        description: |-
+                          Number of secondary replicas for this database
+
+                          Secondaries provide read-only access for horizontal scaling.
+                          Secondaries are optional but improve read performance and availability.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                  propertyShardTopology:
+                    description: |-
+                      Property shard topology specification
+
+                      Defines the replication topology for each property shard database.
+                      All property shards use the same topology configuration.
+                    properties:
+                      replicas:
+                        default: 1
+                        description: Number of replicas per property shard.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  propertyShards:
+                    description: |-
+                      Number of property shards to create
+
+                      Determines how node and relationship properties are distributed.
+                      More shards enable better parallelization but increase complexity.
+                      Recommended: 4-16 shards for most use cases.
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                required:
+                - graphShard
+                - propertyShardTopology
+                - propertyShards
+                type: object
+              seedConfig:
+                description: Seed configuration for advanced initialization
+                properties:
+                  config:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Additional seed provider configuration options
+
+                      Common configuration options:
+                      - "compression": "gzip" | "lz4" | "none"
+                      - "validation": "strict" | "lenient"
+                      - "bufferSize": Buffer size for seed operations
+
+                      Cloud-specific options:
+                      - S3: "region", "endpoint", "pathStyleAccess"
+                      - GCS: "project", "location"
+                      - Azure: "endpoint", "containerName"
+                    type: object
+                  restoreUntil:
+                    description: |-
+                      Restore until specific point in time (Neo4j 2025.x only)
+
+                      Supports two formats:
+                      - RFC3339 timestamp: "2025-01-15T10:30:00Z"
+                      - Transaction ID: "txId:12345"
+
+                      This allows point-in-time recovery when creating database from backup.
+                      Only available with Neo4j 2025.x and CloudSeedProvider.
+                    type: string
+                type: object
+              seedCredentials:
+                description: Seed credentials for URI access when system-wide auth
+                  is not available
+                properties:
+                  secretRef:
+                    description: |-
+                      Kubernetes secret containing seed URI credentials
+
+                      Expected secret keys by URI scheme:
+
+                      S3 (s3://):
+                      - AWS_ACCESS_KEY_ID: AWS access key
+                      - AWS_SECRET_ACCESS_KEY: AWS secret key
+                      - AWS_SESSION_TOKEN: (optional) session token
+                      - AWS_REGION: (optional) AWS region override
+
+                      Google Cloud Storage (gs://):
+                      - GOOGLE_APPLICATION_CREDENTIALS: Service account JSON key
+                      - GOOGLE_CLOUD_PROJECT: (optional) project ID override
+
+                      Azure Blob Storage (azb://):
+                      - AZURE_STORAGE_ACCOUNT: Storage account name
+                      - AZURE_STORAGE_KEY: Storage account key
+                      - AZURE_STORAGE_SAS_TOKEN: (alternative) SAS token
+
+                      HTTP/HTTPS/FTP:
+                      - USERNAME: (optional) authentication username
+                      - PASSWORD: (optional) authentication password
+                      - AUTH_HEADER: (optional) custom authorization header
+                    type: string
+                type: object
+              seedSourceDatabase:
+                description: |-
+                  Optional source database name for seed metadata lookup.
+                  Used when seeding from backups with a different database name.
+                type: string
+              seedURI:
+                description: |-
+                  Seed URI for creating the sharded database from backups or dumps.
+                  When provided as a single URI, Neo4j expects backup artifacts to be named
+                  using shard suffixes (e.g., <db>-g000, <db>-p000).
+                type: string
+              seedURIs:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Seed URIs keyed by shard name for dump-based seeding or multi-location backups.
+                  Keys must match shard names (e.g., <db>-g000, <db>-p000).
+                type: object
+              txLogEnrichment:
+                description: |-
+                  Transaction log enrichment for sharded database creation.
+                  Valid values are Neo4j-supported txLogEnrichment options (e.g., "FULL").
+                type: string
+              wait:
+                default: true
+                description: Wait for database creation to complete
+                type: boolean
+            required:
+            - clusterRef
+            - defaultCypherLanguage
+            - name
+            - propertySharding
+            type: object
+          status:
+            description: Neo4jShardedDatabaseStatus defines the observed state of
+              Neo4jShardedDatabase
+            properties:
+              backupStatus:
+                description: Backup status across all shards
+                properties:
+                  consistencyCheck:
+                    description: Backup consistency check status
+                    type: string
+                  lastBackupTime:
+                    description: Last coordinated backup time
+                    format: date-time
+                    type: string
+                  nextBackupTime:
+                    description: Next scheduled backup time
+                    format: date-time
+                    type: string
+                  shardBackups:
+                    description: Individual shard backup statuses
+                    items:
+                      description: ShardBackupStatus tracks backup status for individual
+                        shards
+                      properties:
+                        backupSize:
+                          description: Backup size for this shard
+                          type: string
+                        lastBackupTime:
+                          description: Last backup time for this shard
+                          format: date-time
+                          type: string
+                        lastError:
+                          description: Last error during backup
+                          type: string
+                        shardName:
+                          description: Shard name
+                          type: string
+                        status:
+                          description: Backup status for this shard
+                          type: string
+                      type: object
+                    type: array
+                  status:
+                    description: Overall backup status
+                    type: string
+                type: object
+              conditions:
+                description: Conditions represent the current state of the sharded
+                  database
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              creationTime:
+                description: CreationTime shows when the sharded database was created
+                format: date-time
+                type: string
+              graphShard:
+                description: Graph shard status
+                properties:
+                  lastError:
+                    description: Last error encountered for this shard
+                    type: string
+                  name:
+                    description: Database name for this shard
+                    type: string
+                  propertyCount:
+                    format: int64
+                    type: integer
+                  propertyShardIndex:
+                    description: Property shard specific fields
+                    format: int32
+                    type: integer
+                  ready:
+                    description: Ready indicates if this shard is operational
+                    type: boolean
+                  servers:
+                    description: Servers hosting this shard
+                    items:
+                      type: string
+                    type: array
+                  size:
+                    description: Size of this shard database
+                    type: string
+                  state:
+                    description: Current state of this shard database
+                    type: string
+                  type:
+                    description: 'Shard type: graph or property'
+                    enum:
+                    - graph
+                    - property
+                    type: string
+                type: object
+              lastBackupTime:
+                description: Last successful backup time across all shards
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  state
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation observed by
+                  the controller
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase of the sharded database
+                type: string
+              propertyShards:
+                description: Property shard statuses
+                items:
+                  description: ShardStatus tracks the status of individual shards
+                    (graph or property)
+                  properties:
+                    lastError:
+                      description: Last error encountered for this shard
+                      type: string
+                    name:
+                      description: Database name for this shard
+                      type: string
+                    propertyCount:
+                      format: int64
+                      type: integer
+                    propertyShardIndex:
+                      description: Property shard specific fields
+                      format: int32
+                      type: integer
+                    ready:
+                      description: Ready indicates if this shard is operational
+                      type: boolean
+                    servers:
+                      description: Servers hosting this shard
+                      items:
+                        type: string
+                      type: array
+                    size:
+                      description: Size of this shard database
+                      type: string
+                    state:
+                      description: Current state of this shard database
+                      type: string
+                    type:
+                      description: 'Shard type: graph or property'
+                      enum:
+                      - graph
+                      - property
+                      type: string
+                  type: object
+                type: array
+              shardingReady:
+                description: ShardingReady indicates whether all shards are created
+                  and operational
+                type: boolean
+              totalSize:
+                description: Total size across all shards
+                type: string
+              virtualDatabase:
+                description: Virtual database status (logical view combining all shards)
+                properties:
+                  endpoint:
+                    description: Connection endpoint for virtual database queries
+                    type: string
+                  metrics:
+                    description: Performance metrics for virtual database
+                    properties:
+                      queryMetrics:
+                        description: Query performance statistics
+                        properties:
+                          averageQueryTime:
+                            description: Average query execution time
+                            type: string
+                          crossShardQueriesPerSecond:
+                            description: Number of cross-shard queries per second
+                            type: string
+                          propertyCacheHitRatio:
+                            description: Cache hit ratio for property lookups (0.0-1.0
+                              as string)
+                            type: string
+                        type: object
+                      totalNodes:
+                        description: Total number of nodes across all shards
+                        format: int64
+                        type: integer
+                      totalProperties:
+                        description: Total number of properties across all property
+                          shards
+                        format: int64
+                        type: integer
+                      totalRelationships:
+                        description: Total number of relationships across all shards
+                        format: int64
+                        type: integer
+                    type: object
+                  name:
+                    description: Name of the virtual database (logical view)
+                    type: string
+                  ready:
+                    description: Ready indicates if the virtual database is operational
+                    type: boolean
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

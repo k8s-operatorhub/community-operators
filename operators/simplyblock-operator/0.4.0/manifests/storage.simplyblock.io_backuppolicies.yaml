@@ -1,0 +1,152 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: backuppolicies.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: BackupPolicy
+    listKind: BackupPolicyList
+    plural: backuppolicies
+    singular: backuppolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.clusterName
+      name: Cluster
+      type: string
+    - jsonPath: .spec.schedule
+      name: Schedule
+      type: string
+    - jsonPath: .spec.maxVersions
+      name: MaxVersions
+      type: integer
+    - jsonPath: .spec.maxAge
+      name: MaxAge
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: "BackupPolicy is the Schema for the backuppolicies API.\n\nA
+          BackupPolicy defines retention and scheduling parameters for Simplyblock\nbackups.
+          To apply a policy to a PVC, annotate the PVC with:\n\n\tsimplybk/backup-policy:
+          <BackupPolicy-name>\n\nThe BackupPolicy must be in the same namespace as
+          the annotated PVC.\nThe controller attaches and detaches the policy in the
+          Simplyblock backend\nwhenever the annotation is added or removed."
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of BackupPolicy
+            properties:
+              clusterName:
+                description: ClusterName is the target storage cluster name.
+                type: string
+              maxAge:
+                description: |-
+                  MaxAge is the maximum age of backups to retain (e.g. "7d", "12h", "30m").
+                  Backups older than this are merged. Accepts m, h, d, w suffixes.
+                type: string
+              maxVersions:
+                description: |-
+                  MaxVersions is the maximum number of completed backup versions to retain.
+                  When exceeded, the oldest backup is merged into the second-oldest.
+                type: integer
+              schedule:
+                description: |-
+                  Schedule defines the tiered backup schedule as a space-separated list of
+                  interval,keep_count pairs (e.g. "15m,4 60m,11 24h,7").
+                  Intervals must be strictly increasing. Supported units: m, h, d, w.
+                type: string
+            required:
+            - clusterName
+            type: object
+            x-kubernetes-validations:
+            - message: clusterName is immutable
+              rule: self.clusterName == oldSelf.clusterName
+            - message: maxVersions is immutable
+              rule: self.maxVersions == oldSelf.maxVersions
+            - message: maxAge is immutable
+              rule: self.maxAge == oldSelf.maxAge
+            - message: schedule is immutable
+              rule: self.schedule == oldSelf.schedule
+          status:
+            description: status defines the observed state of BackupPolicy
+            properties:
+              attachedLvols:
+                description: |-
+                  AttachedLvols lists the PVCs (and their lvol IDs) currently attached to
+                  this policy in the Simplyblock backend. The controller uses this to detect
+                  and reconcile annotation additions and removals.
+                items:
+                  description: AttachedLvol records a single PVC-to-lvol attachment
+                    managed by this policy.
+                  properties:
+                    lvolID:
+                      description: LvolID is the Simplyblock logical volume UUID that
+                        this policy is attached to.
+                      type: string
+                    pvcName:
+                      description: PVCName is the name of the PVC.
+                      type: string
+                    pvcNamespace:
+                      description: PVCNamespace is the namespace of the PVC.
+                      type: string
+                  required:
+                  - lvolID
+                  - pvcName
+                  - pvcNamespace
+                  type: object
+                type: array
+              clusterUUID:
+                description: ClusterUUID is the resolved backend cluster UUID.
+                type: string
+              message:
+                description: Message contains the latest reconciliation detail or
+                  error.
+                type: string
+              phase:
+                description: Phase is the high-level lifecycle state of the policy.
+                type: string
+              policyID:
+                description: PolicyID is the UUID assigned to this policy by the Simplyblock
+                  backend.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

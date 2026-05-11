@@ -1,0 +1,360 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: podtrace.v0.11.9
+  namespace: placeholder
+  annotations:
+    capabilities: Basic Install
+    categories: "Monitoring,Developer Tools"
+    containerImage: ghcr.io/gma1k/podtrace:0.11.9
+    createdAt: "2026-05-11T11:59:37Z"
+    description: eBPF-based diagnostic operator for Kubernetes pods
+    repository: https://github.com/gma1k/podtrace
+    support: https://github.com/gma1k/podtrace/issues
+    olm.skipRange: ">=0.11.0 <0.11.9"
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "podtrace.io/v1alpha1",
+          "kind": "TracerConfig",
+          "metadata": { "name": "default" },
+          "spec": {
+            "image": "ghcr.io/gma1k/podtrace:0.11.9",
+            "imagePullPolicy": "IfNotPresent",
+            "systemNamespace": "podtrace-system",
+            "agent": { "eventBufferSize": 10000 }
+          }
+        },
+        {
+          "apiVersion": "podtrace.io/v1alpha1",
+          "kind": "ExporterConfig",
+          "metadata": { "name": "prod-otlp", "namespace": "default" },
+          "spec": {
+            "type": "otlp",
+            "otlp": {
+              "endpoint": "otel-collector.observability:4318",
+              "protocol": "http",
+              "insecure": true
+            }
+          }
+        },
+        {
+          "apiVersion": "podtrace.io/v1alpha1",
+          "kind": "PodTrace",
+          "metadata": { "name": "watch-api", "namespace": "default" },
+          "spec": {
+            "selector": { "matchLabels": { "app": "api" } },
+            "filters": ["dns", "net"],
+            "exporterRef": { "name": "prod-otlp" }
+          }
+        },
+        {
+          "apiVersion": "podtrace.io/v1alpha1",
+          "kind": "PodTraceSession",
+          "metadata": { "name": "diag-api", "namespace": "default" },
+          "spec": {
+            "selector": { "matchLabels": { "app": "api" } },
+            "duration": "30s",
+            "filters": ["dns", "net", "fs"],
+            "exporterRef": { "name": "prod-otlp" },
+            "reportRef": { "configMap": { "name": "api-diag-report" } }
+          }
+        }
+      ]
+
+spec:
+  displayName: Podtrace
+  description: |
+    Podtrace is an eBPF-based diagnostic operator for Kubernetes that
+    surfaces low-level runtime behavior — TCP/UDP latency, DNS resolution,
+    file I/O, syscall traces, lock contention, OOM events, and
+    application-layer events (HTTP, gRPC, Postgres, MySQL, Redis,
+    Memcached, Kafka, FastCGI/PHP-FPM) — without requiring application
+    code changes or sidecars.
+
+    ## Three usage modes
+
+    Podtrace ships one operator that supports three workflows:
+
+    - **`PodTrace` CR** — continuous, realtime tracing of pods matching
+      a label selector. Events stream through a per-node agent
+      DaemonSet to a configured `ExporterConfig` (OTLP, Jaeger, Splunk
+      HEC, Datadog, or Zipkin).
+
+    - **`PodTraceSession` CR** — bounded, GitOps-driven diagnose runs.
+      The operator fans out a privileged Job per node hosting a matched
+      pod, collects events for a configured duration, and writes a
+      structured report to a `ConfigMap` or `Secret`. Equivalent to the
+      podtrace CLI's `--diagnose` mode but multi-tenant and
+      operator-managed.
+
+    - **`TracerConfig` CR** — cluster-wide tracer configuration that
+      governs the agent DaemonSet (event buffer sizes, default filters,
+      probe groups, alert thresholds, sample rates).
+
+    ## Architecture
+
+    On install the operator runs unprivileged in the
+    `podtrace-system` namespace and watches the four CRD kinds
+    cluster-wide. When a `TracerConfig` is created, the operator rolls
+    out a `podtrace-agent` DaemonSet across the cluster with the
+    minimum capabilities eBPF requires: `CAP_BPF`, `CAP_PERFMON`, and
+    `hostPID`. Per-session Jobs use a separate, narrower
+    ServiceAccount with namespaced RBAC scoped to the session's
+    target.
+
+    ## Stability
+
+    The CRDs are at `v1alpha1`; field names may change before
+    promotion to `v1beta1`. See
+    [STABILITY.md](https://github.com/gma1k/podtrace/blob/main/STABILITY.md)
+    for the project's stability statement and
+    [doc/compatibility.md](https://github.com/gma1k/podtrace/blob/main/doc/compatibility.md)
+    for the kernel and Kubernetes version compatibility matrix.
+
+    ## Prerequisites
+
+    - Linux nodes with kernel **5.8+** (BPF ring buffer)
+    - For some probes (gRPC, FastCGI, full path resolution),
+      `/sys/kernel/btf/vmlinux` must be present (BTF support)
+    - `cert-manager` is **required** if you enable the validating
+      webhook (default: enabled). The operator ships with
+      `cert-manager.io/inject-ca-from` annotations on the
+      `ValidatingWebhookConfiguration`. For air-gapped clusters
+      without cert-manager, configure self-signed webhook certs via
+      the underlying Helm chart values.
+
+    ## Resources
+
+    - [Source code & docs](https://github.com/gma1k/podtrace)
+    - [CRD reference](https://github.com/gma1k/podtrace/tree/main/doc)
+    - [Issue tracker](https://github.com/gma1k/podtrace/issues)
+
+  version: 0.11.9
+  replaces: podtrace.v0.11.8
+  maturity: alpha
+  minKubeVersion: 1.28.0
+
+  keywords:
+    - ebpf
+    - tracing
+    - observability
+    - debugging
+    - diagnostics
+    - kubernetes
+    - operator
+    - apm
+    - profiling
+    - networking
+
+  maintainers:
+    - name: Ghassan Malke
+      email: ghassan+podtrace@malke.nl
+
+  provider:
+    name: Podtrace
+    url: https://github.com/gma1k/podtrace
+
+  links:
+    - name: Source
+      url: https://github.com/gma1k/podtrace
+    - name: Documentation
+      url: https://github.com/gma1k/podtrace/tree/main/doc
+    - name: Container image
+      url: https://github.com/gma1k/podtrace/pkgs/container/podtrace
+    - name: Helm chart
+      url: https://github.com/gma1k/podtrace/pkgs/container/charts%2Fpodtrace
+
+  icon:
+    - base64data: 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
+      mediatype: image/png
+
+  installModes:
+    - supported: false
+      type: OwnNamespace
+    - supported: false
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+
+  customresourcedefinitions:
+    owned:
+      - name: tracerconfigs.podtrace.io
+        version: v1alpha1
+        kind: TracerConfig
+        displayName: Tracer Config
+        description: |
+          Cluster-wide tracer configuration that governs the agent
+          DaemonSet — event buffer sizes, default filters, probe
+          groups, alert thresholds, and sample rates. Exactly one
+          `default` instance is typically created per cluster.
+        resources:
+          - kind: DaemonSet
+            version: apps/v1
+          - kind: ConfigMap
+            version: v1
+
+      - name: exporterconfigs.podtrace.io
+        version: v1alpha1
+        kind: ExporterConfig
+        displayName: Exporter Config
+        description: |
+          Endpoint and credential configuration for distributed-tracing
+          exporters (OTLP, Jaeger, Splunk HEC, Datadog, Zipkin).
+          Referenced by `PodTrace` and `PodTraceSession` resources via
+          `spec.exporterRef`.
+        resources:
+          - kind: Secret
+            version: v1
+          - kind: ConfigMap
+            version: v1
+
+      - name: podtraces.podtrace.io
+        version: v1alpha1
+        kind: PodTrace
+        displayName: Pod Trace
+        description: |
+          Continuous, realtime tracing intent over a set of pods.
+          Selectors and explicit pod refs route events through the
+          agent DaemonSet to the referenced `ExporterConfig`. Stays
+          active until the resource is deleted.
+        resources:
+          - kind: Pod
+            version: v1
+          - kind: DaemonSet
+            version: apps/v1
+
+      - name: podtracesessions.podtrace.io
+        version: v1alpha1
+        kind: PodTraceSession
+        displayName: Pod Trace Session
+        description: |
+          Bounded diagnose run over a set of pods. The operator
+          fans out one privileged Job per node hosting a matched
+          pod, collects events for the configured duration, and
+          writes a structured report to a `ConfigMap` or `Secret`.
+          Reaches `phase: Completed` when all child Jobs finish.
+        resources:
+          - kind: Job
+            version: batch/v1
+          - kind: ConfigMap
+            version: v1
+          - kind: Secret
+            version: v1
+
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: podtrace-operator
+          rules:
+            - apiGroups: ["podtrace.io"]
+              resources: ["tracerconfigs", "podtraces", "podtracesessions", "exporterconfigs"]
+              verbs: ["get", "list", "watch", "update", "patch", "delete"]
+            - apiGroups: ["podtrace.io"]
+              resources: ["tracerconfigs/status", "podtraces/status", "podtracesessions/status", "exporterconfigs/status"]
+              verbs: ["get", "update", "patch"]
+            - apiGroups: ["podtrace.io"]
+              resources: ["tracerconfigs/finalizers", "podtraces/finalizers", "podtracesessions/finalizers"]
+              verbs: ["update"]
+            - apiGroups: ["apps"]
+              resources: ["daemonsets"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["batch"]
+              resources: ["jobs"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["pods"]
+              verbs: ["get", "list", "watch"]
+            - apiGroups: [""]
+              resources: ["serviceaccounts", "configmaps", "secrets"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["rbac.authorization.k8s.io"]
+              resources: ["clusterroles", "clusterrolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["rbac.authorization.k8s.io"]
+              resources: ["roles", "rolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: [""]
+              resources: ["events"]
+              verbs: ["get", "list", "watch", "create", "patch"]
+            - apiGroups: ["events.k8s.io"]
+              resources: ["events"]
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["coordination.k8s.io"]
+              resources: ["leases"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+      deployments:
+        - name: podtrace-operator
+          spec:
+            replicas: 1
+            strategy:
+              type: RollingUpdate
+              rollingUpdate:
+                maxUnavailable: 1
+                maxSurge: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: podtrace
+                app.kubernetes.io/component: operator
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: podtrace
+                  app.kubernetes.io/component: operator
+              spec:
+                serviceAccountName: podtrace-operator
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  fsGroup: 65532
+                containers:
+                  - name: operator
+                    image: ghcr.io/gma1k/podtrace:0.11.9
+                    imagePullPolicy: IfNotPresent
+                    args:
+                      - operator
+                      - --system-namespace=podtrace-system
+                      - --leader-elect=true
+                      - --leader-elect-namespace=podtrace-system
+                      - --metrics-addr=:8080
+                      - --health-addr=:8081
+                    env:
+                      - name: POD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                    ports:
+                      - name: metrics
+                        containerPort: 8080
+                        protocol: TCP
+                      - name: health
+                        containerPort: 8081
+                        protocol: TCP
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: health
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: health
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop: ["ALL"]

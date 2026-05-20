@@ -1,0 +1,532 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: nextguard-operator.v0.1.0
+  namespace: placeholder
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "security.nextguard.io/v1alpha1",
+          "kind": "SecurityPolicy",
+          "metadata": {
+            "name": "deny-all-ingress",
+            "namespace": "default"
+          },
+          "spec": {
+            "tenantNamespace": "my-app",
+            "policyType": "Ingress",
+            "podSelector": {
+              "app": "web"
+            },
+            "ingressRules": [],
+            "dryRun": false,
+            "priority": 100
+          }
+        },
+        {
+          "apiVersion": "security.nextguard.io/v1alpha1",
+          "kind": "EgressRule",
+          "metadata": {
+            "name": "allow-dns",
+            "namespace": "default"
+          },
+          "spec": {
+            "tenantNamespace": "my-app",
+            "rules": [
+              {
+                "type": "Allow",
+                "to": {
+                  "dnsName": "api.example.com"
+                },
+                "ports": [
+                  {
+                    "protocol": "TCP",
+                    "port": 443
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "security.nextguard.io/v1alpha1",
+          "kind": "MeshPolicy",
+          "metadata": {
+            "name": "strict-mtls",
+            "namespace": "default"
+          },
+          "spec": {
+            "tenantNamespace": "my-app",
+            "policyKind": "PeerAuthentication",
+            "config": {
+              "mtls": {
+                "mode": "STRICT"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "security.nextguard.io/v1alpha1",
+          "kind": "RuntimeProfile",
+          "metadata": {
+            "name": "web-profile",
+            "namespace": "default"
+          },
+          "spec": {
+            "tenantNamespace": "my-app",
+            "action": "ALERT_ONLY",
+            "syscallRules": [
+              {
+                "name": "block-ptrace",
+                "syscalls": ["ptrace"],
+                "condition": "always"
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "security.nextguard.io/v1alpha1",
+          "kind": "ClusterSecurityPolicy",
+          "metadata": {
+            "name": "global-config"
+          },
+          "spec": {
+            "moduleConfigs": {
+              "networkPolicy": {
+                "enabled": true,
+                "settings": {}
+              },
+              "runtimeSecurity": {
+                "enabled": true,
+                "settings": {
+                  "falcoNamespace": "nextguard-system"
+                }
+              }
+            }
+          }
+        }
+      ]
+    categories: Security
+    capabilities: Full Lifecycle
+    containerImage: docker.io/hadilbelhadj/nextguard-operator:0.4.4
+    createdAt: "2024-01-01T00:00:00Z"
+    support: NextGuard Team
+    repository: https://github.com/hadilbelhadj/nextguard-operator
+    description: Kubernetes operator for unified security policy management - network policies, egress firewalls, service mesh, and runtime security.
+spec:
+  displayName: NextGuard Operator
+  description: |
+    ## NextGuard Operator
+
+    NextGuard Operator provides unified security policy management for Kubernetes and OpenShift clusters.
+    It manages network policies, egress firewall rules, service mesh security, and runtime threat detection
+    through Kubernetes-native Custom Resources.
+
+    ### Features
+
+    * **SecurityPolicy** - Declarative NetworkPolicy management with dry-run support
+    * **EgressRule** - Egress firewall rules (OVN EgressFirewall on OpenShift, NetworkPolicy on vanilla K8s)
+    * **MeshPolicy** - Istio service mesh security (PeerAuthentication, AuthorizationPolicy)
+    * **RuntimeProfile** - Runtime security profiles via Falco (syscall, FIM, network rules)
+    * **ClusterSecurityPolicy** - Cluster-wide security module configuration
+
+    ### Architecture
+
+    The operator runs as a controller-runtime manager with leader election. It watches NextGuard CRDs
+    and reconciles the desired state into native Kubernetes/Istio/Falco resources. It communicates
+    with the NextGuard Portal via gRPC (with mTLS) for centralized policy sync and health reporting.
+
+    ### OpenShift Support
+
+    The operator auto-detects OpenShift clusters and uses OVN EgressFirewall resources when available.
+    SecurityContextConstraints are supported for restricted environments.
+
+  maturity: alpha
+  version: 0.1.0
+  minKubeVersion: "1.25.0"
+
+  keywords:
+    - security
+    - network-policy
+    - egress-firewall
+    - service-mesh
+    - runtime-security
+    - falco
+    - istio
+    - openshift
+    - zero-trust
+
+  maintainers:
+    - name: NextGuard Team
+      email: team@nextguard.io
+
+  provider:
+    name: NextGuard
+
+  links:
+    - name: Documentation
+      url: https://github.com/hadilbelhadj/nextguard-operator
+    - name: Source Code
+      url: https://github.com/hadilbelhadj/nextguard-operator
+
+  icon:
+    - base64data: iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABS2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNS41LjAiPgogPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4KICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIi8+CiA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgo8P3hwYWNrZXQgZW5kPSJyIj8+Gkqr6gAAAYRpQ0NQc1JHQiBJRUM2MTk2Ni0yLjEAACiRdZHPK0RRFMc/M0aMIhYWFpMGKzSjsbIxRJNaTE2ZwWbmzS/N/HjzZpK1spUitvh1wV/AVlkrRaRk5y+IDetpZiY1kXPvud/7PeeeS++5YI5m1ByuBshkC7p/3OuYDYYdL8xxHxY6sRFRNXVyyu9n2vG8w2LGuwGzVv3v/dfaoYiugsUBPKaqegF4QbhrpaCavAncrCYjEeAH4OqiQZPfme42+cjkU5Nv9Lk+r5/MaUJlKBIvr6D8S/+vSfVw3OJyOnNQPaFC8c3FrviAkjWZv/AfpH0lQ1JNYhIPERYjOJnX1CeC8i5JSv0y/7dZ3JfJLBjrMUP99zCdTK3cWr0D3aaAavoZYu++rv9v/P5wS5pLx/aR7PlFc7Qa8h/A4qeSm4fXoObxrB8e3jXPq2rLb6HmzfUqGeg6hPUzrVCfhp0nEGvSdXw0x00nMLGvcwt2vDMw+o7UBwFHcMwB5yfwO3fg3sPwBo3WfEVX6eGAAAAAlwSFlzAAALEwAACxMBAJqcGAAAACVJREFUWIXtzjENAAAIAzDAv+dhDA5QEHTp1clt+4pt27Zt2+8eNMoB+TziVhAAAAAASUVORK5CYII=
+      mediatype: image/png
+
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: nextguard-operator
+          rules:
+            - apiGroups:
+                - security.nextguard.io
+              resources:
+                - securitypolicies
+                - egressrules
+                - meshpolicies
+                - runtimeprofiles
+                - clustersecuritypolicies
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - security.nextguard.io
+              resources:
+                - securitypolicies/status
+                - egressrules/status
+                - meshpolicies/status
+                - runtimeprofiles/status
+                - clustersecuritypolicies/status
+              verbs:
+                - get
+                - update
+                - patch
+            - apiGroups:
+                - security.nextguard.io
+              resources:
+                - securitypolicies/finalizers
+                - egressrules/finalizers
+                - meshpolicies/finalizers
+                - runtimeprofiles/finalizers
+                - clustersecuritypolicies/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+                - pods/log
+                - namespaces
+                - configmaps
+                - secrets
+                - services
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - networkpolicies
+                - ingresses
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+                - statefulsets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - k8s.ovn.org
+              resources:
+                - egressfirewalls
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - security.openshift.io
+              resources:
+                - securitycontextconstraints
+              verbs:
+                - use
+            - apiGroups:
+                - networking.istio.io
+              resources:
+                - virtualservices
+                - destinationrules
+                - gateways
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - security.istio.io
+              resources:
+                - authorizationpolicies
+                - peerauthentications
+                - requestauthentications
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+      deployments:
+        - name: nextguard-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: nextguard-operator
+            template:
+              metadata:
+                labels:
+                  app: nextguard-operator
+              spec:
+                serviceAccountName: nextguard-operator
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  runAsGroup: 65532
+                  fsGroup: 65532
+                containers:
+                  - name: operator
+                    image: docker.io/hadilbelhadj/nextguard-operator:0.4.4
+                    imagePullPolicy: IfNotPresent
+                    securityContext:
+                      readOnlyRootFilesystem: true
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                    args:
+                      - "--cluster-id=$(CLUSTER_ID)"
+                      - "--cluster-name=$(CLUSTER_NAME)"
+                      - "--portal-address=$(PORTAL_ADDRESS)"
+                      - "--health-interval=60s"
+                      - "--insecure"
+                    env:
+                      - name: CLUSTER_ID
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: CLUSTER_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: PORTAL_ADDRESS
+                        value: "nextguard-portal.default:9090"
+                    ports:
+                      - name: metrics
+                        containerPort: 8080
+                        protocol: TCP
+                      - name: webhook
+                        containerPort: 9443
+                        protocol: TCP
+                      - name: health
+                        containerPort: 8081
+                        protocol: TCP
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: health
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                      timeoutSeconds: 5
+                      failureThreshold: 3
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: health
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                      failureThreshold: 3
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
+
+  customresourcedefinitions:
+    owned:
+      - name: securitypolicies.security.nextguard.io
+        version: v1alpha1
+        kind: SecurityPolicy
+        displayName: Security Policy
+        description: Manages Kubernetes NetworkPolicies for pod-level network security with dry-run support.
+        resources:
+          - version: v1
+            kind: NetworkPolicy
+        specDescriptors:
+          - path: tenantNamespace
+            displayName: Target Namespace
+            description: Namespace where the NetworkPolicy will be created.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Namespace
+          - path: policyType
+            displayName: Policy Type
+            description: "Type of policy: Ingress, Egress, or Both."
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:Ingress
+              - urn:alm:descriptor:com.tectonic.ui:select:Egress
+              - urn:alm:descriptor:com.tectonic.ui:select:Both
+          - path: dryRun
+            displayName: Dry Run
+            description: Generate YAML without applying to cluster.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: priority
+            displayName: Priority
+            description: Policy priority (lower = higher priority).
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            description: Current state of the policy.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+
+      - name: egressrules.security.nextguard.io
+        version: v1alpha1
+        kind: EgressRule
+        displayName: Egress Rule
+        description: Manages egress firewall rules. Uses OVN EgressFirewall on OpenShift, NetworkPolicy on vanilla Kubernetes.
+        specDescriptors:
+          - path: tenantNamespace
+            displayName: Target Namespace
+            description: Namespace where egress rules will be applied.
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Namespace
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+
+      - name: meshpolicies.security.nextguard.io
+        version: v1alpha1
+        kind: MeshPolicy
+        displayName: Mesh Policy
+        description: Manages Istio service mesh security policies (PeerAuthentication, AuthorizationPolicy, RequestAuthentication).
+        specDescriptors:
+          - path: tenantNamespace
+            displayName: Target Namespace
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Namespace
+          - path: policyKind
+            displayName: Istio Resource Kind
+            description: Type of Istio resource to create.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:PeerAuthentication
+              - urn:alm:descriptor:com.tectonic.ui:select:AuthorizationPolicy
+              - urn:alm:descriptor:com.tectonic.ui:select:RequestAuthentication
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+
+      - name: runtimeprofiles.security.nextguard.io
+        version: v1alpha1
+        kind: RuntimeProfile
+        displayName: Runtime Profile
+        description: Defines runtime security profiles for Falco - syscall monitoring, file integrity, and network rules.
+        specDescriptors:
+          - path: tenantNamespace
+            displayName: Target Namespace
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes:Namespace
+          - path: action
+            displayName: Action
+            description: Response action when a rule is triggered.
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:ALERT_ONLY
+              - urn:alm:descriptor:com.tectonic.ui:select:KILL_PROCESS
+              - urn:alm:descriptor:com.tectonic.ui:select:ISOLATE_POD
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+
+      - name: clustersecuritypolicies.security.nextguard.io
+        version: v1alpha1
+        kind: ClusterSecurityPolicy
+        displayName: Cluster Security Policy
+        description: Cluster-wide security module configuration. Controls which NextGuard modules are enabled globally.
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase

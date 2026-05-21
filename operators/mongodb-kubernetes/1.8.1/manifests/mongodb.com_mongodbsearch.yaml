@@ -1,0 +1,636 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: mongodbsearch.mongodb.com
+spec:
+  group: mongodb.com
+  names:
+    kind: MongoDBSearch
+    listKind: MongoDBSearchList
+    plural: mongodbsearch
+    shortNames:
+    - mdbs
+    singular: mongodbsearch
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Current state of the MongoDB deployment.
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: MongoDB Search version reconciled by the operator.
+      jsonPath: .status.version
+      name: Version
+      type: string
+    - description: Current state of the managed load balancer.
+      jsonPath: .status.loadBalancer.phase
+      name: LoadBalancer
+      type: string
+    - description: The time since the MongoDB resource was created.
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              autoEmbedding:
+                description: |-
+                  Configure MongoDB Search's automatic generation of vector embeddings using an embedding model service.
+                  `embedding` field of mongot config is generated using the values provided here.
+                properties:
+                  embeddingModelAPIKeySecret:
+                    description: |-
+                      EmbeddingModelAPIKeySecret would have the name of the secret that has two keys
+                      query-key and indexing-key for embedding model's API keys.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  providerEndpoint:
+                    type: string
+                required:
+                - embeddingModelAPIKeySecret
+                type: object
+              jvmFlags:
+                description: |-
+                  JVMFlags can be used to set the `--jvm-flags` option for the search (mongot) processes.
+                  https://www.mongodb.com/docs/manual/tutorial/mongot-sizing/advanced-guidance/hardware/#jvm-heap-sizing
+                items:
+                  type: string
+                type: array
+              loadBalancer:
+                description: LoadBalancer configures how mongod/mongos connect to
+                  mongot (Managed vs Unmanaged/BYO Load Balancer).
+                properties:
+                  managed:
+                    description: Managed configures an operator-managed Envoy load
+                      balancer.
+                    properties:
+                      deployment:
+                        description: |-
+                          Deployment holds optional overrides merged into the operator-created Envoy Deployment.
+                          Follows the same convention as spec.statefulSet on MongoDB resources.
+                        properties:
+                          metadata:
+                            description: DeploymentMetadataWrapper is a wrapper around
+                              Labels and Annotations
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                          spec:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        required:
+                        - spec
+                        type: object
+                      externalHostname:
+                        description: |-
+                          ExternalHostname is the hostname Envoy expects for SNI matching on incoming requests.
+                          For sharded clusters, may contain a {shardName} placeholder.
+                          Required when MongoDB is externally managed. Ignored for operator-managed MongoDB.
+                        type: string
+                      resourceRequirements:
+                        description: |-
+                          ResourceRequirements for the Envoy container.
+                          When not set, defaults to requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                    type: object
+                  unmanaged:
+                    description: Unmanaged configures a user-provided (BYO) L7 load
+                      balancer.
+                    properties:
+                      endpoint:
+                        description: |-
+                          Endpoint is the full host:port of the BYO load balancer written into mongod config.
+                          For sharded clusters, must contain a {shardName} placeholder.
+                        type: string
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of managed or unmanaged must be set
+                  rule: (has(self.managed) && !has(self.unmanaged)) || (!has(self.managed)
+                    && has(self.unmanaged))
+              logLevel:
+                description: Configure verbosity of mongot logs. Defaults to INFO
+                  if not set.
+                enum:
+                - TRACE
+                - DEBUG
+                - INFO
+                - WARN
+                - ERROR
+                type: string
+              persistence:
+                description: Configure MongoDB Search's persistent volume. If not
+                  defined, the operator will request 10GB of storage.
+                properties:
+                  multiple:
+                    properties:
+                      data:
+                        properties:
+                          labelSelector:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          storage:
+                            type: string
+                          storageClass:
+                            type: string
+                        type: object
+                      journal:
+                        properties:
+                          labelSelector:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          storage:
+                            type: string
+                          storageClass:
+                            type: string
+                        type: object
+                      logs:
+                        properties:
+                          labelSelector:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          storage:
+                            type: string
+                          storageClass:
+                            type: string
+                        type: object
+                    type: object
+                  single:
+                    properties:
+                      labelSelector:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      storage:
+                        type: string
+                      storageClass:
+                        type: string
+                    type: object
+                type: object
+              prometheus:
+                description: Configure prometheus metrics endpoint in mongot. If not
+                  set, the metrics endpoint will be disabled.
+                properties:
+                  port:
+                    default: 9946
+                    description: Port where metrics endpoint will be exposed on. Defaults
+                      to 9946.
+                    maximum: 65535
+                    minimum: 0
+                    type: integer
+                type: object
+              replicas:
+                default: 1
+                description: |-
+                  Replicas is the number of mongot pods to deploy.
+                  For ReplicaSet source: the number of mongot pods in total.
+                  For Sharded source: the number mongot pods per shard.
+                  When Replicas > 1, a load balancer configuration (spec.loadBalancer)
+                  is required to distribute traffic across mongot instances.
+                minimum: 1
+                type: integer
+              resourceRequirements:
+                description: Configure resource requests and limits for the MongoDB
+                  Search pods.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This is an alpha field and requires enabling the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              security:
+                description: Configure security settings of the MongoDB Search server
+                  that MongoDB database is connecting to when performing search queries.
+                properties:
+                  tls:
+                    properties:
+                      certificateKeySecretRef:
+                        description: |-
+                          CertificateKeySecret is a reference to a Secret containing a private key and certificate to use for TLS.
+                          The key and cert are expected to be PEM encoded and available at "tls.key" and "tls.crt".
+                          This is the same format used for the standard "kubernetes.io/tls" Secret type, but no specific type is required.
+                          If both CertificateKeySecret.Name and CertsSecretPrefix are specified, CertificateKeySecret.Name takes precedence.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      certsSecretPrefix:
+                        description: |-
+                          CertsSecretPrefix is a prefix used to derive the TLS secret name.
+                          When set, the operator will look for a secret named "{prefix}-{resourceName}-search-cert".
+                          If CertificateKeySecret.Name is also specified, that takes precedence over this field.
+                        type: string
+                    type: object
+                type: object
+              source:
+                description: MongoDB database connection details from which MongoDB
+                  Search will synchronize data to build indexes.
+                properties:
+                  external:
+                    properties:
+                      hostAndPorts:
+                        description: |-
+                          HostAndPorts is the list of mongod host:port seeds for replica set sources.
+                          Mutually exclusive with Sharded.
+                        items:
+                          type: string
+                        type: array
+                      keyfileSecretRef:
+                        description: mongod keyfile used to connect to the external
+                          MongoDB deployment
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      shardedCluster:
+                        description: |-
+                          ShardedCluster contains configuration for external sharded MongoDB clusters.
+                          Mutually exclusive with HostAndPorts.
+                        properties:
+                          router:
+                            description: Router contains the mongos router configuration
+                            properties:
+                              hosts:
+                                description: Hosts is the list of mongos router endpoints
+                                  (host:port)
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                            required:
+                            - hosts
+                            type: object
+                          shards:
+                            description: Shards is the list of shard configurations
+                            items:
+                              description: ExternalShardConfig contains configuration
+                                for a single shard in an external sharded cluster
+                              properties:
+                                hosts:
+                                  description: Hosts is the list of mongod host:port
+                                    seeds for this shard's replica set
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                                shardName:
+                                  description: ShardName is the logical shard name
+                                    (e.g., "shard-0").
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - hosts
+                              - shardName
+                              type: object
+                            minItems: 1
+                            type: array
+                        required:
+                        - router
+                        - shards
+                        type: object
+                      tls:
+                        description: TLS configuration for the external MongoDB deployment
+                        properties:
+                          ca:
+                            description: |-
+                              CA is a reference to a Secret containing the CA certificate that issued mongod's TLS certificate.
+                              The CA certificate is expected to be PEM encoded and available at the "ca.crt" key.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - ca
+                        type: object
+                    type: object
+                  mongodbResourceRef:
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  passwordSecretRef:
+                    description: |-
+                      SecretKeyRef is a reference to a value in a given secret in the same
+                      namespace. Based on:
+                      https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#secretkeyselector-v1-core
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  username:
+                    type: string
+                  x509:
+                    description: |-
+                      X509 configures x509 client certificate authentication for the sync source connection.
+                      When set, mongot authenticates to MongoDB using x509 instead of username/password.
+                      Mutually exclusive with PasswordSecretRef and Username.
+                    properties:
+                      clientCertificateSecretRef:
+                        description: |-
+                          ClientCertificateSecret is a reference to a Secret containing the x509 client
+                          certificate and key for authenticating to the MongoDB sync source.
+                          Expected keys: "tls.crt", "tls.key" (required), "tls.keyFilePassword" (optional).
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - clientCertificateSecretRef
+                    type: object
+                type: object
+              statefulSet:
+                description: |-
+                  StatefulSetSpec which the operator will apply to the MongoDB Search StatefulSet at the end of the reconcile loop. Use to provide necessary customizations,
+                  which aren't exposed as fields in the MongoDBSearch.spec.
+                properties:
+                  metadata:
+                    description: StatefulSetMetadataWrapper is a wrapper around Labels
+                      and Annotations
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+              version:
+                description: Optional version of MongoDB Search component (mongot).
+                  If not set, then the operator will set the most appropriate version
+                  of MongoDB Search.
+                type: string
+            type: object
+          status:
+            properties:
+              lastTransition:
+                type: string
+              loadBalancer:
+                description: |-
+                  LoadBalancer reports the state of the operator-managed load balancer.
+                  Only populated when spec.loadBalancer.managed is set.
+                properties:
+                  message:
+                    type: string
+                  phase:
+                    type: string
+                required:
+                - phase
+                type: object
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              pvc:
+                items:
+                  properties:
+                    phase:
+                      type: string
+                    statefulsetName:
+                      type: string
+                  required:
+                  - phase
+                  - statefulsetName
+                  type: object
+                type: array
+              resourcesNotReady:
+                items:
+                  description: ResourceNotReady describes the dependent resource which
+                    is not ready yet
+                  properties:
+                    errors:
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          reason:
+                            type: string
+                        type: object
+                      type: array
+                    kind:
+                      description: ResourceKind specifies a kind of a Kubernetes resource.
+                        Used in status of a Custom Resource
+                      type: string
+                    message:
+                      type: string
+                    name:
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              version:
+                type: string
+              warnings:
+                items:
+                  type: string
+                type: array
+            required:
+            - phase
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

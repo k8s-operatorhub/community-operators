@@ -1,0 +1,656 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: 0.1.8
+  namespace: placeholder
+  annotations:
+    capabilities: Auto Pilot
+    categories: AI/Machine Learning, Developer Tools, Application Runtime
+    containerImage: 0.1.8
+    createdAt: "2026-05-26T17:07:45Z"
+    support: paperclipinc
+    repository: https://github.com/paperclipinc/hermes-operator
+    description: >-
+      A production-grade Kubernetes operator for deploying and managing
+      nousresearch/hermes-agent: a Python-based self-improving multi-platform AI
+      agent.
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "hermes.agent/v1",
+          "kind": "HermesInstance",
+          "metadata": { "name": "demo", "namespace": "default" },
+          "spec": {
+            "image": { "repository": "ghcr.io/paperclipinc/hermes-agent", "tag": "1.0.0" },
+            "storage": { "persistence": { "enabled": true, "size": "10Gi" } },
+            "envFrom": [{ "secretRef": { "name": "hermes-api-keys" } }]
+          }
+        },
+        {
+          "apiVersion": "hermes.agent/v1",
+          "kind": "HermesInstance",
+          "metadata": { "name": "production", "namespace": "hermes" },
+          "spec": {
+            "image": { "repository": "ghcr.io/paperclipinc/hermes-agent", "tag": "1.0.0" },
+            "resources": {
+              "requests": { "cpu": "500m", "memory": "1Gi" },
+              "limits":   { "cpu": "2",    "memory": "4Gi" }
+            },
+            "storage": { "persistence": { "enabled": true, "size": "50Gi" } },
+            "gateways": {
+              "telegram": { "enabled": true, "tokenSecretRef": { "name": "tg-token" } },
+              "slack":    { "enabled": true, "tokenSecretRef": { "name": "slack-token" } }
+            },
+            "profileStore": { "enabled": true, "persistence": { "size": "5Gi" } },
+            "selfConfigure": {
+              "enabled": true,
+              "protectedKeys": ["image", "storage", "security", "networking"]
+            },
+            "observability": { "serviceMonitor": { "enabled": true } },
+            "backup": {
+              "s3": {
+                "bucket": "hermes-backups",
+                "endpoint": "s3.amazonaws.com",
+                "region": "us-east-1",
+                "credentialsSecretRef": { "name": "hermes-s3-creds" }
+              },
+              "schedule": "0 3 * * *",
+              "onDelete": true,
+              "historyLimit": 30
+            },
+            "autoUpdate": {
+              "enabled": true,
+              "source": { "registry": "ghcr.io/paperclipinc/hermes-agent", "channel": "1.x" },
+              "rollback": { "enabled": true, "probeFailureThreshold": 3 }
+            }
+          }
+        },
+        {
+          "apiVersion": "hermes.agent/v1",
+          "kind": "HermesSelfConfig",
+          "metadata": { "name": "install-finance-skill", "namespace": "default" },
+          "spec": {
+            "instanceRef": "production",
+            "addSkills": [{ "source": "git+https://github.com/foo/finance-skill@v1.2.0" }],
+            "patchConfig": { "schedules": { "morning-brief": "0 8 * * *" } },
+            "addEnvVars": [{ "name": "FINANCE_TZ", "value": "Europe/Berlin" }]
+          }
+        },
+        {
+          "apiVersion": "hermes.agent/v1",
+          "kind": "HermesClusterDefaults",
+          "metadata": { "name": "cluster" },
+          "spec": {
+            "image": { "repository": "ghcr.io/paperclipinc/hermes-agent", "tag": "1.0.0" },
+            "storage": { "storageClassName": "gp3", "size": "10Gi" },
+            "observability": { "serviceMonitor": { "enabled": true } },
+            "networking": { "networkPolicy": { "enabled": true } }
+          }
+        }
+      ]
+    features.operators.openshift.io/disconnected: 'false'
+    features.operators.openshift.io/fips-compliant: 'false'
+    features.operators.openshift.io/proxy-aware: 'false'
+    features.operators.openshift.io/tls-profiles: 'false'
+    features.operators.openshift.io/token-auth-aws: 'false'
+    features.operators.openshift.io/token-auth-azure: 'false'
+    features.operators.openshift.io/token-auth-gcp: 'false'
+spec:
+  displayName: Hermes Operator
+  description: >
+    ## Hermes Kubernetes Operator
+
+
+    A production-grade Kubernetes operator for deploying and managing
+
+    [nousresearch/hermes-agent](https://github.com/nousresearch/hermes-agent):
+
+    a Python-based, self-improving, multi-platform AI agent.
+
+
+    ### What is hermes-agent?
+
+
+    hermes-agent fronts multiple messaging platforms (Telegram, Discord, Slack,
+
+    WhatsApp, Signal), self-improves through a built-in learning loop, persists
+
+    session memory via FTS5, models users via Honcho dialectic profiles, and
+    runs
+
+    scheduled automations via a native cron scheduler.
+
+
+    ### Key Capabilities
+
+
+    - **Declarative Deployment**: every aspect of an agent's runtime, gateways,
+      storage, networking, observability, and security through a single
+      `HermesInstance` resource.
+    - **Self-Configuration with Audit**: the agent persists learned skills, env
+      vars, config patches, and workspace files via `HermesSelfConfig` CRs that
+      the operator validates against an explicit allowlist, then applies via
+      Server-Side Apply (no GitOps flap).
+    - **Cluster Defaults**: `HermesClusterDefaults` (cluster-scoped singleton)
+      supplies organization-wide defaults for image, storage class, IRSA, etc.
+    - **Auto-Update with Rollback**: OCI registry polling with pre-update backup
+      and probe-driven rollback.
+    - **Backup / Restore**: S3-compatible (R2, MinIO, AWS), backup-on-delete
+      finalizer, declarative restore from snapshot.
+    - **OpenClaw Migration**: one-shot `spec.migration.fromOpenClaw` invokes
+      hermes-agent's built-in importer.
+    - **Honcho Profile Store**: optional companion Deployment with persistence
+      for dialectic user profiles.
+    - **Multi-Platform Gateways**: first-class config for Telegram, Discord,
+      Slack, WhatsApp, Signal: each with isolated secret rotation.
+
+    ### Default Security Posture
+
+
+    All containers run as non-root, drop ALL Linux capabilities, use
+
+    RuntimeDefault seccomp, mount a read-only root filesystem with explicit
+
+    writable subPaths, and apply default-deny NetworkPolicies. PVCs are
+
+    immutable post-create; finalizer-driven backup-on-delete is configurable.
+
+
+    ### Managed Resources
+
+
+    For each HermesInstance the operator creates and manages:
+
+    StatefulSet, Service, ServiceAccount, ConfigMap (workspace), ConfigMap
+
+    (gateway-derived), PVC, Role, RoleBinding, NetworkPolicy,
+
+    PodDisruptionBudget, optionally Ingress, ServiceMonitor, HPA, Honcho
+
+    Deployment + PVC + Service, and migration / backup Jobs. All resources are
+
+    owned by the CR and garbage-collected on deletion (with the
+
+    `hermes.agent/backup-on-delete` finalizer holding deletion until the
+
+    backup Job completes).
+
+
+    ### Getting Started
+
+
+    1. Install the operator via OLM or `helm install`.
+
+    2. Create a Secret with your AI provider keys and platform tokens.
+
+    3. Create a `HermesInstance` referencing the Secret.
+
+    4. The operator handles the rest: deployment, networking, security,
+       lifecycle.
+
+    ### Prerequisites
+
+
+    - Kubernetes 1.28+
+  maturity: alpha
+  version: 0.1.8
+  minKubeVersion: 1.28.0
+  keywords:
+    - ai
+    - agent
+    - hermes
+    - nousresearch
+    - llm
+    - kubernetes
+    - ai-agent
+    - chatbot
+    - telegram
+    - discord
+    - slack
+    - whatsapp
+    - signal
+    - honcho
+    - self-improving
+    - python
+  maintainers:
+    - name: Jannes Stubbemann
+      email: jannes@aqora.io
+  provider:
+    name: paperclipinc
+    url: https://github.com/paperclipinc/hermes-operator
+  links:
+    - name: GitHub Repository
+      url: https://github.com/paperclipinc/hermes-operator
+    - name: API Reference
+      url: >-
+        https://github.com/paperclipinc/hermes-operator/blob/main/docs/api-reference.md
+    - name: Changelog
+      url: https://github.com/paperclipinc/hermes-operator/blob/main/CHANGELOG.md
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+  relatedImages:
+    - name: hermes-operator
+      image: ghcr.io/paperclipinc/hermes-operator:v0.1.8
+    - name: hermes-agent
+      image: ghcr.io/paperclipinc/hermes-agent:latest
+  customresourcedefinitions:
+    owned:
+      - name: hermesinstances.hermes.agent
+        version: v1
+        kind: HermesInstance
+        displayName: Hermes Instance
+        description: >-
+          Represents a managed hermes-agent instance with security, networking,
+          gateways, storage, and observability.
+        specDescriptors:
+          - path: image.repository
+            displayName: Image Repository
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: image.tag
+            displayName: Image Tag
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: storage.persistence.enabled
+            displayName: Persistent Storage
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: storage.persistence.size
+            displayName: Storage Size
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: resources
+            displayName: Resource Requirements
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+          - path: gateways.telegram.enabled
+            displayName: Telegram Gateway
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: gateways.discord.enabled
+            displayName: Discord Gateway
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: gateways.slack.enabled
+            displayName: Slack Gateway
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: gateways.whatsapp.enabled
+            displayName: WhatsApp Gateway
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: gateways.signal.enabled
+            displayName: Signal Gateway
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: profileStore.enabled
+            displayName: Honcho Profile Store
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: selfConfigure.enabled
+            displayName: Agent Self-Configuration
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: observability.serviceMonitor.enabled
+            displayName: Prometheus ServiceMonitor
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: autoUpdate.enabled
+            displayName: Auto Update
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: backup.s3.bucket
+            displayName: Backup S3 Bucket
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: networking.ingress.enabled
+            displayName: Ingress
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: networking.networkPolicy.enabled
+            displayName: NetworkPolicy
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - path: suspended
+            displayName: Suspended (scale-to-zero)
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+          - path: conditions
+            displayName: Conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: observedGeneration
+            displayName: Observed Generation
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: lastBackupTime
+            displayName: Last Backup
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: lastBackupPath
+            displayName: Last Backup Path
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: autoUpdate.latestVersion
+            displayName: Latest Available Version
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: migrationCompleted
+            displayName: Migration Completed
+            x-descriptors:
+              - urn:alm:descriptor:text
+        resources:
+          - kind: StatefulSet
+            version: v1
+          - kind: Service
+            version: v1
+          - kind: ServiceAccount
+            version: v1
+          - kind: ConfigMap
+            version: v1
+          - kind: PersistentVolumeClaim
+            version: v1
+          - kind: NetworkPolicy
+            version: v1
+          - kind: PodDisruptionBudget
+            version: v1
+          - kind: Ingress
+            version: v1
+          - kind: Role
+            version: v1
+          - kind: RoleBinding
+            version: v1
+          - kind: ServiceMonitor
+            version: v1
+          - kind: Job
+            version: v1
+          - kind: HorizontalPodAutoscaler
+            version: v2
+      - name: hermesselfconfigs.hermes.agent
+        version: v1
+        kind: HermesSelfConfig
+        displayName: Hermes SelfConfig
+        description: >-
+          Agent-initiated mutation request, validated against the parent
+          instance's selfConfigure policy and applied via Server-Side Apply.
+        specDescriptors:
+          - path: instanceRef
+            displayName: Instance Reference
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: addSkills
+            displayName: Skills to Add
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Mutations
+        statusDescriptors:
+          - path: phase
+            displayName: Phase
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.phase
+          - path: conditions
+            displayName: Conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - path: appliedAt
+            displayName: Applied At
+            x-descriptors:
+              - urn:alm:descriptor:text
+          - path: denyReason
+            displayName: Deny Reason
+            x-descriptors:
+              - urn:alm:descriptor:text
+      - name: hermesclusterdefaults.hermes.agent
+        version: v1
+        kind: HermesClusterDefaults
+        displayName: Hermes Cluster Defaults
+        description: >-
+          Cluster-scoped singleton that fills nil fields on every
+          HermesInstance. Name must be 'cluster'.
+        specDescriptors:
+          - path: image.repository
+            displayName: Default Image Repository
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: storage.storageClassName
+            displayName: Default StorageClass
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - path: conditions
+            displayName: Conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: hermes-operator-controller-manager
+          rules:
+            - apiGroups:
+                - ''
+              resources:
+                - configmaps
+                - events
+                - persistentvolumeclaims
+                - secrets
+                - serviceaccounts
+                - services
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ''
+              resources:
+                - pods
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - statefulsets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - batch
+              resources:
+                - cronjobs
+                - jobs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - hermes.agent
+              resources:
+                - hermesclusterdefaults
+              verbs:
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - hermes.agent
+              resources:
+                - hermesclusterdefaults/status
+                - hermesinstances/status
+                - hermesselfconfigs/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - hermes.agent
+              resources:
+                - hermesinstances
+                - hermesselfconfigs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - hermes.agent
+              resources:
+                - hermesinstances/finalizers
+                - hermesselfconfigs/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - monitoring.coreos.com
+              resources:
+                - prometheusrules
+                - servicemonitors
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingresses
+                - networkpolicies
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - openclaw.rocks
+              resources:
+                - openclawinstances
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - rolebindings
+                - roles
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+      deployments:
+        - name: hermes-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  control-plane: controller-manager
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: hermes-operator-controller-manager
+                terminationGracePeriodSeconds: 10
+                containers:
+                  - name: manager
+                    image: ghcr.io/paperclipinc/hermes-operator:v0.1.8
+                    command:
+                      - /manager
+                    args:
+                      - '--leader-elect'
+                      - '--health-probe-bind-address=:8081'
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 256Mi
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi

@@ -1,0 +1,439 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jdatabases.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    kind: Neo4jDatabase
+    listKind: Neo4jDatabaseList
+    plural: neo4jdatabases
+    singular: neo4jdatabase
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Neo4jDatabase declaratively manages a single named Neo4j database
+          inside a referenced cluster or standalone. The operator issues
+          CREATE / ALTER / DROP DATABASE statements against the system
+          database, with optional topology (primaries/secondaries), Cypher
+          language version (5 or 25), seed-from-URI, and IF NOT EXISTS
+          semantics. Cluster-level concerns (image, storage, auth, TLS, plugins)
+          stay on the cluster/standalone CR — Neo4jDatabase only owns
+          database-scope CREATE DATABASE options.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Neo4jDatabaseSpec defines the desired state of Neo4jDatabase
+            properties:
+              clusterRef:
+                description: Reference to the Neo4j cluster
+                type: string
+              defaultCypherLanguage:
+                description: |-
+                  Default Cypher language version (Neo4j 2025.x only)
+
+                  Specifies the default Cypher language version for this database.
+                  - "5": Cypher 5 (backward compatibility)
+                  - "25": Cypher 25 (recommended for new databases)
+                enum:
+                - "5"
+                - "25"
+                type: string
+              ifNotExists:
+                default: true
+                description: Create database only if it doesn't exist
+                type: boolean
+              initialData:
+                description: Initial data import configuration
+                properties:
+                  configMapRef:
+                    description: Configuration map reference containing data
+                    type: string
+                  cypherStatements:
+                    description: Cypher statements for initial data
+                    items:
+                      type: string
+                    type: array
+                  secretRef:
+                    description: Secret reference containing sensitive data
+                    type: string
+                  source:
+                    description: Source type for initial data
+                    enum:
+                    - cypher
+                    - dump
+                    - csv
+                    type: string
+                  storage:
+                    description: Storage location for data files
+                    properties:
+                      bucket:
+                        type: string
+                      cloud:
+                        description: Cloud provider configuration
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef is the name of a Kubernetes Secret containing
+                              cloud provider credentials as environment variables. Optional when
+                              using workload identity / IAM instance profiles.
+                              For S3:    keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+                              For GCS:   key  GOOGLE_APPLICATION_CREDENTIALS_JSON (base64 service-account JSON)
+                              For Azure: keys AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY
+                            type: string
+                          endpointURL:
+                            description: |-
+                              EndpointURL overrides the S3 API endpoint URL. Use this to target
+                              S3-compatible stores such as MinIO, Ceph RGW, or Cloudflare R2.
+                              Example: "http://minio.minio-ns.svc:9000"
+                              Only applies to the "aws" provider; ignored for gcp and azure.
+                            type: string
+                          forcePathStyle:
+                            description: |-
+                              ForcePathStyle forces S3 path-style addressing, where the bucket name
+                              appears in the URL path (e.g. http://endpoint/bucket/key) rather than
+                              the subdomain (e.g. http://bucket.endpoint/key).
+                              Required for MinIO and most self-hosted S3-compatible stores.
+                              Only effective when EndpointURL is set.
+                            type: boolean
+                          identity:
+                            description: CloudIdentity defines cloud identity configuration
+                            properties:
+                              autoCreate:
+                                description: AutoCreateSpec defines auto-creation
+                                  of service accounts
+                                properties:
+                                  annotations:
+                                    additionalProperties:
+                                      type: string
+                                    type: object
+                                  enabled:
+                                    default: true
+                                    type: boolean
+                                type: object
+                              provider:
+                                enum:
+                                - aws
+                                - gcp
+                                - azure
+                                type: string
+                              serviceAccount:
+                                type: string
+                            required:
+                            - provider
+                            type: object
+                          provider:
+                            enum:
+                            - aws
+                            - gcp
+                            - azure
+                            type: string
+                        type: object
+                      path:
+                        type: string
+                      pvc:
+                        description: PVC configuration
+                        properties:
+                          name:
+                            description: Name of the PVC to use (for referencing existing
+                              PVCs)
+                            type: string
+                          size:
+                            type: string
+                          storageClassName:
+                            type: string
+                        type: object
+                      type:
+                        enum:
+                        - s3
+                        - gcs
+                        - azure
+                        - pvc
+                        type: string
+                    required:
+                    - type
+                    type: object
+                type: object
+              name:
+                description: Database name
+                type: string
+              options:
+                additionalProperties:
+                  type: string
+                description: Database creation options
+                type: object
+              seedConfig:
+                description: Seed configuration for advanced seeding options
+                properties:
+                  config:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Additional seed provider configuration options
+
+                      Common configuration options:
+                      - "compression": "gzip" | "lz4" | "none"
+                      - "validation": "strict" | "lenient"
+                      - "bufferSize": Buffer size for seed operations
+
+                      Cloud-specific options:
+                      - S3: "region", "endpoint", "pathStyleAccess"
+                      - GCS: "project", "location"
+                      - Azure: "endpoint", "containerName"
+                    type: object
+                  restoreUntil:
+                    description: |-
+                      Restore until specific point in time (Neo4j 2025.x only)
+
+                      Supports two formats:
+                      - RFC3339 timestamp: "2025-01-15T10:30:00Z"
+                      - Transaction ID: "txId:12345"
+
+                      This allows point-in-time recovery when creating database from backup.
+                      Only available with Neo4j 2025.x and CloudSeedProvider.
+                    type: string
+                type: object
+              seedCredentials:
+                description: Seed credentials for URI access when system-wide auth
+                  is not available
+                properties:
+                  secretRef:
+                    description: |-
+                      Kubernetes secret containing seed URI credentials
+
+                      Expected secret keys by URI scheme:
+
+                      S3 (s3://):
+                      - AWS_ACCESS_KEY_ID: AWS access key
+                      - AWS_SECRET_ACCESS_KEY: AWS secret key
+                      - AWS_SESSION_TOKEN: (optional) session token
+                      - AWS_REGION: (optional) AWS region override
+
+                      Google Cloud Storage (gs://):
+                      - GOOGLE_APPLICATION_CREDENTIALS: Service account JSON key
+                      - GOOGLE_CLOUD_PROJECT: (optional) project ID override
+
+                      Azure Blob Storage (azb://):
+                      - AZURE_STORAGE_ACCOUNT: Storage account name
+                      - AZURE_STORAGE_KEY: Storage account key
+                      - AZURE_STORAGE_SAS_TOKEN: (alternative) SAS token
+
+                      HTTP/HTTPS/FTP:
+                      - USERNAME: (optional) authentication username
+                      - PASSWORD: (optional) authentication password
+                      - AUTH_HEADER: (optional) custom authorization header
+                    type: string
+                type: object
+              seedURI:
+                description: |-
+                  Seed URI for database creation from existing backup/dump
+
+                  This creates the database from an existing Neo4j backup or dump file
+                  located at the specified URI. The seeding occurs during database creation,
+                  before any initial data import.
+
+                  Supported URI schemes (via Neo4j CloudSeedProvider):
+                  - Amazon S3: s3://bucket/path/backup.backup
+                  - Google Cloud Storage: gs://bucket/path/backup.backup
+                  - Azure Blob Storage: azb://container/path/backup.backup
+                  - HTTP/HTTPS: https://server/path/backup.backup
+                  - FTP: ftp://server/path/backup.backup
+
+                  Cloud authentication is configured system-wide via:
+                  - S3: IAM roles, AWS credentials, or service account annotations
+                  - GCS: Service account keys or workload identity
+                  - Azure: Managed identity or service principal
+
+                  Example: "s3://prod-backups/daily-backup-2025-01-15.backup"
+                type: string
+              topology:
+                description: |-
+                  Database topology specification for clusters
+
+                  This defines how the database is distributed across the available cluster servers.
+                  The cluster provides server infrastructure (e.g., 5 servers), and this topology
+                  specifies how many of those servers should act as primaries vs secondaries
+                  for this specific database.
+
+                  Multiple databases can have different topologies within the same cluster:
+                  - Cluster: 5 servers
+                  - Database A: 3 primaries, 1 secondary (uses 4 servers)
+                  - Database B: 2 primaries, 0 secondaries (uses 2 servers)
+
+                  Servers self-organize into primary/secondary roles at the database level.
+                properties:
+                  primaries:
+                    description: |-
+                      Number of primary replicas for this database
+
+                      Primaries handle both read and write operations for the database.
+                      At least 1 primary is required for database operation.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  secondaries:
+                    description: |-
+                      Number of secondary replicas for this database
+
+                      Secondaries provide read-only access for horizontal scaling.
+                      Secondaries are optional but improve read performance and availability.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              wait:
+                default: true
+                description: Wait for database creation to complete
+                type: boolean
+            required:
+            - clusterRef
+            - name
+            type: object
+          status:
+            description: Neo4jDatabaseStatus defines the observed state of Neo4jDatabase
+            properties:
+              conditions:
+                description: Conditions represent the current state of the database
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              creationTime:
+                description: CreationTime shows when the database was created
+                format: date-time
+                type: string
+              dataImported:
+                description: DataImported indicates whether initial data has been
+                  imported
+                type: boolean
+              lastBackupTime:
+                description: LastBackupTime shows when the last backup was taken
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  state
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation observed by
+                  the controller
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase of the database
+                type: string
+              servers:
+                description: |-
+                  Servers hosting this database (for topology tracking)
+
+                  Lists which cluster servers are currently hosting this database.
+                  This shows the actual distribution of database replicas across
+                  the available cluster server infrastructure.
+                items:
+                  type: string
+                type: array
+              size:
+                description: Size shows the current database size
+                type: string
+              state:
+                description: Current state of the database (online, offline, started,
+                  stopped)
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

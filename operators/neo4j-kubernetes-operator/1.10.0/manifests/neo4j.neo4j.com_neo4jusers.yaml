@@ -1,0 +1,304 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jusers.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    categories:
+    - neo4j
+    kind: Neo4jUser
+    listKind: Neo4jUserList
+    plural: neo4jusers
+    shortNames:
+    - n4juser
+    - n4jusers
+    singular: neo4juser
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .spec.username
+      name: Username
+      type: string
+    - jsonPath: .spec.accountStatus
+      name: AccountStatus
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Neo4jUser is the Schema for the neo4jusers API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Neo4jUserSpec defines the desired state of a Neo4j user.
+
+              A Neo4jUser maps 1:1 to a user in the referenced Neo4j cluster's `system`
+              database. Identity (username), authentication material (password from a
+              Secret, or external auth providers such as OIDC/LDAP), account state
+              (active/suspended), home database, and role bindings are all reconciled
+              to match the spec on every loop.
+
+              Privileges are NOT managed here — they belong on Neo4jRole resources.
+              A Neo4jUser only references roles by name; the controller does not create
+              roles named in .roles. If a referenced custom role is missing the
+              PendingDependencies condition is set and the reconcile requeues.
+            properties:
+              accountStatus:
+                default: active
+                description: |-
+                  AccountStatus is the desired Neo4j account state.
+                    active    — user can authenticate (default).
+                    suspended — user cannot authenticate; native users lose all role
+                                assignments, LDAP/OIDC users retain provider roles.
+                enum:
+                - active
+                - suspended
+                type: string
+              clusterRef:
+                description: |-
+                  ClusterRef is the name of the Neo4jEnterpriseCluster or
+                  Neo4jEnterpriseStandalone in the same namespace whose security graph
+                  owns this user.
+                type: string
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  DeletionPolicy controls what happens to the underlying Neo4j user
+                  when this CR is deleted.
+                    Delete (default): execute DROP USER on CR deletion.
+                    Retain:           leave the user in Neo4j; only remove the finalizer.
+                enum:
+                - Delete
+                - Retain
+                type: string
+              externalAuth:
+                description: |-
+                  ExternalAuth lists non-native authentication providers (LDAP, OIDC,
+                  SSO) the user may authenticate through. Translates to one or more
+                  `SET AUTH '<provider>' { SET ID '<id>' }` clauses on ALTER/CREATE
+                  USER. Either PasswordSecretRef or at least one ExternalAuth entry
+                  must be present (Neo4j requires at least one auth provider).
+                items:
+                  description: |-
+                    ExternalAuthProvider configures a single external authentication provider
+                    for a Neo4jUser, mapping to Neo4j's `SET AUTH '<provider>' { SET ID '...' }`
+                    syntax. See the Neo4j docs on managing users with external authentication
+                    providers for the supported provider names.
+                  properties:
+                    id:
+                      description: |-
+                        ID is the user's identifier within that provider (e.g. an OIDC sub
+                        claim or an LDAP DN).
+                      type: string
+                    provider:
+                      description: |-
+                        Provider is the auth provider name, e.g. "oidc-okta", "ldap1", "saml1".
+                        The provider must already be configured at the DBMS level via
+                        `dbms.security.authentication_providers` etc.
+                      type: string
+                  required:
+                  - id
+                  - provider
+                  type: object
+                type: array
+              homeDatabase:
+                description: |-
+                  HomeDatabase sets the user's home database (or alias). When empty
+                  the user falls back to the DBMS default. Removing this field after
+                  previously setting it will issue `ALTER USER ... REMOVE HOME DATABASE`.
+                type: string
+              passwordSecretRef:
+                description: |-
+                  PasswordSecretRef references a Kubernetes Secret containing the
+                  native-auth password. Required unless one or more ExternalAuth
+                  providers are configured. The Secret value is hashed (SHA-256) and
+                  stored in status to detect rotation; the password itself is never
+                  echoed back into the resource.
+                properties:
+                  key:
+                    description: Key within the Secret. The default depends on context
+                      (e.g., "ca.crt" for TrustStore, "token" for fleet management).
+                    type: string
+                  name:
+                    description: Name of the Kubernetes Secret
+                    type: string
+                required:
+                - name
+                type: object
+              requirePasswordChange:
+                default: false
+                description: |-
+                  RequirePasswordChange forces the user to change the password on next
+                  login. Mapped to Neo4j's `SET PASSWORD CHANGE REQUIRED` clause.
+                type: boolean
+              roles:
+                description: |-
+                  Roles is the desired set of Neo4j role names to grant to this user.
+                  Names may be either built-in (reader, editor, publisher, architect,
+                  admin) or correspond to a Neo4jRole CR managing the role in this
+                  cluster. PUBLIC is implicit and need not be listed; the controller
+                  will never attempt to revoke PUBLIC.
+                items:
+                  type: string
+                type: array
+              username:
+                description: |-
+                  Username is the user name in Neo4j. Defaults to metadata.name when
+                  empty. Must start with an ASCII letter and contain only letters,
+                  digits, underscore, dot, or hyphen. Maximum 65 characters.
+                maxLength: 65
+                pattern: ^[a-zA-Z][a-zA-Z0-9_.\-]*$
+                type: string
+            required:
+            - clusterRef
+            type: object
+          status:
+            description: Neo4jUserStatus describes the observed state of a Neo4jUser.
+            properties:
+              conditions:
+                description: |-
+                  Conditions reflects the latest reconcile state. Conditions used:
+                    Ready                — user is created and in sync with spec
+                    RolesSynced          — granted roles match spec
+                    PasswordSynced       — password hash on the cluster matches the
+                                           last-applied Secret value
+                    PendingDependencies  — at least one referenced custom role does not
+                                           yet exist in Neo4j
+                    ClusterNotReady      — referenced cluster is not Ready
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentRoles:
+                description: |-
+                  CurrentRoles lists the role names actually granted to the user in
+                  Neo4j as observed via SHOW USERS YIELD roles.
+                items:
+                  type: string
+                type: array
+              message:
+                description: Message carries a short human-readable explanation of
+                  the current Phase.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation observed by the
+                  controller during the last successful reconcile.
+                format: int64
+                type: integer
+              passwordLastRotated:
+                description: |-
+                  PasswordLastRotated records the last time the controller issued
+                  `ALTER USER ... SET PASSWORD ...` against the cluster.
+                format: date-time
+                type: string
+              passwordSecretHash:
+                description: |-
+                  PasswordSecretHash is a SHA-256 fingerprint of the password value
+                  last applied to the cluster. It is a change-detection fingerprint —
+                  not a password-storage hash and not used in any authentication path.
+                  The controller uses it to answer "did the Secret rotate since the
+                  last reconcile?" via equality comparison; the actual password lives
+                  in the referenced Kubernetes Secret and Neo4j stores its own hash
+                  (currently scrypt-based) inside the `system` database. SHA-256 is
+                  the right choice here — collision resistance is what matters for
+                  change detection; computational cost would only slow the loop.
+                type: string
+              phase:
+                description: 'Phase is a coarse summary: Pending, Ready, Failed.'
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,260 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: neo4jauthrules.neo4j.neo4j.com
+spec:
+  group: neo4j.neo4j.com
+  names:
+    categories:
+    - neo4j
+    kind: Neo4jAuthRule
+    listKind: Neo4jAuthRuleList
+    plural: neo4jauthrules
+    shortNames:
+    - n4jauthrule
+    - n4jauthrules
+    singular: neo4jauthrule
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.appliedEnabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Neo4jAuthRule is the Schema for the neo4jauthrules API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              Neo4jAuthRuleSpec defines the desired state of a Neo4j attribute-based
+              access control (ABAC) AUTH RULE.
+
+              AUTH RULE was introduced in Neo4j 2026.03; the Neo4jAuthRule controller
+              refuses to reconcile against earlier clusters.
+
+              An auth rule conditionally grants one or more roles when its Cypher
+              `condition` evaluates to true at OIDC authentication time. Conditions
+              reference user attributes from the OIDC token via
+              `abac.oidc.user_attribute('claim_key')`.
+
+              See https://neo4j.com/docs/operations-manual/current/authentication-authorization/attribute-based-access-control/.
+            properties:
+              clusterRef:
+                description: |-
+                  ClusterRef is the name of the Neo4jEnterpriseCluster or
+                  Neo4jEnterpriseStandalone in the same namespace whose security graph
+                  owns this auth rule. The cluster must be Neo4j 2026.03 or later.
+                type: string
+              condition:
+                description: |-
+                  Condition is the Cypher expression evaluated against the user's OIDC
+                  token at authentication time. Returning true grants the listed
+                  GrantedRoles for the duration of the session.
+
+                  Examples:
+
+                    abac.oidc.user_attribute('department') = 'sales'
+
+                    abac.oidc.user_attribute('region') = 'EMEA' AND
+                      time.transaction('UTC').hour >= 6 AND
+                      time.transaction('UTC').hour < 18
+
+                    any(country IN abac.oidc.user_attribute('countries')
+                        WHERE country IN ['US', 'GB'])
+
+                  The full list of supported Cypher functions is documented at
+                  https://neo4j.com/docs/operations-manual/current/authentication-authorization/attribute-based-access-control/.
+                  Conditions MUST be pure expressions — they cannot contain DDL like
+                  CREATE/ALTER/DROP; the validator rejects such inputs defensively.
+                minLength: 1
+                type: string
+              deletionPolicy:
+                default: Drop
+                description: |-
+                  DeletionPolicy controls what happens to the underlying Neo4j auth
+                  rule when this CR is deleted.
+                    Drop (default): execute DROP AUTH RULE on CR deletion.
+                    Retain:         leave the rule in Neo4j; only remove the finalizer.
+                enum:
+                - Drop
+                - Retain
+                type: string
+              enabled:
+                default: true
+                description: |-
+                  Enabled toggles whether the rule actively maps claims to role grants.
+                  Disabled rules are preserved in Neo4j (so they can be re-enabled
+                  quickly) but do not affect any session.
+                type: boolean
+              enforceRoles:
+                default: true
+                description: |-
+                  EnforceRoles controls whether the controller treats GrantedRoles as
+                  the exclusive set of roles bound to this rule. When true (default)
+                  the controller revokes any roles attached out-of-band that are not
+                  in spec.grantedRoles. When false the controller only adds missing
+                  grants and never revokes.
+                type: boolean
+              grantedRoles:
+                description: |-
+                  GrantedRoles names the Neo4j roles that this rule grants when its
+                  Condition evaluates true. Roles MUST exist on the cluster (or as
+                  Neo4jRole CRs in the same namespace) and MUST NOT contain any DENY
+                  privileges — Neo4j refuses to assign deny-bearing roles to auth
+                  rules to prevent privilege escalation if a rule unexpectedly fails.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              name:
+                description: |-
+                  Name is the auth-rule name in Neo4j (the identifier shown in
+                  `SHOW AUTH RULES`). Defaults to metadata.name when empty. Must start
+                  with an ASCII letter and contain only letters, digits, underscores,
+                  or hyphens.
+                maxLength: 65
+                pattern: ^[a-zA-Z][a-zA-Z0-9_-]*$
+                type: string
+            required:
+            - clusterRef
+            - condition
+            - grantedRoles
+            type: object
+          status:
+            description: Neo4jAuthRuleStatus describes the observed state of a Neo4jAuthRule.
+            properties:
+              appliedEnabled:
+                description: AppliedEnabled reflects the enabled flag last observed
+                  on the rule.
+                type: boolean
+              appliedRoles:
+                description: |-
+                  AppliedRoles is the set of roles last observed as granted to this
+                  rule via SHOW AUTH RULES. Useful for confirming drift reconciliation.
+                items:
+                  type: string
+                type: array
+              conditions:
+                description: |-
+                  Conditions reflects the latest reconcile state. Conditions used:
+                    Ready                  — auth rule exists and granted roles are in sync
+                    ConditionValid         — the Cypher condition parses successfully
+                    OIDCProviderConfigured — the cluster has dbms.security.abac.authorization_providers set
+                    GrantedRolesExist      — all spec.grantedRoles resolve in Neo4j
+                    ClusterNotReady        — referenced cluster is not Ready or too old
+                    PendingDependencies    — one or more granted roles do not yet exist
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                description: Message carries a short human-readable explanation of
+                  the current Phase.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation observed by the
+                  controller during the last successful reconcile.
+                format: int64
+                type: integer
+              phase:
+                description: |-
+                  Phase is a coarse summary of the reconcile state:
+                  Pending, Ready, Failed, PendingDependencies.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

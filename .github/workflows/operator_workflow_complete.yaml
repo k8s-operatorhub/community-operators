@@ -35,13 +35,14 @@ jobs:
             });
             var fs = require('fs');
             fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
-      - run: unzip pr.zip
-      - name: 'PR Number'
+      - run: unzip -o pr.zip -d pr_data
+      - name: 'Read PR number'
         id: pr-number
         run: |
-          PR=$(tr -dc [0-9] <./NR)
+          PR=$(tr -dc [0-9] <./pr_data/NR)
           [ -z "$PR" ] && echo "Invalid PR number" && exit 1
           echo "pr=${PR}" >> $GITHUB_OUTPUT
+          [ -f ./pr_data/CI_YAML_ONLY ] && echo "ci_yaml_only=$(cat ./pr_data/CI_YAML_ONLY)" >> $GITHUB_OUTPUT || echo "ci_yaml_only=0" >> $GITHUB_OUTPUT
 
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: pr-labels
@@ -55,15 +56,58 @@ jobs:
               repo: context.repo.repo
             })
             return labels.data
-      # - name: Labels
-      #   id: pr-labels
-      #   continue-on-error: true
-      #   run: |
-      #     curl -L --header "Authorization: token ${{secrets.GITHUB_TOKEN}}" https://api.github.com/repos/operator-framework/community-operators/issues/${{ steps.pr-number.outputs.pr }}/labels -o /tmp/labels.json
-      #     LABELS=$(cat /tmp/labels.json)
-      #     echo "labels=${LABELS//'%'/'%25'}" >> $GITHUB_OUTPUT
     outputs:
       pr: "${{ steps.pr-number.outputs.pr }}"
+      ci_yaml_only: "${{ steps.pr-number.outputs.ci_yaml_only }}"
+
+  post-comments:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [pr]
+    steps:
+      - name: 'Download and post PR comments from artifacts'
+        if: needs.pr.outputs.pr != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner, repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }},
+            });
+
+            for (const name of ['pr_comments', 'pr_comments_test']) {
+              const match = artifacts.data.artifacts.find(a => a.name === name);
+              if (!match) continue;
+              const dl = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner, repo: context.repo.repo,
+                artifact_id: match.id, archive_format: 'zip',
+              });
+              fs.writeFileSync(`${name}.zip`, Buffer.from(dl.data));
+              execSync(`unzip -o ${name}.zip -d comments`);
+            }
+
+            const dir = './comments';
+            if (fs.existsSync(dir)) {
+              for (const file of fs.readdirSync(dir).sort()) {
+                if (!file.endsWith('.md')) continue;
+                const body = fs.readFileSync(path.join(dir, file), 'utf8').trim();
+                if (!body) continue;
+                await github.rest.issues.createComment({
+                  issue_number: parseInt(process.env.PR),
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body,
+                });
+              }
+            }
 
   on-success:
     runs-on: ubuntu-latest

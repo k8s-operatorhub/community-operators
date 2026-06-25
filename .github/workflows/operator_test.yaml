@@ -2,7 +2,7 @@ name: Operator test
 
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, synchronize, unlabeled]
     branches:
       - master
@@ -31,7 +31,6 @@ env:
   OPP_MIRROR_INDEX_MULTIARCH_BASE: "quay.io/operator-framework/opm"
   OPP_MULTIARCH_SUPPORTED_VERSIONS: "v1.57.0"
   OPP_MIRROR_INDEX_MULTIARCH_POSTFIX: "s"
-  IIB_INPUT_REGISTRY_USER: "framework_automation"
   OPP_PROD: 0
   OPP_DRY_RUN: 0
   # TODO handle config
@@ -43,7 +42,6 @@ env:
   OPP_FORCE_DEPLOY_ON_K8S_OPENSHIFT_VERSION: 4.10
 #  ARTEFACT_PATH: "/tmp/operator-test" #hardcoded for now
 
-  IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
 
 jobs:
   pr-check:
@@ -86,21 +84,18 @@ jobs:
           fi
 
       - name: Operator traffic light (comment)
-        id: op-traffic-light-comment
         if: always() && steps.op-traffic-light-result.outputs.git_rebase_conflict == '1'
-        uses: mshick/add-pr-comment@v1
-        with:
-          message: |
-            Dear @${{ github.event.pull_request.user.login }},
-            Your forked procject is not rebased
-            
-            To fix this issue please rebase or execute following commands: 
-            ```
-            ${{ steps.op-traffic-light-result.outputs.git_rebase_conflict_comment }}
-            ```
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-          allow-repeats: true
+        run: |
+          mkdir -p /tmp/pr_comments
+          cat > /tmp/pr_comments/rebase.md <<'ENDOFCOMMENT'
+          Dear @${{ github.event.pull_request.user.login }},
+          Your forked project is not rebased
+          
+          To fix this issue please rebase or execute following commands: 
+          ```
+          ${{ steps.op-traffic-light-result.outputs.git_rebase_conflict_comment }}
+          ```
+          ENDOFCOMMENT
 
       - name: Operator info
         id: op-info
@@ -137,35 +132,36 @@ jobs:
           [ -f /tmp/operator-test/op_failed_k8s_bundles.yaml ] && echo "opp_check_err_k8s_bundles_value=$(cat /tmp/operator-test/op_failed_k8s_bundles.yaml | yq -r '.operators | @csv' | tr -d '"')" >> $GITHUB_OUTPUT || true
           [ -f /tmp/operator-test/format_failed ] && echo "opp_check_err_package_manifest=1" >> $GITHUB_OUTPUT || true
 
-
       - name: Operator info (packagemanifest format failed)
-        id: op-info-comment-format
         if: always() && steps.op-info-result.outputs.opp_check_err_package_manifest == '1' && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' ) && (steps.op-traffic-light.outputs.opp_ci_yaml_only == '0')
-        uses: mshick/add-pr-comment@v1
-        with:
-          message: |
-            Dear @${{ github.event.pull_request.user.login }},
-            your operator is in package manifest format. This format is not supported anymore. Please convert it to bundle format. [More info](https://docs.openshift.com/container-platform/4.12/operators/operator_sdk/osdk-pkgman-to-bundle.html)
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-          allow-repeats: true
+        run: |
+          mkdir -p /tmp/pr_comments
+          cat > /tmp/pr_comments/packagemanifest.md <<'ENDOFCOMMENT'
+          Dear @${{ github.event.pull_request.user.login }},
+          your operator is in package manifest format. This format is not supported anymore. Please convert it to bundle format. [More info](https://docs.openshift.com/container-platform/4.12/operators/operator_sdk/osdk-pkgman-to-bundle.html)
+          ENDOFCOMMENT
 
       - name: Operator info (comment)
-        id: op-info-comment
         if: always() && steps.op-info-result.outputs.opp_check_err_k8s_bundles == '1' && (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1' ) && (steps.op-traffic-light.outputs.opp_ci_yaml_only == '0')
-        uses: mshick/add-pr-comment@v1
-        with:
-          message: |
-            Dear @${{ github.event.pull_request.user.login }},
-            There are some operators version that are using **deprecated api** and kubernetes max versions (`operatorhub.io/ui-metadata-max-k8s-version`) is **NOT** set correctly under annotation field in CSV file.
-            
-            Affected versions : `${{ steps.op-info-result.outputs.opp_check_err_k8s_bundles_value }}`
-            
-            More info in 'Kubernetes max version in CSV' section [here](https://${{ env.OPP_THIS_REPO_ORG }}.github.io/${{ env.OPP_THIS_REPO_NAME }}/operator-ci-yaml/#kubernetes-max-version-in-csv).
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-          allow-repeats: true
+        run: |
+          mkdir -p /tmp/pr_comments
+          cat > /tmp/pr_comments/k8s_bundles.md <<ENDOFCOMMENT
+          Dear @${{ github.event.pull_request.user.login }},
+          There are some operators version that are using **deprecated api** and kubernetes max versions (\`operatorhub.io/ui-metadata-max-k8s-version\`) is **NOT** set correctly under annotation field in CSV file.
+          
+          Affected versions : \`${{ steps.op-info-result.outputs.opp_check_err_k8s_bundles_value }}\`
+          
+          More info in 'Kubernetes max version in CSV' section [here](https://${{ env.OPP_THIS_REPO_ORG }}.github.io/${{ env.OPP_THIS_REPO_NAME }}/operator-ci-yaml/#kubernetes-max-version-in-csv).
+          ENDOFCOMMENT
 
+
+      - name: Upload pr-check comments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr_comments
+          path: /tmp/pr_comments/
+          if-no-files-found: ignore
       - name: Upload operator_info
         uses: actions/upload-artifact@v4
         if: (steps.op-traffic-light.outputs.opp_op_delete == '0' || steps.op-traffic-light.outputs.opp_is_new_operatror == '1' || steps.op-traffic-light.outputs.opp_recreate == '1') && (steps.op-traffic-light.outputs.opp_ci_yaml_only == '0')
@@ -275,19 +271,16 @@ jobs:
 
       - name: "Comment operator_sdk_bundle_validate_warnings_and_errors if exists"
         if: always() && steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate != ''
-        uses: mshick/add-pr-comment@v1
-        with:
-          message: |
-            Dear @${{ github.event.pull_request.user.login }},        
-            Some errors and/or warnings were found while doing the check of your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) against the entire suite of validators for Operator Framework with [Operator-SDK](https://github.com/operator-framework/operator-sdk) version `${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_version }}` and the command `$ operator-sdk bundle validate <bundle-path> ${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_args }}`. 
-            
-            **Errors (:bug:)  must be fixed while warnings (:warning:) are informative, and fixing them might improve the quality of your solution.**
+        run: |
+          mkdir -p /tmp/pr_comments
+          cat > /tmp/pr_comments/bundle_validate.md <<ENDOFCOMMENT
+          Dear @${{ github.event.pull_request.user.login }},        
+          Some errors and/or warnings were found while doing the check of your operator (\`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}\`) against the entire suite of validators for Operator Framework with [Operator-SDK](https://github.com/operator-framework/operator-sdk) version \`${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_version }}\` and the command \`$ operator-sdk bundle validate <bundle-path> ${{ steps.op-kiwi-test-err-bundle-validate.outputs.operator_sdk_args }}\`. 
+          
+          **Errors (:bug:) must be fixed while warnings (:warning:) are informative, and fixing them might improve the quality of your solution.**
 
-            ${{ steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate }}
-
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-          allow-repeats: true
+          ${{ steps.op-kiwi-test-err-bundle-validate.outputs.opp_check_err_bundle_validate }}
+          ENDOFCOMMENT
 
       - name: "Search operator test error olm.maxOpenShiftVersion error"
         id: op-kiwi-test-err-maxOpenShiftVersion
@@ -299,28 +292,33 @@ jobs:
 
       - name: "Comment operator test error olm.maxOpenShiftVersion"
         if: always() && steps.op-kiwi-test-err-maxOpenShiftVersion.outputs.opp_check_err_maxOpenShiftVersion != '0'
-        uses: mshick/add-pr-comment@v1
-        with:
-          message: |
-            Dear @${{ github.event.pull_request.user.login }},
-            :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) might **not** run on k8s 1.22 or  in the Openshift version 4.9. **For more info see details bellow.**
-            :---: | :--- |
+        run: |
+          mkdir -p /tmp/pr_comments
+          cat > /tmp/pr_comments/maxOpenShiftVersion.md <<'ENDOFCOMMENT'
+          Dear @${{ github.event.pull_request.user.login }},
+          :warning: | Your operator (`${{ needs.pr-check.outputs.opp_name }}/${{ needs.pr-check.outputs.opp_version }}`) might **not** run on k8s 1.22 or in the Openshift version 4.9. **For more info see details below.**
+          :---: | :--- |
 
-            **IMPORTANT** : Kubernetes has been deprecating API(s) which will be removed and no longer available in 1.22 and in the Openshift version 4.9. Note that your project will be unable to use them on OCP 4.9/K8s 1.22 and then, it is strongly recommended to check [Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22) and ensure that your projects have them migrated and are not using any deprecated API.
-            To prevent workflow issues, its users will need to have installed in their OCP cluster a version of your operator compatible with 4.9 before they try to upgrade their cluster from any previous version to 4.9 or higher. However, If you still need to publish the operator bundles with any of these API(s) for use on earlier k8s/OCP versions, ensure that the operator bundle is configured accordingly:
-            Use the olm.openShiftMaxVersion property in the CSV to prevent the user from upgrading their OCP cluster before upgrading the installed operator version to any distribution which is compatible with:
-            ```yaml
-            apiVersion: operators.coreos.com/v1alpha1
-            kind: ClusterServiceVersion
-              metadata:
-                annotations:
-                  # Prevent cluster upgrades to OpenShift Version 4.9 when this
-                  # bundle is installed on the cluster
-                  "olm.properties": '[{"type": "olm.maxOpenShiftVersion", "value": "4.8"}]'
-            ```
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          repo-token-user-login: 'github-actions[bot]' # The user.login for temporary GitHub tokens
-          allow-repeats: true
+          **IMPORTANT** : Kubernetes has been deprecating API(s) which will be removed and no longer available in 1.22 and in the Openshift version 4.9. Note that your project will be unable to use them on OCP 4.9/K8s 1.22 and then, it is strongly recommended to check [Deprecated API Migration Guide from v1.22](https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22) and ensure that your projects have them migrated and are not using any deprecated API.
+          To prevent workflow issues, its users will need to have installed in their OCP cluster a version of your operator compatible with 4.9 before they try to upgrade their cluster from any previous version to 4.9 or higher. However, If you still need to publish the operator bundles with any of these API(s) for use on earlier k8s/OCP versions, ensure that the operator bundle is configured accordingly:
+          Use the olm.openShiftMaxVersion property in the CSV to prevent the user from upgrading their OCP cluster before upgrading the installed operator version to any distribution which is compatible with:
+          ```yaml
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: ClusterServiceVersion
+            metadata:
+              annotations:
+                # Prevent cluster upgrades to OpenShift Version 4.9 when this
+                # bundle is installed on the cluster
+                "olm.properties": '[{"type": "olm.maxOpenShiftVersion", "value": "4.8"}]'
+          ```
+          ENDOFCOMMENT
+      - name: Upload pr comments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr_comments_test
+          path: /tmp/pr_comments/
+          if-no-files-found: ignore
 
 
   test-lemon:
@@ -376,7 +374,6 @@ jobs:
           OPP_AUTO_PACKAGEMANIFEST_CLUSTER_VERSION_LABEL: "${{ needs.pr-check.outputs.opp_auto_packagemanifest_cluster_version_label }}"
           OPP_MIRROR_INDEX_ENABLED: 1
           OPP_IIB_INSTALL: 0
-          IIB_INPUT_REGISTRY_TOKEN: ${{ secrets.IIB_INPUT_REGISTRY_TOKEN }}
           OPERATOR_INDEX_TAG: ${{ matrix.index-tag }}
           OPP_INSTALLATION_SKIP: "${{ needs.pr-check.outputs.opp_installation_skipped }}"
           KIND_KUBE_VERSION: "${{ needs.pr-check.outputs.kind_kube_version }}"
@@ -405,21 +402,9 @@ jobs:
         run: |
           mkdir -p ./pr
           echo ${{ github.event.number }} > ./pr/NR
+          echo "${{ needs.pr-check.outputs.opp_ci_yaml_only }}" > ./pr/CI_YAML_ONLY
       - uses: actions/upload-artifact@v4
         with:
           name: pr
           path: pr/
 
-      - name: "Setting package-validated label"
-        if: needs.pr-check.outputs.opp_ci_yaml_only == '1'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        continue-on-error: true
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            github.rest.issues.addLabels({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['package-validated']
-            })

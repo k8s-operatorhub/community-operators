@@ -1,0 +1,97 @@
+name: FBC Catalog Validation
+
+# Validates File-Based Catalog contributions on pull requests that touch
+# catalog-templates/ or catalogs/latest/ for any operator.
+# Mirrors the validation approach used in community-operators-prod.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'operators/*/catalog-templates/**'
+      - 'operators/*/ci.yaml'
+      - 'catalogs/latest/**'
+
+env:
+  OPM_VERSION: "v1.46.0"
+  YQ_VERSION: "v4.45.1"
+
+jobs:
+  fbc-validate:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Detect changed operators
+        id: changed
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} HEAD \
+            | grep -E '^operators/[^/]+/(catalog-templates/|ci\.yaml)' \
+            | sed -E 's|^operators/([^/]+)/.*|\1|' \
+            | sort -u)
+          echo "operators<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Detected changed FBC operators: $CHANGED"
+
+      - name: Install opm
+        run: |
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/amd64/')
+          curl -sLo opm "https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/${OS}-${ARCH}-opm"
+          chmod +x opm && sudo mv opm /usr/local/bin/
+
+      - name: Install yq
+        run: |
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/amd64/')
+          curl -sLo yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${OS}_${ARCH}"
+          chmod +x yq && sudo mv yq /usr/local/bin/
+
+      - name: Download render_catalogs.sh
+        run: |
+          curl -sLo render_catalogs.sh \
+            https://raw.githubusercontent.com/redhat-openshift-ecosystem/operator-pipelines/main/fbc/render_catalogs.sh
+          chmod +x render_catalogs.sh
+
+      - name: Validate FBC operators
+        run: |
+          FAILED=0
+          while IFS= read -r operator; do
+            [ -z "$operator" ] && continue
+            CI_YAML="operators/$operator/ci.yaml"
+
+            # Only process FBC-enabled operators
+            FBC_ENABLED=$(yq '.fbc.enabled // false' "$CI_YAML" 2>/dev/null || echo "false")
+            [ "$FBC_ENABLED" != "true" ] && continue
+
+            echo "::group::Validating FBC for $operator"
+
+            # Render catalogs from templates
+            (cd "operators/$operator" && bash ../../render_catalogs.sh) || { FAILED=1; echo "::error::Render failed for $operator"; }
+
+            # Validate each rendered catalog
+            for catalog_dir in catalogs/latest/"$operator"; do
+              [ -d "$catalog_dir" ] || continue
+              opm validate "$catalog_dir" \
+                && echo "✅ $catalog_dir" \
+                || { FAILED=1; echo "::error::opm validate failed for $catalog_dir"; }
+            done
+
+            echo "::endgroup::"
+          done <<< "${{ steps.changed.outputs.operators }}"
+
+          exit $FAILED
+
+      - name: Verify rendered catalogs are committed
+        run: |
+          # Warn if rendered catalog.yaml files differ from committed state.
+          # This is informational only — the render step above is authoritative.
+          git diff --name-only catalogs/latest/ | while read -r f; do
+            echo "::warning file=$f::Rendered catalog differs from committed file. Run 'make catalogs' locally and commit the result."
+          done

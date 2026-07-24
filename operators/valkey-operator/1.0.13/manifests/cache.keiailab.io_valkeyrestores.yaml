@@ -1,0 +1,446 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  creationTimestamp: null
+  name: valkeyrestores.cache.keiailab.io
+spec:
+  group: cache.keiailab.io
+  names:
+    kind: ValkeyRestore
+    listKind: ValkeyRestoreList
+    plural: valkeyrestores
+    shortNames:
+    - vkr
+    singular: valkeyrestore
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef.name
+      name: Cluster
+      type: string
+    - jsonPath: .spec.restoreType
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.restoredKeys
+      name: Keys
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ValkeyRestore — 기존 backup (PVC 또는 외부 target) 에서 RDB 를 복원.
+          ADR-0015 (Init Container 패턴 + STS template patch + 원복).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ValkeyRestoreSpec — restore 트리거 정의.
+            properties:
+              clusterRef:
+                description: 대상 Valkey 또는 ValkeyCluster CR (같은 namespace).
+                properties:
+                  kind:
+                    enum:
+                    - Valkey
+                    - ValkeyCluster
+                    type: string
+                  name:
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              restoreType:
+                default: RDB
+                description: RestoreType — RDB snapshot 또는 AOF (추후) 복원.
+                enum:
+                - RDB
+                - AOF
+                type: string
+              source:
+                description: 복원 source — PVC (즉시 사용 가능) 또는 TargetRef (S3 등 외부).
+                properties:
+                  pvc:
+                    description: |-
+                      RestoreSourcePVC — Source.PVC: 기존 backup PVC 에서 RDB 직접 사용.
+
+                      단일 valkey (Standalone/Replication 모드) 는 `<pvc>/dump.rdb` 경로.
+                      ValkeyCluster (sharded) 는 `<pvc>/<shardLayout[shardN]>` 매핑 — 추후 commit.
+                    properties:
+                      name:
+                        description: 기존 PVC 이름 (같은 namespace).
+                        type: string
+                      path:
+                        default: dump.rdb
+                        description: PVC 안의 RDB 파일 경로. 미명시 시 "dump.rdb".
+                        type: string
+                      shardLayout:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          ValkeyCluster (sharded) 시 shard index → PVC 내부 path 매핑.
+                          예: { "shard-0": "shard-0/dump.rdb", ... }
+                          단일 Valkey (Standalone/Replication) 시 무시.
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  targetRef:
+                    description: RestoreSourceTargetRef — 외부 ValkeyBackupTarget 참조
+                      (ADR-0016 대칭).
+                    properties:
+                      name:
+                        description: ValkeyBackupTarget CR 이름 (같은 namespace).
+                        type: string
+                      path:
+                        description: 'target 내부의 path/prefix. 예: "2026-05-05/dump.rdb".'
+                        type: string
+                    required:
+                    - name
+                    - path
+                    type: object
+                type: object
+              sourcePVCAccessMode:
+                default: ReadWriteOnce
+                description: |-
+                  SourcePVCAccessMode — Source.TargetRef 시 자체 임시 PVC 의 accessMode.
+                  미명시 시 default ReadWriteOnce (Standalone). Replication / Cluster
+                  (replicas>1) 시 ReadOnlyMany 명시 필요.
+                enum:
+                - ReadWriteOnce
+                - ReadOnlyMany
+                type: string
+            required:
+            - clusterRef
+            - source
+            type: object
+          status:
+            description: ValkeyRestoreStatus — 진행 상황.
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: RestorePhase — 라이프사이클 (ADR-0015).
+                enum:
+                - Pending
+                - Mounting
+                - Restoring
+                - Verifying
+                - Completed
+                - Failed
+                type: string
+              restoredKeys:
+                description: RDB 가 cluster 에 로드된 후 INFO 로 추정한 키 개수 (검증 단계 결과).
+                format: int64
+                type: integer
+              startedAt:
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef.name
+      name: Cluster
+      type: string
+    - jsonPath: .spec.restoreType
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.restoredKeys
+      name: Keys
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ValkeyRestore — 기존 backup (PVC 또는 외부 target) 에서 RDB 를 복원.
+          ADR-0015 (Init Container 패턴 + STS template patch + 원복).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ValkeyRestoreSpec — restore 트리거 정의.
+            properties:
+              clusterRef:
+                description: 대상 Valkey 또는 ValkeyCluster CR (같은 namespace).
+                properties:
+                  kind:
+                    enum:
+                    - Valkey
+                    - ValkeyCluster
+                    type: string
+                  name:
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              restoreType:
+                default: RDB
+                description: RestoreType — RDB snapshot 또는 AOF (추후) 복원.
+                enum:
+                - RDB
+                - AOF
+                type: string
+              source:
+                description: 복원 source — PVC (즉시 사용 가능) 또는 TargetRef (S3 등 외부).
+                properties:
+                  pvc:
+                    description: |-
+                      RestoreSourcePVC — Source.PVC: 기존 backup PVC 에서 RDB 직접 사용.
+
+                      단일 valkey (Standalone/Replication 모드) 는 `<pvc>/dump.rdb` 경로.
+                      ValkeyCluster (sharded) 는 `<pvc>/<shardLayout[shardN]>` 매핑 — 추후 commit.
+                    properties:
+                      name:
+                        description: 기존 PVC 이름 (같은 namespace).
+                        type: string
+                      path:
+                        default: dump.rdb
+                        description: PVC 안의 RDB 파일 경로. 미명시 시 "dump.rdb".
+                        type: string
+                      shardLayout:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          ValkeyCluster (sharded) 시 shard index → PVC 내부 path 매핑.
+                          예: { "shard-0": "shard-0/dump.rdb", ... }
+                          단일 Valkey (Standalone/Replication) 시 무시.
+                        type: object
+                    required:
+                    - name
+                    type: object
+                  targetRef:
+                    description: RestoreSourceTargetRef — 외부 ValkeyBackupTarget 참조
+                      (ADR-0016 대칭).
+                    properties:
+                      name:
+                        description: ValkeyBackupTarget CR 이름 (같은 namespace).
+                        type: string
+                      path:
+                        description: 'target 내부의 path/prefix. 예: "2026-05-05/dump.rdb".'
+                        type: string
+                    required:
+                    - name
+                    - path
+                    type: object
+                type: object
+              sourcePVCAccessMode:
+                default: ReadWriteOnce
+                description: |-
+                  SourcePVCAccessMode — Source.TargetRef 시 자체 임시 PVC 의 accessMode.
+                  미명시 시 default ReadWriteOnce (Standalone). Replication / Cluster
+                  (replicas>1) 시 ReadOnlyMany 명시 필요.
+                enum:
+                - ReadWriteOnce
+                - ReadOnlyMany
+                type: string
+            required:
+            - clusterRef
+            - source
+            type: object
+          status:
+            description: ValkeyRestoreStatus — 진행 상황.
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: RestorePhase — 라이프사이클 (ADR-0015).
+                enum:
+                - Pending
+                - Mounting
+                - Restoring
+                - Verifying
+                - Completed
+                - Failed
+                type: string
+              restoredKeys:
+                description: RDB 가 cluster 에 로드된 후 INFO 로 추정한 키 개수 (검증 단계 결과).
+                format: int64
+                type: integer
+              startedAt:
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

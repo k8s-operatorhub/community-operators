@@ -1,0 +1,401 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "dotvirt.io/v1alpha1",
+          "kind": "Dotvirt",
+          "metadata": {
+            "name": "dotvirt",
+            "namespace": "dotvirt"
+          },
+          "spec": {
+            "argocd": {
+              "controllerServiceAccount": "openshift-gitops-argocd-application-controller",
+              "namespace": "openshift-gitops"
+            },
+            "forge": {
+              "credentialsSecret": "dotvirt-forge",
+              "insecureTLS": true,
+              "managed": true,
+              "platformRepo": "https://forgejo.apps.example.com/dotvirt/platform.git",
+              "url": "https://forgejo.apps.example.com"
+            },
+            "ingress": {
+              "host": "dotvirt.apps.example.com",
+              "type": "auto"
+            },
+            "metrics": {
+              "url": "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+            }
+          }
+        }
+      ]
+    capabilities: Seamless Upgrades
+    categories: Developer Tools, Modernization & Migration
+    containerImage: quay.io/epheo/dotvirt-operator@sha256:73c12ad00a4e47681854aef82af31d32076f8d38ab9885f885ca498c6d55f8a5
+    createdAt: "2026-07-22T10:23:05Z"
+    description: Installs dotvirt, a vCenter-like GitOps WebUI for KubeVirt, with its platform/tenant tier.
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operatorframework.io/suggested-namespace: dotvirt-operator
+    operators.operatorframework.io/builder: operator-sdk-v1.42.2
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/epheo/dotvirt
+    support: https://github.com/epheo/dotvirt/issues
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+  name: dotvirt-operator.v0.0.27
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: 'A dotvirt install: the workload and Route/Ingress, RBAC, the ArgoCD AppProject tier and ApplicationSet, the platform git repo, and (optionally) a self-hosted Forgejo.'
+        displayName: dotvirt
+        kind: Dotvirt
+        name: dotvirts.dotvirt.io
+        resources:
+          - kind: Deployment
+            name: ""
+            version: v1
+          - kind: Service
+            name: ""
+            version: v1
+          - kind: Route
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: dotvirt app image to deploy. Defaults to the operator's pinned digest, so an operator upgrade rolls the app; set only to override.
+            displayName: App Image
+            path: image
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: 'Git forge holding the platform repo: its URL and platform repo, the credentials secret, and whether the operator self-hosts a Forgejo.'
+            displayName: Forge
+            path: forge
+          - description: 'The ArgoCD (OpenShift GitOps) instance dotvirt drives: its namespace and application-controller service account.'
+            displayName: ArgoCD
+            path: argocd
+          - description: How the UI is exposed (a Route on OpenShift or an Ingress on vanilla Kubernetes) and at which host.
+            displayName: Ingress
+            path: ingress
+          - description: Prometheus/Thanos query API backing the Performance tab.
+            displayName: Metrics
+            path: metrics
+          - description: Optional OpenShift SSO beside the always-present token login (the OAuthClient name and its client-secret ref).
+            displayName: Auth
+            path: auth
+        statusDescriptors:
+          - displayName: Phase
+            path: phase
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+        version: v1alpha1
+  description: |
+    dotvirt is a vCenter-style web console for KubeVirt, built the GitOps way:
+    every project is a git repository of VM manifests, every change ships as a
+    pull request, ArgoCD applies what merges, and dotvirt reads live state back.
+
+    The runtime owns nothing: API requests run under the caller's own Kubernetes
+    token, and configuration reaches the cluster only by merging a PR. This
+    operator is the install-time provisioner; one `Dotvirt` resource provisions
+    the complete stack.
+
+    ### What the operator installs
+
+    - The dotvirt workload and its exposure: Route on OpenShift, Ingress on
+      vanilla Kubernetes (auto-detected)
+    - Read RBAC for the app and apply RBAC bound to the ArgoCD application
+      controller
+    - The ArgoCD AppProject tier (tenants + platform), the per-project
+      ApplicationSet, and the platform Application
+    - The platform git repository (bootstrapped on the forge), Argo repo
+      credentials, and an org-level webhook for instant sync
+    - Optionally a self-hosted Forgejo for evaluation (`forge.managed: true`)
+
+    Each step records a status condition on the `Dotvirt` resource, so
+    `kubectl describe dotvirt` explains a stuck install.
+
+    ### What you get in the UI
+
+    - VM inventory and detail views with live power, migrate, and snapshot
+      actions
+    - Every change staged as a reviewable pull request in the project's git
+      repository
+    - Per-object GitOps drift and sync status, with one-click resync
+    - Host capacity and balance views with DRS-style predictive and automatic
+      rebalancing
+    - Network segments (UDN/CUDN), distributed firewall, and topology views
+    - VM template library, storage overview, events, issues, and
+      Prometheus-backed metrics
+
+    ### Prerequisites
+
+    - ArgoCD (OpenShift GitOps or community Argo CD) and KubeVirt (OpenShift
+      Virtualization or upstream): hard prerequisites the operator waits for
+      and reports on
+    - OVN-Kubernetes, NMState, and CDI: optional, unlock the networking tier
+      and image upload
+    - A git forge with a Forgejo/Gitea API: bring your own, or set
+      `forge.managed: true` for an evaluation Forgejo
+
+    ### Getting started
+
+    Create a `Dotvirt` resource in the operator's namespace, setting your
+    ingress host and forge details (see the provided example). When the
+    `Available` condition is `True`, open the configured host and sign in with
+    a Kubernetes token (or OpenShift SSO if configured).
+  displayName: dotvirt operator
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjE2MS4yNiA1LjMzIDk4MS41NiA4MDAuMjUiIGZpbGw9Im5vbmUiPgogIDxjaXJjbGUgY3g9IjU2MS4zNSIgY3k9IjQwNS40MiIgcj0iMzk0LjA5IiBmaWxsPSIjRjM3NzJCIi8+CiAgPGNpcmNsZSBjeD0iMTAzNi43OCIgY3k9IjY5OS41NCIgcj0iMTAwLjA0IiBmaWxsPSIjRjM3NzJCIi8+CiAgPHBhdGggZmlsbD0iI0ZGRkZGRiIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNDgyLjk2LDY1NC4wMCBDNDgwLjg5LDY0NS4wNiA0ODIuODMsNTU0LjA4IDQ4Mi44Myw1MzcuMDAgQzQ4Mi44Myw0NTIuMzMgNDgyLjgzLDM2Ny42NyA0ODIuODMsMjgzLjAwIEM0ODIuODMsMjU0LjMzIDQ4Mi44MywyMjUuNjcgNDgyLjgzLDE5Ny4wMCBDNDgyLjgzLDE5My4xMiA0ODEuOTksMTcwLjk1IDQ4NC40NywxNzAuMDAgQzQ5MC42NywxNjcuODcgNTA1LjU4LDE2OS44MyA1MTIuNjcsMTY5LjgzIEM1MzQuMjIsMTY5LjgzIDU1NS43OCwxNjkuODMgNTc3LjMzLDE2OS44MyBDNjA2LjI5LDE2OS44MyA2MzUuNzEsMTY5LjI4IDY2NC4zMywxNzAuODIgQzY2OS4zOCwxNzEuMDkgNjc0LjY1LDE3MC4yMyA2NzkuNjcsMTcwLjg3IEM3MzMuNDksMTc3Ljc4IDc4Ni45NCwxOTMuMzQgODI5LjAwLDIzMC41MiBDODg1LjA0LDI4MC4wNyA5MDguNzQsMzU1LjQwIDkwNC44Miw0MjguMzMgQzkwNC4yNyw0MzguNTcgOTAyLjE2LDQ0OC45MyA5MDAuODcsNDU5LjAwIEM4OTguMTUsNDgwLjI1IDg5Mi4xOSw1MDIuODIgODgyLjYyLDUyMi4zMyBDODY3LjUwLDU1My4xNyA4NDcuMjAsNTc5LjM0IDgyMC43OCw2MDEuMzMgQzgwNi4yNiw2MTMuNDEgNzg5LjIyLDYyMS43NyA3NzIuMzMsNjMwLjA1IEM3MDkuNjAsNjYwLjgxIDYzNy43Miw2NTQuODMgNTY4LjMzLDY1NC44MyBDNTQ2LjY3LDY1NC44MyA1MjUuMDAsNjU0LjgzIDUwMy4zMyw2NTQuODMgQzUwMC42MSw2NTQuODMgNDgzLjU0LDY1NS4zMiA0ODIuOTYsNjU0LjAwIFogTTU5NC42NywyNzIuOTYgQzU5My40MSwyNzMuNTEgNTkzLjgzLDI4Ni40OCA1OTMuODMsMjg4LjY3IEM1OTMuODMsMzA1LjExIDU5My44MywzMjEuNTYgNTkzLjgzLDMzOC4wMCBDNTkzLjgzLDM4Ni41NiA1OTMuODMsNDM1LjExIDU5My44Myw0ODMuNjcgQzU5My44Myw0OTYuNzQgNTkxLjc2LDU0MS41MiA1OTMuOTYsNTUxLjAwIEM1OTQuNTIsNTUyLjI4IDYyOC4yOCw1NTEuODMgNjM1LjAwLDU1MS44MyBDNjgwLjI4LDU1MS44MyA3MjAuMDksNTQ2LjAxIDc1NS4wMCw1MTUuMTQgQzgxMC43Nyw0NjUuODQgODA2Ljg0LDM1NS43NyA3NTAuMDAsMzA1LjUyIEM3MTcuNzgsMjc3LjA0IDY3NS4zMSwyNzIuODMgNjM0LjAwLDI3Mi44MyBDNjIzLjM3LDI3Mi44MyA2MDQuMzMsMjcwLjcyIDU5NC42NywyNzIuOTYgWiIvPgo8L3N2Zz4K
+      mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - create
+                - deletecollection
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - persistentvolumeclaims
+                - serviceaccounts
+                - services
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - deletecollection
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - argoproj.io
+              resources:
+                - applications
+                - applicationsets
+                - appprojects
+              verbs:
+                - create
+                - deletecollection
+                - patch
+            - apiGroups:
+                - dotvirt.io
+              resources:
+                - dotvirts
+              verbs:
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - dotvirt.io
+              resources:
+                - dotvirts/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - dotvirt.io
+              resources:
+                - dotvirts/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingresses
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterrolebindings
+              verbs:
+                - create
+                - deletecollection
+                - patch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resourceNames:
+                - dotvirt
+                - dotvirt-argocd-apply
+                - dotvirt-platform-network-admin
+              resources:
+                - clusterroles
+              verbs:
+                - bind
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - routes
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - watch
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - routes/custom-host
+              verbs:
+                - create
+          serviceAccountName: dotvirt-operator-controller
+      deployments:
+        - label:
+            app: dotvirt-operator
+          name: dotvirt-operator-controller
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: dotvirt-operator
+            strategy: {}
+            template:
+              metadata:
+                labels:
+                  app: dotvirt-operator
+              spec:
+                containers:
+                  - args:
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                    env:
+                      - name: RELATED_IMAGE_DOTVIRT
+                        value: quay.io/epheo/dotvirt@sha256:6df18fdcfb461270a46f7372356f97601f463827d85432bd5a1e5fbdbc02f9b6
+                      - name: RELATED_IMAGE_FORGEJO
+                        value: codeberg.org/forgejo/forgejo:11-rootless@sha256:5135f11de848bea6d59c0a96688e90c361380ba102bdc08dbd5aa52cca2b179b
+                    image: quay.io/epheo/dotvirt-operator@sha256:73c12ad00a4e47681854aef82af31d32076f8d38ab9885f885ca498c6d55f8a5
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        memory: 256Mi
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: dotvirt-operator-controller
+                terminationGracePeriodSeconds: 10
+      permissions:
+        - rules:
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: dotvirt-operator-controller
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - kubevirt
+    - gitops
+    - argocd
+    - virtualization
+    - vcenter
+    - openshift
+  links:
+    - name: Source
+      url: https://github.com/epheo/dotvirt
+    - name: Documentation
+      url: https://github.com/epheo/dotvirt/blob/main/README.md
+    - name: Operator
+      url: https://github.com/epheo/dotvirt/blob/main/operator/README.md
+  maintainers:
+    - email: github@epheo.eu
+      name: epheo
+  maturity: alpha
+  minKubeVersion: 1.30.0
+  provider:
+    name: epheo
+  relatedImages:
+    - image: quay.io/epheo/dotvirt@sha256:6df18fdcfb461270a46f7372356f97601f463827d85432bd5a1e5fbdbc02f9b6
+      name: dotvirt
+    - image: quay.io/epheo/dotvirt-operator@sha256:73c12ad00a4e47681854aef82af31d32076f8d38ab9885f885ca498c6d55f8a5
+      name: dotvirt-operator-73c12ad00a4e47681854aef82af31d32076f8d38ab9885f885ca498c6d55f8a5-annotation
+    - image: codeberg.org/forgejo/forgejo:11-rootless@sha256:5135f11de848bea6d59c0a96688e90c361380ba102bdc08dbd5aa52cca2b179b
+      name: forgejo
+    - image: quay.io/epheo/dotvirt-operator@sha256:73c12ad00a4e47681854aef82af31d32076f8d38ab9885f885ca498c6d55f8a5
+      name: manager
+  version: 0.0.27

@@ -1,0 +1,125 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: prompt-policy-operator.v1.0.0
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "creative.foster.tools/v1alpha1",
+          "kind": "PromptPolicy",
+          "metadata": {
+            "name": "campaign-visuals"
+          },
+          "spec": {
+            "requiredLayers": ["subject", "composition", "camera", "visual"],
+            "maxPromptCharacters": 1600,
+            "maxReferenceImages": 4,
+            "productGuideURL": "https://muse-image.co/"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Developer Tools
+    containerImage: ghcr.io/fostermartyn735/prompt-policy-operator:v1.0.0
+    createdAt: "2026-07-29T00:00:00Z"
+    description: Reconciles visual prompt review requirements into Kubernetes ConfigMaps.
+    repository: https://github.com/FosterMartyn735/prompt-policy-operator
+    support: Community
+spec:
+  displayName: Prompt Policy Operator
+  description: |
+    Prompt Policy Operator provides a namespaced API for visual prompt review
+    requirements. It reconciles required brief layers, prompt-size limits,
+    reference-image limits, and an optional workflow guide into an owned
+    ConfigMap for use by applications in the same namespace.
+  version: 1.0.0
+  maturity: alpha
+  provider:
+    name: FosterMartyn735
+  maintainers:
+    - name: FosterMartyn735
+      email: FosterMartyn735@gmail.com
+  links:
+    - name: Source
+      url: https://github.com/FosterMartyn735/prompt-policy-operator
+    - name: Documentation
+      url: https://github.com/FosterMartyn735/prompt-policy-operator#readme
+  keywords:
+    - prompt
+    - policy
+    - creative workflow
+    - configmap
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: false
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+        - name: prompt-policy-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: prompt-policy-operator
+                control-plane: controller-manager
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: prompt-policy-operator
+                  control-plane: controller-manager
+              spec:
+                serviceAccountName: prompt-policy-operator-controller-manager
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: manager
+                    image: ghcr.io/fostermartyn735/prompt-policy-operator:v1.0.0
+                    imagePullPolicy: IfNotPresent
+                    command: ["/manager"]
+                    args:
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop: ["ALL"]
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                      limits:
+                        cpu: 500m
+                        memory: 128Mi
+      permissions:
+        - serviceAccountName: prompt-policy-operator-controller-manager
+          rules:
+            - apiGroups: [""]
+              resources: ["configmaps"]
+              verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+            - apiGroups: ["creative.foster.tools"]
+              resources: ["promptpolicies"]
+              verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+            - apiGroups: ["creative.foster.tools"]
+              resources: ["promptpolicies/finalizers"]
+              verbs: ["update"]
+            - apiGroups: ["creative.foster.tools"]
+              resources: ["promptpolicies/status"]
+              verbs: ["get", "patch", "update"]
+  customresourcedefinitions:
+    owned:
+      - name: promptpolicies.creative.foster.tools
+        version: v1alpha1
+        kind: PromptPolicy
+        displayName: Prompt Policy
+        description: Defines prompt review requirements reconciled into a ConfigMap.
+  minKubeVersion: 1.28.0-0

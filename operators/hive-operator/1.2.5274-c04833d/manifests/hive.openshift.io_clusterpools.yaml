@@ -1,0 +1,1590 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: clusterpools.hive.openshift.io
+spec:
+  group: hive.openshift.io
+  names:
+    kind: ClusterPool
+    listKind: ClusterPoolList
+    plural: clusterpools
+    shortNames:
+      - cp
+    singular: clusterpool
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.size
+          name: Size
+          type: string
+        - jsonPath: .status.standby
+          name: Standby
+          type: string
+        - jsonPath: .status.ready
+          name: Ready
+          type: string
+        - jsonPath: .spec.baseDomain
+          name: BaseDomain
+          type: string
+        - jsonPath: .spec.imageSetRef.name
+          name: ImageSet
+          type: string
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: |-
+            ClusterPool represents a pool of clusters that should be kept ready to be given out to users. Clusters are removed
+            from the pool once claimed and then automatically replaced with a new one.
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: ClusterPoolSpec defines the desired state of the ClusterPool.
+              properties:
+                annotations:
+                  additionalProperties:
+                    type: string
+                  description: |-
+                    Annotations to be applied to new ClusterDeployments created for the pool. ClusterDeployments that have already been
+                    claimed will not be affected when this value is modified.
+                  type: object
+                baseDomain:
+                  description: BaseDomain is the base domain to use for all clusters created in this pool.
+                  type: string
+                claimLifetime:
+                  description: ClaimLifetime defines the lifetimes for claims for the cluster pool.
+                  properties:
+                    default:
+                      description: |-
+                        Default is the default lifetime of the claim when no lifetime is set on the claim itself.
+                        This is a Duration value; see https://pkg.go.dev/time#ParseDuration for accepted formats.
+                        Note: due to discrepancies in validation vs parsing, we use a Pattern instead of `Format=duration`. See
+                        https://bugzilla.redhat.com/show_bug.cgi?id=2050332
+                        https://github.com/kubernetes/apimachinery/issues/131
+                        https://github.com/kubernetes/apiextensions-apiserver/issues/56
+                      pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                      type: string
+                    maximum:
+                      description: |-
+                        Maximum is the maximum lifetime of the claim after it is assigned a cluster. If the claim still exists
+                        when the lifetime has elapsed, the claim will be deleted by Hive.
+                        The lifetime of a claim is the mimimum of the lifetimes set by the cluster pool and the claim itself.
+                        This is a Duration value; see https://pkg.go.dev/time#ParseDuration for accepted formats.
+                        Note: due to discrepancies in validation vs parsing, we use a Pattern instead of `Format=duration`. See
+                        https://bugzilla.redhat.com/show_bug.cgi?id=2050332
+                        https://github.com/kubernetes/apimachinery/issues/131
+                        https://github.com/kubernetes/apiextensions-apiserver/issues/56
+                      pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                      type: string
+                  type: object
+                customizationRef:
+                  description: |-
+                    CustomizationRef refers to a ClusterDeploymentCustomization object whose InstallerManifestPatches should
+                    be applied to *all* ClusterDeployments created by this ClusterPool. This is in addition to any CDC from
+                    Inventory. The CDC must exist in the ClusterPool's namespace. It will be copied to the namespace of each
+                    ClusterDeployment generated by the ClusterPool.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                hibernateAfter:
+                  description: |-
+                    HibernateAfter will be applied to new ClusterDeployments created for the pool. HibernateAfter will transition
+                    clusters in the clusterpool to hibernating power state after it has been running for the given duration. The time
+                    that a cluster has been running is the time since the cluster was installed or the time since the cluster last came
+                    out of hibernation.
+                    This is a Duration value; see https://pkg.go.dev/time#ParseDuration for accepted formats.
+                    Note: due to discrepancies in validation vs parsing, we use a Pattern instead of `Format=duration`. See
+                    https://bugzilla.redhat.com/show_bug.cgi?id=2050332
+                    https://github.com/kubernetes/apimachinery/issues/131
+                    https://github.com/kubernetes/apiextensions-apiserver/issues/56
+                  pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                  type: string
+                hibernationConfig:
+                  description: HibernationConfig configures the hibernation/resume behavior of ClusterDeployments owned by the ClusterPool.
+                  properties:
+                    resumeTimeout:
+                      description: |-
+                        ResumeTimeout is the maximum amount of time we will wait for an unclaimed ClusterDeployment to resume from
+                        hibernation (e.g. at the behest of runningCount, or in preparation for being claimed). If this time is
+                        exceeded, the ClusterDeployment will be considered Broken and we will replace it. The default (unspecified
+                        or zero) means no timeout -- we will allow the ClusterDeployment to continue trying to resume "forever".
+                        This is a Duration value; see https://pkg.go.dev/time#ParseDuration for accepted formats.
+                        Note: due to discrepancies in validation vs parsing, we use a Pattern instead of `Format=duration`. See
+                        https://bugzilla.redhat.com/show_bug.cgi?id=2050332
+                        https://github.com/kubernetes/apimachinery/issues/131
+                        https://github.com/kubernetes/apiextensions-apiserver/issues/56
+                      pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                      type: string
+                  type: object
+                imageSetRef:
+                  description: |-
+                    ImageSetRef is a reference to a ClusterImageSet. The release image specified in the ClusterImageSet will be used
+                    by clusters created for this cluster pool.
+                  properties:
+                    name:
+                      description: Name is the name of the ClusterImageSet that this refers to
+                      type: string
+                  required:
+                    - name
+                  type: object
+                installAttemptsLimit:
+                  description: InstallAttemptsLimit is the maximum number of times Hive will attempt to install the cluster.
+                  format: int32
+                  type: integer
+                installConfigSecretTemplateRef:
+                  description: |-
+                    InstallConfigSecretTemplateRef is a secret with the key install-config.yaml consisting of the content of the install-config.yaml
+                    to be used as a template for all clusters in this pool.
+                    Cluster specific settings (name, basedomain) will be injected dynamically when the ClusterDeployment install-config Secret is generated.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                installerEnv:
+                  description: |-
+                    InstallerEnv are extra environment variables to pass through to the installer. This may be used to enable
+                    additional features of the installer.
+                  items:
+                    description: EnvVar represents an environment variable present in a Container.
+                    properties:
+                      name:
+                        description: |-
+                          Name of the environment variable.
+                          May consist of any printable ASCII characters except '='.
+                        type: string
+                      value:
+                        description: |-
+                          Variable references $(VAR_NAME) are expanded
+                          using the previously defined environment variables in the container and
+                          any service environment variables. If a variable cannot be resolved,
+                          the reference in the input string will be unchanged. Double $$ are reduced
+                          to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                          "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                          Escaped references will never be expanded, regardless of whether the variable
+                          exists or not.
+                          Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source for the environment variable's value. Cannot be used if value is not empty.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a ConfigMap.
+                            properties:
+                              key:
+                                description: The key to select.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the ConfigMap or its key must be defined
+                                type: boolean
+                            required:
+                              - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          fieldRef:
+                            description: |-
+                              Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                              spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                            properties:
+                              apiVersion:
+                                description: Version of the schema the FieldPath is written in terms of, defaults to "v1".
+                                type: string
+                              fieldPath:
+                                description: Path of the field to select in the specified API version.
+                                type: string
+                            required:
+                              - fieldPath
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          fileKeyRef:
+                            description: |-
+                              FileKeyRef selects a key of the env file.
+                              Requires the EnvFiles feature gate to be enabled.
+                            properties:
+                              key:
+                                description: |-
+                                  The key within the env file. An invalid key will prevent the pod from starting.
+                                  The keys defined within a source may consist of any printable ASCII characters except '='.
+                                  During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                type: string
+                              optional:
+                                default: false
+                                description: |-
+                                  Specify whether the file or its key must be defined. If the file or key
+                                  does not exist, then the env var is not published.
+                                  If optional is set to true and the specified key does not exist,
+                                  the environment variable will not be set in the Pod's containers.
+
+                                  If optional is set to false and the specified key does not exist,
+                                  an error will be returned during Pod creation.
+                                type: boolean
+                              path:
+                                description: |-
+                                  The path within the volume from which to select the file.
+                                  Must be relative and may not contain the '..' path or start with '..'.
+                                type: string
+                              volumeName:
+                                description: The name of the volume mount containing the env file.
+                                type: string
+                            required:
+                              - key
+                              - path
+                              - volumeName
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          resourceFieldRef:
+                            description: |-
+                              Selects a resource of the container: only resources limits and requests
+                              (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                            properties:
+                              containerName:
+                                description: 'Container name: required for volumes, optional for env vars'
+                                type: string
+                              divisor:
+                                anyOf:
+                                  - type: integer
+                                  - type: string
+                                description: Specifies the output format of the exposed resources, defaults to "1"
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              resource:
+                                description: 'Required: resource to select'
+                                type: string
+                            required:
+                              - resource
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          secretKeyRef:
+                            description: Selects a key of a secret in the pod's namespace
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key must be defined
+                                type: boolean
+                            required:
+                              - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                    required:
+                      - name
+                    type: object
+                  type: array
+                inventory:
+                  description: |-
+                    Inventory maintains a list of entries consumed by the ClusterPool
+                    to customize the default ClusterDeployment.
+                  items:
+                    description: InventoryEntry maintains a reference to a custom resource consumed by a clusterpool to customize the cluster deployment.
+                    properties:
+                      kind:
+                        default: ClusterDeploymentCustomization
+                        description: Kind denotes the kind of the referenced resource. The default is ClusterDeploymentCustomization, which is also currently the only supported value.
+                        enum:
+                          - ""
+                          - ClusterDeploymentCustomization
+                        type: string
+                      name:
+                        description: Name is the name of the referenced resource.
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  type: array
+                labels:
+                  additionalProperties:
+                    type: string
+                  description: |-
+                    Labels to be applied to new ClusterDeployments created for the pool. ClusterDeployments that have already been
+                    claimed will not be affected when this value is modified.
+                  type: object
+                maxConcurrent:
+                  description: |-
+                    MaxConcurrent is the maximum number of clusters that will be provisioned or deprovisioned at an time. This includes the
+                    claimed clusters being deprovisioned.
+                    By default there is no limit.
+                  format: int32
+                  type: integer
+                maxSize:
+                  description: |-
+                    MaxSize is the maximum number of clusters that will be provisioned including clusters that have been claimed
+                    and ones waiting to be used.
+                    By default there is no limit.
+                  format: int32
+                  type: integer
+                platform:
+                  description: Platform encompasses the desired platform for the cluster.
+                  properties:
+                    agentBareMetal:
+                      description: |-
+                        AgentBareMetal is the configuration used when performing an Assisted Agent based installation
+                        to bare metal.
+                      properties:
+                        agentSelector:
+                          description: |-
+                            AgentSelector is a label selector used for associating relevant custom resources with this cluster.
+                            (Agent, BareMetalHost, etc)
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                  - key
+                                  - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                        - agentSelector
+                      type: object
+                    aws:
+                      description: AWS is the configuration used when installing on AWS.
+                      properties:
+                        credentialsAssumeRole:
+                          description: |-
+                            CredentialsAssumeRole refers to the IAM role that must be assumed to obtain
+                            AWS account access for the cluster operations.
+                          properties:
+                            externalID:
+                              description: |-
+                                ExternalID is random string generated by platform so that assume role
+                                is protected from confused deputy problem.
+                                more info: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html
+                              type: string
+                            roleARN:
+                              type: string
+                          required:
+                            - roleARN
+                          type: object
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains the AWS account access
+                            credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        privateLink:
+                          description: |-
+                            PrivateLink allows uses to enable access to the cluster's API server using AWS
+                            PrivateLink. AWS PrivateLink includes a pair of VPC Endpoint Service and VPC
+                            Endpoint accross AWS accounts and allows clients to connect to services using AWS's
+                            internal networking instead of the Internet.
+                          properties:
+                            additionalAllowedPrincipals:
+                              description: |-
+                                AdditionalAllowedPrincipals is a list of additional allowed principal ARNs to be configured
+                                for the Private Link cluster's VPC Endpoint Service.
+                                ARNs provided as AdditionalAllowedPrincipals will be configured for the cluster's VPC Endpoint
+                                Service in addition to the IAM entity used by Hive.
+                              items:
+                                type: string
+                              type: array
+                            enabled:
+                              type: boolean
+                          required:
+                            - enabled
+                          type: object
+                        region:
+                          description: Region specifies the AWS region where the cluster will be created.
+                          type: string
+                        userTags:
+                          additionalProperties:
+                            type: string
+                          description: UserTags specifies additional tags for AWS resources created for the cluster.
+                          type: object
+                      required:
+                        - region
+                      type: object
+                    azure:
+                      description: Azure is the configuration used when installing on Azure.
+                      properties:
+                        baseDomainResourceGroupName:
+                          description: BaseDomainResourceGroupName specifies the resource group where the azure DNS zone for the base domain is found
+                          type: string
+                        cloudName:
+                          description: |-
+                            cloudName is the name of the Azure cloud environment which can be used to configure the Azure SDK
+                            with the appropriate Azure API endpoints.
+                            If empty, the value is equal to "AzurePublicCloud".
+                          enum:
+                            - ""
+                            - AzurePublicCloud
+                            - AzureUSGovernmentCloud
+                            - AzureChinaCloud
+                            - AzureGermanCloud
+                          type: string
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains the Azure account access
+                            credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        region:
+                          description: Region specifies the Azure region where the cluster will be created.
+                          type: string
+                      required:
+                        - credentialsSecretRef
+                        - region
+                      type: object
+                    baremetal:
+                      description: BareMetal is the configuration used when installing on bare metal.
+                      properties:
+                        libvirtSSHPrivateKeySecretRef:
+                          description: |-
+                            LibvirtSSHPrivateKeySecretRef is the reference to the secret that contains the private SSH key to use
+                            for access to the libvirt provisioning host.
+                            The SSH private key is expected to be in the secret data under the "ssh-privatekey" key.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                        - libvirtSSHPrivateKeySecretRef
+                      type: object
+                    gcp:
+                      description: GCP is the configuration used when installing on Google Cloud Platform.
+                      properties:
+                        credentialsSecretRef:
+                          description: CredentialsSecretRef refers to a secret that contains the GCP account access credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        discardLocalSsdOnHibernate:
+                          description: |-
+                            DiscardLocalSsdOnHibernate passes the specified value through to the GCP API to indicate
+                            whether the content of any local SSDs should be preserved or discarded. See
+                            https://cloud.google.com/compute/docs/disks/local-ssd#stop_instance
+                            This field is required when attempting to hibernate clusters with instances possessing
+                            SSDs -- e.g. those with GPUs.
+                          type: boolean
+                        privateServiceConnect:
+                          description: |-
+                            PrivateSericeConnect allows users to enable access to the cluster's API server using GCP
+                            Private Service Connect. It includes a forwarding rule paired with a Service Attachment
+                            across GCP accounts and allows clients to connect to services using GCP internal networking
+                            of using public load balancers.
+                          properties:
+                            enabled:
+                              description: Enabled specifies if Private Service Connect is to be enabled on the cluster.
+                              type: boolean
+                            serviceAttachment:
+                              description: ServiceAttachment configures the service attachment to be used by the cluster.
+                              properties:
+                                subnet:
+                                  description: Subnet configures the subnetwork that contains the service attachment.
+                                  properties:
+                                    cidr:
+                                      description: Cidr specifies the cidr to use when creating a service attachment subnet.
+                                      type: string
+                                    existing:
+                                      description: |-
+                                        Existing specifies a pre-existing subnet to use instead of creating a new service attachment subnet.
+                                        This is required when using BYO VPCs. It must be in the same region as the api-int load balancer, be
+                                        configured with a purpose of "Private Service Connect", and have sufficient routing and firewall rules
+                                        to access the api-int load balancer.
+                                      properties:
+                                        name:
+                                          description: Name specifies the name of the existing subnet.
+                                          type: string
+                                        project:
+                                          description: |-
+                                            Project specifies the project the subnet exists in.
+                                            This is required for Shared VPC.
+                                          type: string
+                                      required:
+                                        - name
+                                      type: object
+                                  type: object
+                              type: object
+                          required:
+                            - enabled
+                          type: object
+                        region:
+                          description: Region specifies the GCP region where the cluster will be created.
+                          type: string
+                      required:
+                        - region
+                      type: object
+                    ibmcloud:
+                      description: IBMCloud is the configuration used when installing on IBM Cloud
+                      properties:
+                        accountID:
+                          description: |-
+                            AccountID is the IBM Cloud Account ID.
+                            AccountID is DEPRECATED and is gathered via the IBM Cloud API for the provided
+                            credentials. This field will be ignored.
+                          type: string
+                        cisInstanceCRN:
+                          description: |-
+                            CISInstanceCRN is the IBM Cloud Internet Services Instance CRN
+                            CISInstanceCRN is DEPRECATED and gathered via the IBM Cloud API for the provided
+                            credentials and cluster deployment base domain. This field will be ignored.
+                          type: string
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains IBM Cloud account access
+                            credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        region:
+                          description: |-
+                            Region specifies the IBM Cloud region where the cluster will be
+                            created.
+                          type: string
+                      required:
+                        - credentialsSecretRef
+                        - region
+                      type: object
+                    none:
+                      description: |-
+                        None indicates platform-agnostic install.
+                        https://docs.openshift.com/container-platform/4.7/installing/installing_platform_agnostic/installing-platform-agnostic.html
+                      type: object
+                    nutanix:
+                      description: Nutanix is the configuration used when installing on Nutanix Prism Central.
+                      properties:
+                        certificatesSecretRef:
+                          description: |-
+                            CertificatesSecretRef refers to a secret that contains the Prism Central CA certificates
+                            necessary for communicating with the Prism Central.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains the Nutanix account access
+                            credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        failureDomains:
+                          description: |-
+                            FailureDomains configures failure domains for the Nutanix platform.
+                            Required for using MachinePools
+                          items:
+                            description: FailureDomain configures failure domain information for the Nutanix platform.
+                            properties:
+                              dataSourceImages:
+                                description: DataSourceImages identifies the datasource images in the Prism Element.
+                                items:
+                                  description: StorageResourceReference holds reference information of a storage resource (storage container, data source image, etc.)
+                                  properties:
+                                    name:
+                                      description: Name is the name of the storage container resource in the Prism Element.
+                                      type: string
+                                    referenceName:
+                                      description: ReferenceName is the identifier of the storage resource configured in the FailureDomain.
+                                      type: string
+                                    uuid:
+                                      description: UUID is the UUID of the storage container resource in the Prism Element.
+                                      type: string
+                                  required:
+                                    - uuid
+                                  type: object
+                                type: array
+                              name:
+                                description: Name defines the unique name of a failure domain.
+                                maxLength: 64
+                                minLength: 1
+                                pattern: ^[0-9A-Za-z_.-@/]+$
+                                type: string
+                              prismElement:
+                                description: |-
+                                  PrismElement holds the identification (name, UUID) and the optional endpoint address and
+                                  port of the Nutanix Prism Element. When a cluster-wide proxy is installed, this endpoint will,
+                                  by default, be accessed through the cluster-wide proxy configured for the platform.
+                                  If communication with this endpoint should bypass the proxy, add the endpoint to the install-config
+                                  `spec.noProxy` list in the proxy configuration.
+                                properties:
+                                  endpoint:
+                                    description: Endpoint holds the address and port of the Prism Element
+                                    properties:
+                                      address:
+                                        description: address is the endpoint address (DNS name or IP address) of the Nutanix Prism Central or Element (cluster)
+                                        type: string
+                                      port:
+                                        description: port is the port number to access the Nutanix Prism Central or Element (cluster)
+                                        format: int32
+                                        type: integer
+                                    required:
+                                      - address
+                                      - port
+                                    type: object
+                                  name:
+                                    description: Name is the Prism Element (cluster) name.
+                                    type: string
+                                  uuid:
+                                    description: UUID is the UUID of the Prism Element (cluster)
+                                    type: string
+                                required:
+                                  - uuid
+                                type: object
+                              storageContainers:
+                                description: StorageContainers identifies the storage containers in the Prism Element.
+                                items:
+                                  description: StorageResourceReference holds reference information of a storage resource (storage container, data source image, etc.)
+                                  properties:
+                                    name:
+                                      description: Name is the name of the storage container resource in the Prism Element.
+                                      type: string
+                                    referenceName:
+                                      description: ReferenceName is the identifier of the storage resource configured in the FailureDomain.
+                                      type: string
+                                    uuid:
+                                      description: UUID is the UUID of the storage container resource in the Prism Element.
+                                      type: string
+                                  required:
+                                    - uuid
+                                  type: object
+                                type: array
+                              subnetUUIDs:
+                                description: |-
+                                  SubnetUUIDs identifies the network subnets of the Prism Element.
+                                  Currently we only support one subnet for a failure domain.
+                                items:
+                                  type: string
+                                minItems: 1
+                                type: array
+                                x-kubernetes-list-type: set
+                            required:
+                              - name
+                              - prismElement
+                              - subnetUUIDs
+                            type: object
+                          type: array
+                        prismCentral:
+                          description: |-
+                            PrismCentral is the endpoint (address and port) to connect to the Prism Central.
+                            This serves as the default Prism-Central.
+                          properties:
+                            address:
+                              description: address is the endpoint address (DNS name or IP address) of the Nutanix Prism Central or Element (cluster)
+                              type: string
+                            port:
+                              description: port is the port number to access the Nutanix Prism Central or Element (cluster)
+                              format: int32
+                              type: integer
+                          required:
+                            - address
+                            - port
+                          type: object
+                      required:
+                        - credentialsSecretRef
+                        - prismCentral
+                      type: object
+                    openstack:
+                      description: OpenStack is the configuration used when installing on OpenStack
+                      properties:
+                        certificatesSecretRef:
+                          description: |-
+                            CertificatesSecretRef refers to a secret that contains CA certificates
+                            necessary for communicating with the OpenStack.
+                            There is additional configuration required for the OpenShift cluster to trust
+                            the certificates provided in this secret.
+                            The "clouds.yaml" file included in the credentialsSecretRef Secret must also include
+                            a reference to the certificate bundle file for the OpenShift cluster being created to
+                            trust the OpenStack endpoints.
+                            The "clouds.yaml" file must set the "cacert" field to
+                            either "/etc/openstack-ca/<key name containing the trust bundle in credentialsSecretRef Secret>" or
+                            "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem".
+
+                            For example,
+                            """clouds.yaml
+                            clouds:
+                              shiftstack:
+                                auth: ...
+                                cacert: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+                            """
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        cloud:
+                          description: |-
+                            Cloud will be used to indicate the OS_CLOUD value to use the right section
+                            from the clouds.yaml in the CredentialsSecretRef.
+                          type: string
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains the OpenStack account access
+                            credentials.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        trunkSupport:
+                          description: TrunkSupport indicates whether or not to use trunk ports in your OpenShift cluster.
+                          type: boolean
+                      required:
+                        - cloud
+                        - credentialsSecretRef
+                      type: object
+                    vsphere:
+                      description: VSphere is the configuration used when installing on vSphere
+                      properties:
+                        certificatesSecretRef:
+                          description: |-
+                            CertificatesSecretRef refers to a secret that contains the vSphere CA certificates
+                            necessary for communicating with the VCenter.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        cluster:
+                          description: |-
+                            Cluster is the name of the cluster virtual machines will be cloned into.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                        credentialsSecretRef:
+                          description: |-
+                            CredentialsSecretRef refers to a secret that contains the vSphere account access
+                            credentials: GOVC_USERNAME, GOVC_PASSWORD fields.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        datacenter:
+                          description: |-
+                            Datacenter is the name of the datacenter to use in the vCenter.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                        defaultDatastore:
+                          description: |-
+                            DefaultDatastore is the default datastore to use for provisioning volumes.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                        folder:
+                          description: |-
+                            Folder is the name of the folder that will be used and/or created for
+                            virtual machines.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                        infrastructure:
+                          description: Infrastructure is the desired state of the vSphere infrastructure provider.
+                          properties:
+                            apiVIP:
+                              description: |-
+                                DeprecatedAPIVIP is the virtual IP address for the api endpoint
+                                Deprecated: Use APIVIPs
+                              type: string
+                            apiVIPs:
+                              description: |-
+                                APIVIPs contains the VIP(s) for the api endpoint. In dual stack clusters
+                                it contains an IPv4 and IPv6 address, otherwise only one VIP
+                              format: ip
+                              items:
+                                type: string
+                              maxItems: 2
+                              type: array
+                            cluster:
+                              description: |-
+                                Cluster is the name of the cluster virtual machines will be cloned into.
+                                Deprecated: Use FailureDomains.Topology.Cluster
+                              type: string
+                            clusterOSImage:
+                              description: ClusterOSImage overrides the url provided in rhcos.json to download the RHCOS OVA
+                              type: string
+                            datacenter:
+                              description: |-
+                                Datacenter is the name of the datacenter to use in the vCenter.
+                                Deprecated: Use FailureDomains.Topology.Datacenter
+                              type: string
+                            defaultDatastore:
+                              description: |-
+                                DefaultDatastore is the default datastore to use for provisioning volumes.
+                                Deprecated: Use FailureDomains.Topology.Datastore
+                              type: string
+                            defaultMachinePlatform:
+                              description: |-
+                                DefaultMachinePlatform is the default configuration used when
+                                installing on VSphere for machine pools which do not define their own
+                                platform configuration.
+                              properties:
+                                coresPerSocket:
+                                  description: |-
+                                    NumCoresPerSocket is the number of cores per socket in a vm. The number
+                                    of vCPUs on the vm will be NumCPUs/NumCoresPerSocket.
+                                  format: int32
+                                  type: integer
+                                cpus:
+                                  description: NumCPUs is the total number of virtual processor cores to assign a vm.
+                                  format: int32
+                                  type: integer
+                                dataDisks:
+                                  description: DataDisks are additional disks to add to the VM that are not part of the VM's OVA template.
+                                  items:
+                                    description: DataDisk defines a data disk to add to the VM that is not part of the VM OVA template.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          name is used to identify the disk definition. name is required needs to be unique so that it can be used to
+                                          clearly identify purpose of the disk.
+                                        example: images_1
+                                        maxLength: 80
+                                        pattern: ^[a-zA-Z0-9]([-_a-zA-Z0-9]*[a-zA-Z0-9])?$
+                                        type: string
+                                      provisioningMode:
+                                        description: |-
+                                          provisioningMode is an optional field that specifies the provisioning type to be used by this vSphere data disk.
+                                          Allowed values are "Thin", "Thick", "EagerlyZeroed", and omitted.
+                                          When set to Thin, the disk will be made using thin provisioning allocating the bare minimum space.
+                                          When set to Thick, the full disk size will be allocated when disk is created.
+                                          When set to EagerlyZeroed, the disk will be created using eager zero provisioning. An eager zeroed thick disk has all space allocated and wiped clean of any previous contents on the physical media at creation time. Such disks may take longer time during creation compared to other disk formats.
+                                          When omitted, no setting will be applied to the data disk and the provisioning mode for the disk will be determined by the default storage policy configured for the datastore in vSphere.
+                                        enum:
+                                          - Thin
+                                          - Thick
+                                          - EagerlyZeroed
+                                        type: string
+                                      sizeGiB:
+                                        description: |-
+                                          sizeGiB is the size of the disk in GiB.
+                                          The maximum supported size is 16384 GiB.
+                                        format: int32
+                                        maximum: 16384
+                                        minimum: 1
+                                        type: integer
+                                    required:
+                                      - name
+                                      - sizeGiB
+                                    type: object
+                                  maxItems: 29
+                                  type: array
+                                  x-kubernetes-list-map-keys:
+                                    - name
+                                  x-kubernetes-list-type: map
+                                memoryMB:
+                                  description: Memory is the size of a VM's memory in MB.
+                                  format: int64
+                                  type: integer
+                                osDisk:
+                                  description: OSDisk defines the storage for instance.
+                                  properties:
+                                    diskSizeGB:
+                                      description: DiskSizeGB defines the size of disk in GB.
+                                      format: int32
+                                      type: integer
+                                  type: object
+                                zones:
+                                  description: |-
+                                    Zones defines available zones
+                                    Zones is available in TechPreview.
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
+                            diskType:
+                              description: |-
+                                DiskType is the name of the disk provisioning type,
+                                valid values are thin, thick, and eagerZeroedThick. When not
+                                specified, it will be set according to the default storage policy
+                                of vsphere.
+                              enum:
+                                - ""
+                                - thin
+                                - thick
+                                - eagerZeroedThick
+                              type: string
+                            dnsRecordsType:
+                              description: |-
+                                dnsRecordsType determines whether records for api, api-int, and ingress
+                                are provided by the internal DNS service or externally.
+                                Allowed values are `Internal`, `External`, and omitted.
+                                When set to `Internal`, records are provided by the internal infrastructure and
+                                no additional user configuration is required for the cluster to function.
+                                When set to `External`, records are not provided by the internal infrastructure
+                                and must be configured by the user on a DNS server outside the cluster.
+                                Cluster nodes must use this external server for their upstream DNS requests.
+                                This value may only be set when loadBalancer.type is set to UserManaged.
+                                When omitted, this means the user has no opinion and the platform is left
+                                to choose reasonable defaults. These defaults are subject to change over time.
+                                The current default is `Internal`.
+                              enum:
+                                - Internal
+                                - External
+                              type: string
+                            failureDomains:
+                              description: |-
+                                FailureDomains holds the VSpherePlatformFailureDomainSpec which contains
+                                the definition of region, zone and the vCenter topology.
+                                If this is omitted failure domains (regions and zones) will not be used.
+                              items:
+                                description: |-
+                                  FailureDomain holds the region and zone failure domain and
+                                  the vCenter topology of that failure domain.
+                                properties:
+                                  name:
+                                    description: |-
+                                      name defines the name of the FailureDomain
+                                      This name is arbitrary but will be used
+                                      in VSpherePlatformDeploymentZone for association.
+                                    maxLength: 256
+                                    minLength: 1
+                                    type: string
+                                  region:
+                                    description: |-
+                                      The region is the name of the tag in vCenter that is associated with the
+                                      tag category `openshift-region`. The region name must match the tag name
+                                      and must exist prior to installation. When the regionType is Datacenter
+                                      the tag must be attached to the toplogy.datacenter object in vCenter.
+                                      When the regionType is ComputeCluster the tag must be attached to the topology.computeCluster
+                                      object in vCenter.
+                                    type: string
+                                  regionType:
+                                    allOf:
+                                      - enum:
+                                          - HostGroup
+                                          - Datacenter
+                                          - ComputeCluster
+                                      - enum:
+                                          - Datacenter
+                                          - ComputeCluster
+                                    description: |-
+                                      regionType is the type of failure domain region, the current values are "Datacenter" and "ComputeCluster"
+                                      When regionType is Datacenter the zoneType must be ComputeCluster.
+                                      When regionType is ComputeCluster the zoneType must be HostGroup
+                                    type: string
+                                  server:
+                                    description: server is the fully-qualified domain name or the IP address of the vCenter server.
+                                    maxLength: 255
+                                    minLength: 1
+                                    type: string
+                                  topology:
+                                    description: Topology describes a given failure domain using vSphere constructs
+                                    properties:
+                                      computeCluster:
+                                        description: |-
+                                          computeCluster as the failure domain
+                                          This is required to be a path
+                                        maxLength: 2048
+                                        minLength: 1
+                                        type: string
+                                      datacenter:
+                                        description: |-
+                                          datacenter is the vCenter datacenter in which virtual machines will be located
+                                          and defined as the failure domain.
+                                        maxLength: 80
+                                        minLength: 1
+                                        type: string
+                                      datastore:
+                                        description: |-
+                                          datastore is the name or inventory path of the datastore in which the
+                                          virtual machine is created/located.
+                                        maxLength: 2048
+                                        minLength: 1
+                                        type: string
+                                      folder:
+                                        description: |-
+                                          folder is the inventory path of the folder in which the
+                                          virtual machine is created/located.
+                                        maxLength: 2048
+                                        minLength: 1
+                                        pattern: ^/.*?/vm/.*?
+                                        type: string
+                                      hostGroup:
+                                        description: |-
+                                          hostGroup is the name of the vm-host group of type host within vCenter for this failure domain.
+                                          hostGroup is limited to 80 characters.
+                                          This field is required when the ZoneType is HostGroup
+                                        maxLength: 80
+                                        type: string
+                                      networks:
+                                        description: networks is the list of networks within this failure domain
+                                        items:
+                                          type: string
+                                        maxItems: 10
+                                        minItems: 1
+                                        type: array
+                                      resourcePool:
+                                        description: |-
+                                          resourcePool is the absolute path of the resource pool where virtual machines will be
+                                          created. The absolute path is of the form /<datacenter>/host/<cluster>/Resources/<resourcepool>.
+                                        maxLength: 2048
+                                        minLength: 1
+                                        pattern: ^/.*?/host/.*?/Resources.*
+                                        type: string
+                                      tagIDs:
+                                        description: |-
+                                          tagIDs is an optional set of tags to add to an instance. Specified tagIDs
+                                          must use URN-notation instead of display names. A maximum of 10 tag IDs may be specified.
+                                        example: urn:vmomi:InventoryServiceTag:5736bf56-49f5-4667-b38c-b97e09dc9578:GLOBAL
+                                        items:
+                                          type: string
+                                        type: array
+                                      template:
+                                        description: |-
+                                          template is the inventory path of the virtual machine or template
+                                          that will be used for cloning.
+                                        maxLength: 2048
+                                        minLength: 1
+                                        pattern: ^/.*?/vm/.*?
+                                        type: string
+                                    required:
+                                      - computeCluster
+                                      - datacenter
+                                      - datastore
+                                      - networks
+                                    type: object
+                                  zone:
+                                    description: |-
+                                      The zone is the name of the tag in vCenter that is associated with
+                                      the tag category `openshift-zone`. The zone name must match the tag name
+                                      and must exist prior to installation. When zoneType is HostGroup the
+                                      ESXi hosts defined in the provided in the topology.hostGroup field must be tagged.
+                                      When the zoneType is ComputeCluster the tag must be attached to the topology.computeCluster
+                                      object in vCenter.
+                                    type: string
+                                  zoneType:
+                                    allOf:
+                                      - enum:
+                                          - HostGroup
+                                          - Datacenter
+                                          - ComputeCluster
+                                      - enum:
+                                          - ComputeCluster
+                                          - HostGroup
+                                    description: |-
+                                      When zoneType is ComputeCluster the regionType must be Datacenter
+                                      When zoneType is HostGroup the regionType must be ComputeCluster
+                                      If the zoneType is HostGroup topology.hostGroup must be defined and exist in vCenter
+                                      prior to installation.
+                                    type: string
+                                required:
+                                  - name
+                                  - region
+                                  - server
+                                  - topology
+                                  - zone
+                                type: object
+                              type: array
+                            folder:
+                              description: |-
+                                Folder is the absolute path of the folder that will be used and/or created for
+                                virtual machines. The absolute path is of the form /<datacenter>/vm/<folder>/<subfolder>.
+                                Deprecated: Use FailureDomains.Topology.Folder
+                              pattern: ^/.*?/vm/.*?
+                              type: string
+                            hosts:
+                              description: Hosts defines network configurations to be applied by the installer. Hosts is available in TechPreview.
+                              items:
+                                description: Host defines host VMs to generate as part of the installation.
+                                properties:
+                                  failureDomain:
+                                    description: FailureDomain refers to the name of a FailureDomain as described in https://github.com/openshift/enhancements/blob/master/enhancements/installer/vsphere-ipi-zonal.md
+                                    type: string
+                                  networkDevice:
+                                    description: NetworkDeviceSpec to be applied to the host
+                                    properties:
+                                      gateway:
+                                        description: |-
+                                          gateway is an IPv4 or IPv6 address which represents the subnet gateway,
+                                          for example, 192.168.1.1.
+                                        format: ipv6
+                                        type: string
+                                      ipAddrs:
+                                        description: |-
+                                          ipAddrs is a list of one or more IPv4 and/or IPv6 addresses and CIDR to assign to
+                                          this device, for example, 192.168.1.100/24. IP addresses provided via ipAddrs are
+                                          intended to allow explicit assignment of a machine's IP address.
+                                        example: 2001:DB8:0000:0000:244:17FF:FEB6:D37D/64
+                                        format: ipv6
+                                        items:
+                                          type: string
+                                        type: array
+                                      nameservers:
+                                        description: |-
+                                          nameservers is a list of IPv4 and/or IPv6 addresses used as DNS nameservers, for example,
+                                          8.8.8.8. a nameserver is not provided by a fulfilled IPAddressClaim. If DHCP is not the
+                                          source of IP addresses for this network device, nameservers should include a valid nameserver.
+                                        example: 8.8.8.8
+                                        format: ipv6
+                                        items:
+                                          type: string
+                                        type: array
+                                    required:
+                                      - ipAddrs
+                                    type: object
+                                  role:
+                                    description: Role defines the role of the node
+                                    enum:
+                                      - ""
+                                      - bootstrap
+                                      - control-plane
+                                      - compute
+                                    type: string
+                                required:
+                                  - networkDevice
+                                  - role
+                                type: object
+                              type: array
+                            ingressVIP:
+                              description: |-
+                                DeprecatedIngressVIP is the virtual IP address for ingress
+                                Deprecated: Use IngressVIPs
+                              type: string
+                            ingressVIPs:
+                              description: |-
+                                IngressVIPs contains the VIP(s) for ingress. In dual stack clusters it
+                                contains an IPv4 and IPv6 address, otherwise only one VIP
+                              format: ip
+                              items:
+                                type: string
+                              maxItems: 2
+                              type: array
+                            loadBalancer:
+                              description: |-
+                                LoadBalancer defines how the load balancer used by the cluster is configured.
+                                LoadBalancer is available in TechPreview.
+                              properties:
+                                type:
+                                  default: OpenShiftManagedDefault
+                                  description: |-
+                                    type defines the type of load balancer used by the cluster on VSphere platform
+                                    which can be a user-managed or openshift-managed load balancer
+                                    that is to be used for the OpenShift API and Ingress endpoints.
+                                    When set to OpenShiftManagedDefault the static pods in charge of API and Ingress traffic load-balancing
+                                    defined in the machine config operator will be deployed.
+                                    When set to UserManaged these static pods will not be deployed and it is expected that
+                                    the load balancer is configured out of band by the deployer.
+                                    When omitted, this means no opinion and the platform is left to choose a reasonable default.
+                                    The default value is OpenShiftManagedDefault.
+                                  enum:
+                                    - OpenShiftManagedDefault
+                                    - UserManaged
+                                  type: string
+                                  x-kubernetes-validations:
+                                    - message: type is immutable once set
+                                      rule: oldSelf == '' || self == oldSelf
+                              type: object
+                            network:
+                              description: |-
+                                Network specifies the name of the network to be used by the cluster.
+                                Deprecated: Use FailureDomains.Topology.Network
+                              type: string
+                            nodeNetworking:
+                              description: |-
+                                nodeNetworking contains the definition of internal and external network constraints for
+                                assigning the node's networking.
+                                If this field is omitted, networking defaults to the legacy
+                                address selection behavior which is to only support a single address and
+                                return the first one found.
+                              properties:
+                                external:
+                                  description: external represents the network configuration of the node that is externally routable.
+                                  properties:
+                                    excludeNetworkSubnetCidr:
+                                      description: |-
+                                        excludeNetworkSubnetCidr IP addresses in subnet ranges will be excluded when selecting
+                                        the IP address from the VirtualMachine's VM for use in the status.addresses fields.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    network:
+                                      description: |-
+                                        network VirtualMachine's VM Network names that will be used to when searching
+                                        for status.addresses fields. Note that if internal.networkSubnetCIDR and
+                                        external.networkSubnetCIDR are not set, then the vNIC associated to this network must
+                                        only have a single IP address assigned to it.
+                                        The available networks (port groups) can be listed using
+                                        `govc ls 'network/*'`
+                                      type: string
+                                    networkSubnetCidr:
+                                      description: |-
+                                        networkSubnetCidr IP address on VirtualMachine's network interfaces included in the fields' CIDRs
+                                        that will be used in respective status.addresses fields.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                  type: object
+                                internal:
+                                  description: internal represents the network configuration of the node that is routable only within the cluster.
+                                  properties:
+                                    excludeNetworkSubnetCidr:
+                                      description: |-
+                                        excludeNetworkSubnetCidr IP addresses in subnet ranges will be excluded when selecting
+                                        the IP address from the VirtualMachine's VM for use in the status.addresses fields.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    network:
+                                      description: |-
+                                        network VirtualMachine's VM Network names that will be used to when searching
+                                        for status.addresses fields. Note that if internal.networkSubnetCIDR and
+                                        external.networkSubnetCIDR are not set, then the vNIC associated to this network must
+                                        only have a single IP address assigned to it.
+                                        The available networks (port groups) can be listed using
+                                        `govc ls 'network/*'`
+                                      type: string
+                                    networkSubnetCidr:
+                                      description: |-
+                                        networkSubnetCidr IP address on VirtualMachine's network interfaces included in the fields' CIDRs
+                                        that will be used in respective status.addresses fields.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: set
+                                  type: object
+                              type: object
+                            password:
+                              description: |-
+                                Password is the password for the user to use to connect to the vCenter.
+                                Deprecated: Use VCenters.Password
+                              type: string
+                            resourcePool:
+                              description: |-
+                                ResourcePool is the absolute path of the resource pool where virtual machines will be
+                                created. The absolute path is of the form /<datacenter>/host/<cluster>/Resources/<resourcepool>.
+                                Deprecated: Use FailureDomains.Topology.ResourcePool
+                              type: string
+                            username:
+                              description: |-
+                                Username is the name of the user to use to connect to the vCenter.
+                                Deprecated: Use VCenters.Username
+                              type: string
+                            vCenter:
+                              description: |-
+                                VCenter is the domain name or IP address of the vCenter.
+                                Deprecated: Use VCenters.Server
+                              type: string
+                            vcenters:
+                              description: VCenters holds the connection details for services to communicate with vCenter.
+                              items:
+                                description: |-
+                                  VCenter stores the vCenter connection fields
+                                  https://github.com/kubernetes/cloud-provider-vsphere/blob/master/pkg/common/config/types_yaml.go
+                                properties:
+                                  datacenters:
+                                    description: Datacenter in which VMs are located.
+                                    items:
+                                      type: string
+                                    minItems: 1
+                                    type: array
+                                  password:
+                                    description: Password is the password for the user to use to connect to the vCenter.
+                                    type: string
+                                  port:
+                                    default: 443
+                                    description: |-
+                                      port is the TCP port that will be used to communicate to
+                                      the vCenter endpoint. This is typically unchanged from
+                                      the default of HTTPS TCP/443.
+                                    format: int32
+                                    maximum: 32767
+                                    minimum: 1
+                                    type: integer
+                                  server:
+                                    description: server is the fully-qualified domain name or the IP address of the vCenter server.
+                                    maxLength: 255
+                                    type: string
+                                  user:
+                                    description: Username is the username that will be used to connect to vCenter
+                                    type: string
+                                required:
+                                  - datacenters
+                                  - password
+                                  - server
+                                  - user
+                                type: object
+                              maxItems: 3
+                              minItems: 1
+                              type: array
+                          type: object
+                        network:
+                          description: |-
+                            Network specifies the name of the network to be used by the cluster.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                        vCenter:
+                          description: |-
+                            VCenter is the domain name or IP address of the vCenter.
+                            Deprecated: Please use Platform.Infrastructure instead
+                            See also: Platform.ConvertDeprecatedFields
+                          type: string
+                      required:
+                        - certificatesSecretRef
+                        - credentialsSecretRef
+                      type: object
+                  type: object
+                pullSecretRef:
+                  description: PullSecretRef is the reference to the secret to use when pulling images.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                runningCount:
+                  description: |-
+                    RunningCount is the number of clusters we should keep running. The remainder will be kept hibernated until claimed.
+                    By default no clusters will be kept running (all will be hibernated).
+                  format: int32
+                  minimum: 0
+                  type: integer
+                size:
+                  description: Size is the default number of clusters that we should keep provisioned and waiting for use.
+                  format: int32
+                  minimum: 0
+                  type: integer
+                skipMachinePools:
+                  description: SkipMachinePools allows creating clusterpools where the machinepools are not managed by hive after cluster creation
+                  type: boolean
+              required:
+                - baseDomain
+                - imageSetRef
+                - platform
+                - size
+              type: object
+            status:
+              description: ClusterPoolStatus defines the observed state of ClusterPool
+              properties:
+                conditions:
+                  description: Conditions includes more detailed status for the cluster pool
+                  items:
+                    description: ClusterPoolCondition contains details for the current condition of a cluster pool
+                    properties:
+                      lastProbeTime:
+                        description: LastProbeTime is the last time we probed the condition.
+                        format: date-time
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is the last time the condition transitioned from one status to another.
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message is a human-readable message indicating details about last transition.
+                        type: string
+                      reason:
+                        description: Reason is a unique, one-word, CamelCase reason for the condition's last transition.
+                        type: string
+                      status:
+                        description: Status is the status of the condition.
+                        type: string
+                      type:
+                        description: Type is the type of the condition.
+                        type: string
+                    required:
+                      - status
+                      - type
+                    type: object
+                  type: array
+                ready:
+                  description: Ready is the number of unclaimed clusters that are installed and are running and ready to be claimed.
+                  format: int32
+                  type: integer
+                size:
+                  description: Size is the number of unclaimed clusters that have been created for the pool.
+                  format: int32
+                  type: integer
+                standby:
+                  description: Standby is the number of unclaimed clusters that are installed, but not running.
+                  format: int32
+                  type: integer
+              required:
+                - ready
+                - size
+              type: object
+          required:
+            - spec
+          type: object
+      served: true
+      storage: true
+      subresources:
+        scale:
+          specReplicasPath: .spec.size
+          statusReplicasPath: .status.size
+        status: {}

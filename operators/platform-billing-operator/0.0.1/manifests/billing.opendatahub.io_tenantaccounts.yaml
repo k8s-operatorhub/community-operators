@@ -1,0 +1,333 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: tenantaccounts.billing.opendatahub.io
+spec:
+  group: billing.opendatahub.io
+  names:
+    kind: TenantAccount
+    listKind: TenantAccountList
+    plural: tenantaccounts
+    singular: tenantaccount
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .spec.billingMode
+      name: Mode
+      type: string
+    - jsonPath: .status.balance
+      name: Balance
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          TenantAccount is the Schema for the tenantaccounts API.
+          It represents a billing tenant with a wallet, billing mode, and lifecycle state.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TenantAccountSpec defines the desired state of a TenantAccount.
+            properties:
+              billingConnectorRef:
+                description: |-
+                  BillingConnectorRef references the BillingConnector that provides
+                  payment processing for this tenant. Required for auto-reload.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              billingMode:
+                description: |-
+                  BillingMode determines how usage is billed.
+                  ShowbackOnly: usage is rated and visible but no wallet/PSP enforcement.
+                  Prepaid: tenant pre-funds a wallet; usage debits the balance.
+                  Invoiced: usage accumulates and is invoiced on a billing cycle.
+                enum:
+                - ShowbackOnly
+                - Prepaid
+                - Invoiced
+                type: string
+              displayName:
+                description: DisplayName is the human-readable tenant name.
+                type: string
+              gpuFreezeMode:
+                default: Drain
+                description: |-
+                  GPUFreezeMode controls how GPU workloads are handled when the tenant's
+                  balance is depleted. Drain (default): running workloads finish naturally
+                  but no new ones are admitted. Preempt: running workloads are evicted.
+                enum:
+                - Drain
+                - Preempt
+                type: string
+              gracePolicy:
+                description: GracePolicy defines behavior when the tenant's balance
+                  drops to zero.
+                properties:
+                  graceAmount:
+                    default: "0.000000"
+                    description: |-
+                      GraceAmount is the dollar amount below zero a tenant is allowed before
+                      enforcement fires. "0.000000" means freeze on the very next request after
+                      crossing zero. The request that crossed zero still completes.
+                    pattern: ^\d+(\.\d{1,6})?$
+                    type: string
+                  warningThreshold:
+                    description: |-
+                      WarningThreshold is the balance level at which a Warning state is entered.
+                      When set and balance drops below this value, the tenant enters Warning state
+                      (advisory only — no enforcement action). Optional.
+                    pattern: ^\d+(\.\d{1,6})?$
+                    type: string
+                required:
+                - graceAmount
+                type: object
+              planRef:
+                description: PlanRef references the Plan CR that governs this tenant's
+                  rate limits.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              priceBookPin:
+                description: |-
+                  PriceBookPin optionally pins this tenant to a specific PriceBook by name,
+                  overriding the default "follow Active" behavior (grandfathering).
+                type: string
+              pspCustomerSecretRef:
+                description: |-
+                  PSPCustomerSecretRef references a Secret containing payment processor
+                  customer data (keys: customerId, defaultPaymentMethodId).
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              reloadPolicy:
+                description: ReloadPolicy configures automatic wallet reload (Prepaid
+                  mode only).
+                properties:
+                  enabled:
+                    description: Enabled controls whether automatic reload is active.
+                    type: boolean
+                  maxReloadsPerDay:
+                    description: |-
+                      MaxReloadsPerDay is the maximum number of reload attempts allowed in a
+                      rolling 24-hour window. 0 means no limit.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  monthlyCapAmount:
+                    description: MonthlyCapAmount is the maximum reload spend per
+                      calendar month.
+                    pattern: ^\d+(\.\d{1,6})?$
+                    type: string
+                  reloadAmount:
+                    description: ReloadAmount is the amount to add on each reload.
+                    pattern: ^\d+(\.\d{1,6})?$
+                    type: string
+                  thresholdAmount:
+                    description: ThresholdAmount is the balance level that triggers
+                      a reload.
+                    pattern: ^\d+(\.\d{1,6})?$
+                    type: string
+                required:
+                - enabled
+                - monthlyCapAmount
+                - reloadAmount
+                - thresholdAmount
+                type: object
+            required:
+            - billingMode
+            - displayName
+            - planRef
+            type: object
+          status:
+            description: TenantAccountStatus defines the observed state of a TenantAccount.
+            properties:
+              allowanceTokens:
+                description: |-
+                  AllowanceTokens is the token allowance computed from balance and pricing,
+                  used for enforcement. Decimal string format.
+                type: string
+              balance:
+                description: |-
+                  Balance is the current wallet balance as a decimal string, mirrored from
+                  the ledger. This is NOT authoritative — the ledger (charges + adjustments)
+                  is the source of truth.
+                type: string
+              balanceObservedAt:
+                description: BalanceObservedAt is the timestamp when the balance was
+                  last computed.
+                format: date-time
+                type: string
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  TenantAccount's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              consecutivePaymentFailures:
+                description: |-
+                  ConsecutivePaymentFailures tracks consecutive payment failures for
+                  event-gated Dunning → Frozen escalation (M=3). Reset on success.
+                format: int32
+                type: integer
+              lastPSPCustomerSecretRef:
+                description: |-
+                  LastPSPCustomerSecretRef is the name of the last-observed
+                  PSPCustomerSecretRef, used to detect payment method changes.
+                type: string
+              mtdSpend:
+                description: MtdSpend is the month-to-date spend as a decimal string.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              paymentMethodChangedAt:
+                description: |-
+                  PaymentMethodChangedAt records when the tenant's payment method
+                  (PSPCustomerSecretRef) was last changed. Used for cooldown enforcement.
+                format: date-time
+                type: string
+              pendingReloadIntentID:
+                description: |-
+                  PendingReloadIntentID is the PSP intent ID of an in-flight reload
+                  payment. Prevents duplicate PaymentIntent creation.
+                type: string
+              runwayDays:
+                description: |-
+                  RunwayDays is the estimated days of service remaining at the current
+                  spend rate, as a decimal string.
+                type: string
+              state:
+                description: State is the current lifecycle state of this TenantAccount.
+                enum:
+                - Pending
+                - Active
+                - Warning
+                - Grace
+                - Dunning
+                - Frozen
+                - Suspended
+                - Closed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

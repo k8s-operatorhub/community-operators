@@ -45,6 +45,229 @@ metadata:
             },
             "suspend": false
           }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectInventory",
+          "metadata": {
+            "name": "team-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "exportMinInterval": "30s",
+            "snapshotSinkRefs": [
+              {
+                "name": "git-inventory",
+                "exportMinInterval": "1h"
+              }
+            ],
+            "databaseSinkRefs": [
+              {
+                "name": "postgres-inventory"
+              }
+            ],
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectSnapshotSink",
+          "metadata": {
+            "name": "git-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "git",
+            "endpoint": "https://github.com/platformrelay/kollect-inventory-demo.git",
+            "cluster": "prod-west",
+            "pathTemplate": "clusters/{cluster}/inventory/{namespace}/{name}.json",
+            "connectionTest": true,
+            "secretRef": {
+              "name": "git-push-credentials",
+              "namespace": "default"
+            },
+            "git": {
+              "branch": "main",
+              "pushPolicy": "Commit",
+              "auth": {
+                "type": "token"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectEventSink",
+          "metadata": {
+            "name": "nats-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "nats",
+            "cluster": "prod-west",
+            "connectionTest": true,
+            "secretRef": {
+              "name": "nats-credentials",
+              "namespace": "default"
+            },
+            "nats": {
+              "url": "nats://nats.kollect-system.svc:4222",
+              "subject": "inventory.events",
+              "stream": "kollect_events"
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectDatabaseSink",
+          "metadata": {
+            "name": "postgres-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "postgres",
+            "cluster": "prod-west",
+            "connectionTest": true,
+            "provisioning": {
+              "mode": "ensure"
+            },
+            "postgres": {
+              "databaseRef": {
+                "name": "inventory-postgres-dsn",
+                "namespace": "default"
+              },
+              "schema": "public",
+              "table": "inventory_items"
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectConnectionTest",
+          "metadata": {
+            "name": "postgres-inventory-probe",
+            "namespace": "default"
+          },
+          "spec": {
+            "sinkRef": {
+              "databaseSinkRef": "postgres-inventory"
+            },
+            "ttlSecondsAfterFinished": 300
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectScope",
+          "metadata": {
+            "name": "team-ceiling",
+            "namespace": "default"
+          },
+          "spec": {
+            "allowedGVKs": [
+              {
+                "group": "apps",
+                "version": "v1",
+                "kind": "Deployment"
+              },
+              {
+                "group": "",
+                "version": "v1",
+                "kind": "Service"
+              }
+            ],
+            "allowedNamespaces": [
+              "default"
+            ],
+            "snapshotSinkRefs": [
+              "git-inventory"
+            ],
+            "databaseSinkRefs": [
+              "postgres-inventory"
+            ],
+            "minExportInterval": "30s"
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterTarget",
+          "metadata": {
+            "name": "platform-deployments"
+          },
+          "spec": {
+            "profileRef": {
+              "name": "deployment-images",
+              "namespace": "default"
+            },
+            "namespaceSelector": {
+              "matchLabels": {
+                "kollect.dev/tenant": "platform"
+              }
+            },
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterInventory",
+          "metadata": {
+            "name": "platform-rollup"
+          },
+          "spec": {
+            "targetRefs": [
+              "platform-deployments"
+            ],
+            "namespaceSelector": {
+              "matchLabels": {
+                "kollect.dev/tenant": "platform"
+              }
+            },
+            "sinkNamespace": "default",
+            "snapshotSinkRefs": [
+              {
+                "name": "git-inventory"
+              }
+            ],
+            "databaseSinkRefs": [
+              {
+                "name": "postgres-inventory"
+              }
+            ],
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterScope",
+          "metadata": {
+            "name": "platform-ceiling"
+          },
+          "spec": {
+            "allowedGVKs": [
+              {
+                "group": "apps",
+                "version": "v1",
+                "kind": "Deployment"
+              },
+              {
+                "group": "",
+                "version": "v1",
+                "kind": "Service"
+              }
+            ],
+            "deniedNamespaces": [
+              "kube-system"
+            ],
+            "allowedStaticRefNamespaces": [
+              "default"
+            ],
+            "snapshotSinkRefs": [
+              "git-inventory"
+            ],
+            "databaseSinkRefs": [
+              "postgres-inventory"
+            ],
+            "minExportInterval": "30s"
+          }
         }
       ]
     categories: Monitoring,Integration & Delivery

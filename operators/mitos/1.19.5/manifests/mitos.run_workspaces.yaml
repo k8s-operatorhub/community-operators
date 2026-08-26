@@ -1,0 +1,345 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: workspaces.mitos.run
+spec:
+  group: mitos.run
+  names:
+    kind: Workspace
+    listKind: WorkspaceList
+    plural: workspaces
+    singular: workspace
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.head
+      name: Head
+      type: string
+    - jsonPath: .status.revisions
+      name: Revisions
+      type: integer
+    - jsonPath: .status.resumable
+      name: Resumable
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              git:
+                description: |-
+                  Git declares the repo paths that get history and the fork-and-merge
+                  rendezvous remote. Git is the merge layer; the engine never does
+                  filesystem merge. The rendezvous itself is a later W4 slice.
+                properties:
+                  credentialsSecretRef:
+                    description: |-
+                      CredentialsSecretRef names a Secret key holding the credential token used to
+                      authenticate the {git} rendezvous push to an external remote. The token is a
+                      secret VALUE: it is resolved at push time, delivered to git only through an
+                      ephemeral credentials file in an isolated HOME, and never logged, never put
+                      on the git argv, and never recorded in a condition or revision. The username
+                      is taken from CredentialsUsername (or defaults to "x-access-token", the
+                      token-only forge convention). Unset means an unauthenticated push (a local
+                      bare repo or an already-credentialed remote helper on the host).
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  credentialsUsername:
+                    description: |-
+                      CredentialsUsername is the basic-auth username paired with the token from
+                      CredentialsSecretRef. It is not a secret. Defaults to "x-access-token" when
+                      unset, which most token-based forges accept. Ignored when CredentialsSecretRef
+                      is unset.
+                    type: string
+                  paths:
+                    description: |-
+                      Paths are the repo paths inside the workspace that get version history and
+                      the rendezvous remote.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              grants:
+                description: |-
+                  Grants are the explicit, auditable workspace access grants. Workspace
+                  access is declarative Kubernetes RBAC over these grant objects, not a
+                  pod-scoped mechanism.
+                items:
+                  properties:
+                    access:
+                      description: Access is the level of access the grant confers.
+                      enum:
+                      - readonly
+                      - readwrite
+                      type: string
+                    serviceAccount:
+                      description: ServiceAccount is the principal the grant applies
+                        to.
+                      type: string
+                  required:
+                  - access
+                  - serviceAccount
+                  type: object
+                type: array
+              retention:
+                description: |-
+                  Retention bounds how many committed revisions are kept and how old a
+                  revision must be before it is eligible for pruning.
+                properties:
+                  minAge:
+                    description: |-
+                      MinAge is the minimum age a revision must reach before it is eligible for
+                      pruning. A revision younger than MinAge is never pruned even if the count
+                      is over Revisions. Unset treats every over-count revision as eligible.
+                    type: string
+                  revisions:
+                    description: |-
+                      Revisions is the maximum number of committed revisions to keep. Committed
+                      revisions beyond this count that are also older than MinAge are pruned
+                      oldest-first. The head and any ancestor on the head's lineage path are
+                      never pruned. Zero or unset disables count-based pruning.
+                    format: int32
+                    type: integer
+                type: object
+              store:
+                description: |-
+                  Store selects the content-addressed object store that backs the
+                  workspace's revision artifacts.
+                properties:
+                  encryptionKeyRef:
+                    description: |-
+                      EncryptionKeyRef names a Secret key holding the wrapped at-rest
+                      data-encryption key (DEK). When set, every revision chunk and manifest is
+                      encrypted at rest with AES-256-GCM under that DEK before it reaches the
+                      store (node CAS or S3), and decrypted on hydrate. The DEK the controller
+                      generates is keyed per-template (by templateID), so a template's workspaces
+                      share its DEK; per-workspace crypto-shred is a future option if finer
+                      granularity is wanted. The DEK is a secret VALUE
+                      delivered wrapped (envelope encryption via internal/kms): it is unwrapped
+                      only in node memory for the duration of a hydrate/dehydrate and is never
+                      logged, never placed in an error or condition, and never written to a host
+                      path. The encrypted round trip stays byte-identical and content-addressed
+                      dedup is preserved because the manifest digest is computed over plaintext.
+                      The key is principal-bound, mirroring the memory-snapshot policy. Unset
+                      keeps today's plaintext store path (backward compatible).
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  objectStorageRef:
+                    description: |-
+                      ObjectStorageRef names the S3-compatible, content-addressed object store
+                      that holds the workspace's chunked revision artifacts. When set, the
+                      workspace's hydrate/dehydrate artifacts live in the referenced S3 bucket
+                      (an alternative to the node CAS), with the same content-addressed,
+                      byte-identical, deduplicated semantics. The bucket and credentials are
+                      resolved from S3 below; unset keeps the default node CAS.
+                    type: string
+                  s3:
+                    description: |-
+                      S3 configures the S3-compatible object-store backend that holds the
+                      workspace's revision artifacts when ObjectStorageRef selects it. Credentials
+                      are taken from a referenced Secret and are never logged.
+                    properties:
+                      accessKeyIdKey:
+                        description: |-
+                          AccessKeyIDKey is the Secret key holding the S3 access-key id. Defaults to
+                          "accessKeyId".
+                        type: string
+                      bucket:
+                        description: Bucket is the S3 bucket that holds the workspace's
+                          chunks and manifests.
+                        type: string
+                      credentialsSecretRef:
+                        description: |-
+                          CredentialsSecretRef names a Secret holding the S3 access-key id and
+                          secret-access-key used to authenticate to the bucket. The secret values are
+                          resolved at use time, passed to the S3 client only in memory, and never
+                          logged, never put in an error, and never written to a host path. The
+                          conventional keys are "accessKeyId" and "secretAccessKey" unless overridden
+                          by AccessKeyIDKey / SecretAccessKeyKey.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      endpoint:
+                        description: |-
+                          Endpoint is the S3 endpoint URL. Empty uses the AWS default for the region;
+                          set it for S3-compatible stores (MinIO, Ceph RGW, etc).
+                        type: string
+                      prefix:
+                        description: |-
+                          Prefix is an optional key prefix under which the chunks/ and manifests/
+                          object keys are written, so several workspaces can share one bucket without
+                          colliding. The content-addressed layout under the prefix is unchanged.
+                        type: string
+                      region:
+                        description: |-
+                          Region is the S3 region. Defaults to us-east-1 when unset (the path-style
+                          default many S3-compatible stores accept).
+                        type: string
+                      secretAccessKeyKey:
+                        description: |-
+                          SecretAccessKeyKey is the Secret key holding the S3 secret-access-key.
+                          Defaults to "secretAccessKey".
+                        type: string
+                    required:
+                    - bucket
+                    type: object
+                type: object
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              head:
+                description: |-
+                  Head is the name of the latest committed revision in the workspace's
+                  lineage. Empty until the first revision commits. Ordering is by revision
+                  creationTimestamp, then by name as a deterministic tiebreaker.
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              resumable:
+                description: |-
+                  Resumable reports whether the head revision pairs with a memory snapshot
+                  (its memorySnapshotRef is set), so a sandbox bound to the workspace can
+                  resume from the captured VM state rather than a cold start.
+                type: boolean
+              revisions:
+                description: Revisions is the number of committed revisions.
+                format: int32
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,443 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: mitos.v1.26.1
+  namespace: placeholder
+  annotations:
+    capabilities: Basic Install
+    categories: Application Runtime,Developer Tools
+    containerImage: ghcr.io/mitos-run/mitos-controller:v1.26.1
+    repository: https://github.com/mitos-run/mitos
+    support: mitos
+    createdAt: 2026-07-07T00:41:44Z
+    description: >-
+      Snapshot-fork microVM sandboxes for AI agents on Kubernetes. Mitos boots Firecracker microVMs, forks them via copy-on-write snapshots, and exposes the whole lifecycle through declarative CRDs.
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "mitos.run/v1",
+          "kind": "SandboxPool",
+          "metadata": {
+            "name": "python-agent-pool"
+          },
+          "spec": {
+            "template": {
+              "image": "python:3.12-slim",
+              "init": [
+                "pip install numpy pandas scikit-learn"
+              ],
+              "resources": {
+                "cpu": "2",
+                "memory": "2Gi"
+              },
+              "volumes": [
+                {
+                  "name": "datasets",
+                  "mountPath": "/data",
+                  "readOnly": true,
+                  "forkPolicy": "Share",
+                  "source": {
+                    "s3": {
+                      "bucket": "ml-datasets",
+                      "prefix": "/training",
+                      "region": "us-east-1"
+                    }
+                  }
+                },
+                {
+                  "name": "code",
+                  "mountPath": "/workspace",
+                  "size": "10Gi",
+                  "storageClass": "btrfs-csi",
+                  "forkPolicy": "Snapshot",
+                  "snapshotClass": "btrfs-snapshots",
+                  "source": {
+                    "git": {
+                      "repo": "https://github.com/org/agent-workspace",
+                      "branch": "main"
+                    }
+                  }
+                },
+                {
+                  "name": "state",
+                  "mountPath": "/state",
+                  "size": "2Gi",
+                  "forkPolicy": "Clone"
+                },
+                {
+                  "name": "scratch",
+                  "mountPath": "/tmp",
+                  "size": "1Gi",
+                  "forkPolicy": "Fresh"
+                }
+              ],
+              "network": {
+                "egress": "deny",
+                "allow": [
+                  "api.openai.com:443",
+                  "*.s3.amazonaws.com:443"
+                ]
+              }
+            },
+            "snapshots": {
+              "replicasPerNode": 10,
+              "snapshotAfter": "Ready",
+              "scaleDownAfterSnapshot": true
+            }
+          }
+        },
+        {
+          "apiVersion": "mitos.run/v1",
+          "kind": "Sandbox",
+          "metadata": {
+            "name": "agent-session-1"
+          },
+          "spec": {
+            "source": {
+              "poolRef": {
+                "name": "python-agent-pool"
+              }
+            },
+            "env": [
+              {
+                "name": "SESSION_ID",
+                "value": "abc-123"
+              }
+            ],
+            "secrets": [
+              {
+                "name": "openai-key",
+                "secretRef": {
+                  "name": "agent-secrets",
+                  "key": "OPENAI_API_KEY"
+                },
+                "envVar": "OPENAI_API_KEY"
+              }
+            ],
+            "lifetime": {
+              "ttl": "30m"
+            }
+          }
+        }
+      ]
+spec:
+  displayName: Mitos
+  description: |-
+    ## Mitos
+
+    Snapshot-fork microVM sandboxes for AI agents on Kubernetes. Mitos boots
+    Firecracker microVMs, forks them via copy-on-write snapshots, and exposes
+    the whole lifecycle through declarative custom resources in the API group
+    `mitos.run`.
+
+    Agent harnesses need fast, isolated environments where agents can read and
+    write files, install packages, and run untrusted code. Mitos gives each
+    agent an isolated, forkable computer: a Firecracker microVM that restores
+    from a memory snapshot, forks into parallel attempts via copy-on-write, and
+    can persist a durable workspace. You drive the whole lifecycle through
+    declarative CRDs on your own cluster.
+
+    ### What this operator installs
+
+    This operator deploys the Mitos **controller**, a Deployment that reconciles
+    the Mitos custom resources and selects nodes for sandbox placement. The
+    controller, once running, deploys and drives the per-node components it needs
+    (the privileged `forkd` DaemonSet and, on the husk pod-native default, warm
+    husk pods). Those node-level components are managed by the controller and are
+    not installed directly by OLM.
+
+    ### Custom resources
+
+    - **SandboxPool**: a warm pool built from an inline template (image, init
+      steps, resources, volumes, and an egress allowlist); pre-snapshots VMs
+      so a Sandbox activates in place.
+    - **Sandbox**: a single running sandbox instance. Created from a pool
+      snapshot (source.poolRef), forked from a live sandbox
+      (source.fromSandbox), or resumed from a WorkspaceRevision
+      (source.fromRevision).
+    - **Workspace** and **WorkspaceRevision**: durable, forkable workspace
+      state and its committed revisions.
+
+    ### Requirements (read before installing)
+
+    Mitos runs real virtual machines. It requires:
+
+    - Cluster nodes with **KVM / hardware virtualization** available to the
+      `forkd` DaemonSet (nested virtualization if running on a virtualized
+      platform).
+    - The ability to run a **privileged DaemonSet** that accesses `/dev/kvm` and
+      host paths on those nodes.
+    - Bare metal is the reference platform (Hetzner plus Talos). Managed control
+      planes and locked-down platforms may not permit the privilege and device
+      access Mitos needs; verify before relying on it.
+
+    The controller and the node images (`mitos-forkd`, `mitos-husk-stub`,
+    `mitos-kvm-device-plugin`, `mitos-facade`) are published as signed, multi-arch
+    images under `ghcr.io/mitos-run`.
+
+    Project website: https://mitos.run
+    Documentation: https://mitos.run/docs
+    Source: https://github.com/mitos-run/mitos
+  version: 1.26.1
+  maturity: alpha
+  minKubeVersion: 1.29.0
+  keywords:
+    - sandbox
+    - firecracker
+    - microvm
+    - snapshot
+    - fork
+    - ai-agents
+    - kvm
+    - operator
+  provider:
+    name: Mitos
+    url: https://mitos.run
+  maintainers:
+    - name: mitos maintainers
+      email: maintainers@mitos.run
+  links:
+    - name: Website
+      url: https://mitos.run
+    - name: Documentation
+      url: https://mitos.run/docs
+    - name: Source
+      url: https://github.com/mitos-run/mitos
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MjMuNjA3IiBoZWlnaHQ9IjUyMy42MDciIHZpZXdCb3g9IjAgMCA1MjMuNjA3IDUyMy42MDciPgogIDx0aXRsZT5taXRvcyBtYXJrPC90aXRsZT4KICA8ZGVzYz5Ud28gb3ZlcmxhcHBpbmcgY2lyY2xlczogYSBmaWxsZWQgZGlzYyBkaXZpZGluZyBpbnRvIGFuIG9wZW4gcmluZy4gR2VvbWV0cnkgZGVyaXZlZCBmcm9tIHRoZSBnb2xkZW4gcmF0aW8uPC9kZXNjPgogIDxjbGlwUGF0aCBpZD0ibGVmdERpc2MiPgogICAgPGNpcmNsZSBjeD0iMjAwIiBjeT0iMjYxLjgwMyIgcj0iMTAwIi8+CiAgPC9jbGlwUGF0aD4KICA8Y2lyY2xlIGN4PSIyMDAiIGN5PSIyNjEuODAzIiByPSIxMDAiIGZpbGw9IiMwMDAwMDAiLz4KICA8Y2lyY2xlIGN4PSIzMjMuNjA3IiBjeT0iMjYxLjgwMyIgcj0iMTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAwMDAiIHN0cm9rZS13aWR0aD0iMTQuNTkiLz4KICA8ZyBjbGlwLXBhdGg9InVybCgjbGVmdERpc2MpIj4KICAgIDxjaXJjbGUgY3g9IjMyMy42MDciIGN5PSIyNjEuODAzIiByPSIxMDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxNC41OSIvPgogIDwvZz4KPC9zdmc+Cg==
+      mediatype: image/svg+xml
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+  customresourcedefinitions:
+    owned:
+      - name: sandboxpools.mitos.run
+        kind: SandboxPool
+        version: v1
+        displayName: Sandbox Pool
+        description: >-
+          A warm pool of Firecracker microVM snapshots. Inlines the template (image, init steps, resources, volumes, network policy) and governs snapshot fan-out and the warm-pod autoscaler. Replaces the former SandboxTemplate and SandboxPool pair.
+      - name: sandboxes.mitos.run
+        kind: Sandbox
+        version: v1
+        displayName: Sandbox
+        description: >-
+          A single running sandbox instance. Source is a required oneof: poolRef (claim from a pool snapshot), fromSandbox (CoW fork of a live sandbox), or fromRevision (resume from a WorkspaceRevision). Replaces the former SandboxClaim and SandboxFork kinds.
+      - name: workspaces.mitos.run
+        kind: Workspace
+        version: v1
+        displayName: Workspace
+        description: >-
+          Durable, forkable workspace state. Tracks the head revision and the resumable set, and reconciles its owned WorkspaceRevisions under a retention policy.
+      - name: workspacerevisions.mitos.run
+        kind: WorkspaceRevision
+        version: v1
+        displayName: Workspace Revision
+        description: >-
+          A committed revision of a Workspace, owner-referenced by its Workspace; carries the diff summary and lineage for a dehydrated workspace state.
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: mitos-controller
+          rules:
+            - apiGroups:
+                - mitos.run
+              resources:
+                - sandboxes
+                - sandboxpools
+                - workspacerevisions
+                - workspaces
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - mitos.run
+              resources:
+                - sandboxes/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - mitos.run
+              resources:
+                - sandboxes/status
+                - sandboxpools/status
+                - workspacerevisions/status
+                - workspaces/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterroles
+              verbs:
+                - bind
+              resourceNames:
+                - mitos-pool-secrets
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - rolebindings
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - networkpolicies
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - watch
+      deployments:
+        - name: mitos-controller
+          label:
+            app.kubernetes.io/name: mitos
+            app.kubernetes.io/component: controller
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: mitos
+                app.kubernetes.io/component: controller
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: mitos
+                  app.kubernetes.io/component: controller
+              spec:
+                serviceAccountName: mitos-controller
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: controller
+                    image: ghcr.io/mitos-run/mitos-controller:v1.26.1
+                    args:
+                      - --metrics-bind-address=:8080
+                      - --health-probe-bind-address=:8081
+                      - --enable-husk-pods
+                      - --husk-stub-image=ghcr.io/mitos-run/mitos-husk-stub:v1.26.1
+                      - --husk-data-dir=/var/lib/mitos
+                    env:
+                      # Run the control plane (PKI bootstrap, forkd discovery) in
+                      # the namespace OLM installs the operator into, not the
+                      # hardcoded default. Without this the controller tries to
+                      # create its CA Secret in a "mitos" namespace that does not
+                      # exist under OLM and crash-loops.
+                      - name: FORKD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                    ports:
+                      - name: metrics
+                        containerPort: 8080
+                      - name: health
+                        containerPort: 8081
+                    resources:
+                      requests:
+                        memory: "128Mi"
+                        cpu: "100m"
+                      limits:
+                        memory: "512Mi"
+                        cpu: "500m"
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - ALL
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: health
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: health
+                      initialDelaySeconds: 15
+                      periodSeconds: 20

@@ -1,0 +1,1506 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.0
+  name: attunepolicies.attune.io
+spec:
+  group: attune.io
+  names:
+    categories:
+    - attune
+    kind: AttunePolicy
+    listKind: AttunePolicyList
+    plural: attunepolicies
+    shortNames:
+    - ap
+    singular: attunepolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.updateStrategy.type
+      name: Type
+      type: string
+    - jsonPath: .status.workloads.discovered
+      name: Workloads
+      type: integer
+    - jsonPath: .status.workloads.withRecommendations
+      name: Recs
+      type: integer
+    - jsonPath: .status.workloads.resized
+      name: Resized
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.savings.cpuRequestReduction
+      name: CPU Saved
+      priority: 1
+      type: string
+    - jsonPath: .status.savings.memoryRequestReduction
+      name: Mem Saved
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AttunePolicy is the Schema for the attunepolicies API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AttunePolicySpec defines the desired state of AttunePolicy.
+            properties:
+              cpu:
+                description: CPU configures CPU resource recommendations.
+                properties:
+                  allowDecrease:
+                    description: |-
+                      AllowDecrease controls whether the resource value can be decreased.
+                      For CPU: nil defaults to true (decreases allowed, throttle detected by safety monitor).
+                      For memory: nil defaults to false (decreases blocked to prevent OOMKill).
+                    type: boolean
+                  burstSensitivity:
+                    description: |-
+                      BurstSensitivity controls how much burst detection inflates the
+                      recommendation. Expressed as a decimal string multiplied by
+                      log2(burstMagnitude). Default "0.1" gives ~20% boost for magnitude 4,
+                      ~30% for 8, ~40% for 16. Set "0" to disable burst boost entirely
+                      (e.g. for batch jobs). Must be >= 0, max 1.0.
+                    type: string
+                  controlledValues:
+                    description: |-
+                      ControlledValues specifies which resource values to manage.
+                      "RequestsOnly" (default) adjusts only requests, leaving limits unchanged.
+                      "RequestsAndLimits" adjusts both requests and limits in lockstep.
+                      For Guaranteed-QoS pods (where requests equal limits), use
+                      "RequestsAndLimits" or resizes will be skipped to preserve QoS class.
+                    enum:
+                    - RequestsOnly
+                    - RequestsAndLimits
+                    type: string
+                  maxAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MaxAllowed is the maximum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxChangePercent:
+                    description: |-
+                      MaxChangePercent is the maximum allowed change percentage per
+                      reconcile cycle for this resource (both directions). Limits how
+                      aggressively the recommendation can deviate from the current value
+                      in a single step, forcing gradual convergence. Overridden by
+                      MaxIncreasePercent/MaxDecreasePercent if those are set.
+                      Defaults to 50 for CPU, 30 for memory.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxDecreasePercent:
+                    description: |-
+                      MaxDecreasePercent is the maximum allowed decrease percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for downward
+                      changes. Memory decreases are riskier (OOM), so a lower cap is
+                      recommended. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxIncreasePercent:
+                    description: |-
+                      MaxIncreasePercent is the maximum allowed increase percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for upward
+                      changes. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  memoryFromCpuRatio:
+                    description: |-
+                      MemoryFromCPURatio derives memory recommendations from CPU recommendations
+                      using a fixed ratio, instead of using Prometheus memory metrics. Useful for
+                      JVM, Go, and .NET workloads where heap scales linearly with CPU allocation
+                      and Prometheus memory metrics are unreliable (JVM reserves heap upfront,
+                      Go GC targets a fixed percentage of available memory).
+                      Example: "2.0" means memory = 2x the CPU recommendation in bytes
+                      (e.g., 500m CPU -> 1Gi memory). The derived value still passes through
+                      minAllowed, maxAllowed, and maxChangePercent bounds.
+                      Only valid on the memory ResourceConfig; ignored on CPU.
+                    type: string
+                  minAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MinAllowed is the minimum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  overhead:
+                    description: |-
+                      Overhead is the percentage of additional resources added on top of the
+                      percentile recommendation. Expressed as a string (e.g. "20" means 20%
+                      extra headroom above the target percentile). Must be >= 0, max 900.
+                      Defaults to "20" for CPU and "30" for memory.
+                    pattern: ^([0-9]+(\.[0-9]+)?)?$
+                    type: string
+                  percentile:
+                    description: |-
+                      Percentile is the usage percentile to target for recommendations.
+                      Supported values: 50, 90, 95, 99. Omit or set to 0 to use the default
+                      (95 for CPU, 99 for memory).
+                    enum:
+                    - 0
+                    - 50
+                    - 90
+                    - 95
+                    - 99
+                    format: int32
+                    type: integer
+                  startupBoost:
+                    description: |-
+                      StartupBoost temporarily increases CPU requests for newly created or
+                      restarted pods to accelerate JVM/.NET class loading, JIT compilation,
+                      and cache warming. After the duration expires (or the container reaches
+                      Ready), the CPU is reduced to the steady-state recommendation.
+                      Only applies to CPU resources.
+                    properties:
+                      duration:
+                        description: |-
+                          Duration is the maximum time the boost remains active after pod
+                          creation or container restart. The boost is removed when the
+                          container reaches Ready or this duration expires, whichever comes first.
+                          Must be >= 10s and <= 1h.
+                        type: string
+                      multiplier:
+                        description: |-
+                          Multiplier scales the recommended CPU request during startup.
+                          For example, "3.0" means 3x the steady-state recommendation.
+                          Must be > 1.0 and <= 10.0.
+                        type: string
+                    required:
+                    - duration
+                    - multiplier
+                    type: object
+                type: object
+              excludedContainers:
+                description: |-
+                  ExcludedContainers is a list of container names to skip when computing
+                  recommendations and performing resizes. Use this for sidecar containers
+                  (e.g., istio-proxy, linkerd-proxy) that are managed by a service mesh
+                  and should not be right-sized.
+                items:
+                  type: string
+                maxItems: 100
+                type: array
+              memory:
+                description: Memory configures memory resource recommendations.
+                properties:
+                  allowDecrease:
+                    description: |-
+                      AllowDecrease controls whether the resource value can be decreased.
+                      For CPU: nil defaults to true (decreases allowed, throttle detected by safety monitor).
+                      For memory: nil defaults to false (decreases blocked to prevent OOMKill).
+                    type: boolean
+                  burstSensitivity:
+                    description: |-
+                      BurstSensitivity controls how much burst detection inflates the
+                      recommendation. Expressed as a decimal string multiplied by
+                      log2(burstMagnitude). Default "0.1" gives ~20% boost for magnitude 4,
+                      ~30% for 8, ~40% for 16. Set "0" to disable burst boost entirely
+                      (e.g. for batch jobs). Must be >= 0, max 1.0.
+                    type: string
+                  controlledValues:
+                    description: |-
+                      ControlledValues specifies which resource values to manage.
+                      "RequestsOnly" (default) adjusts only requests, leaving limits unchanged.
+                      "RequestsAndLimits" adjusts both requests and limits in lockstep.
+                      For Guaranteed-QoS pods (where requests equal limits), use
+                      "RequestsAndLimits" or resizes will be skipped to preserve QoS class.
+                    enum:
+                    - RequestsOnly
+                    - RequestsAndLimits
+                    type: string
+                  maxAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MaxAllowed is the maximum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxChangePercent:
+                    description: |-
+                      MaxChangePercent is the maximum allowed change percentage per
+                      reconcile cycle for this resource (both directions). Limits how
+                      aggressively the recommendation can deviate from the current value
+                      in a single step, forcing gradual convergence. Overridden by
+                      MaxIncreasePercent/MaxDecreasePercent if those are set.
+                      Defaults to 50 for CPU, 30 for memory.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxDecreasePercent:
+                    description: |-
+                      MaxDecreasePercent is the maximum allowed decrease percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for downward
+                      changes. Memory decreases are riskier (OOM), so a lower cap is
+                      recommended. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxIncreasePercent:
+                    description: |-
+                      MaxIncreasePercent is the maximum allowed increase percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for upward
+                      changes. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  memoryFromCpuRatio:
+                    description: |-
+                      MemoryFromCPURatio derives memory recommendations from CPU recommendations
+                      using a fixed ratio, instead of using Prometheus memory metrics. Useful for
+                      JVM, Go, and .NET workloads where heap scales linearly with CPU allocation
+                      and Prometheus memory metrics are unreliable (JVM reserves heap upfront,
+                      Go GC targets a fixed percentage of available memory).
+                      Example: "2.0" means memory = 2x the CPU recommendation in bytes
+                      (e.g., 500m CPU -> 1Gi memory). The derived value still passes through
+                      minAllowed, maxAllowed, and maxChangePercent bounds.
+                      Only valid on the memory ResourceConfig; ignored on CPU.
+                    type: string
+                  minAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MinAllowed is the minimum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  overhead:
+                    description: |-
+                      Overhead is the percentage of additional resources added on top of the
+                      percentile recommendation. Expressed as a string (e.g. "20" means 20%
+                      extra headroom above the target percentile). Must be >= 0, max 900.
+                      Defaults to "20" for CPU and "30" for memory.
+                    pattern: ^([0-9]+(\.[0-9]+)?)?$
+                    type: string
+                  percentile:
+                    description: |-
+                      Percentile is the usage percentile to target for recommendations.
+                      Supported values: 50, 90, 95, 99. Omit or set to 0 to use the default
+                      (95 for CPU, 99 for memory).
+                    enum:
+                    - 0
+                    - 50
+                    - 90
+                    - 95
+                    - 99
+                    format: int32
+                    type: integer
+                  startupBoost:
+                    description: |-
+                      StartupBoost temporarily increases CPU requests for newly created or
+                      restarted pods to accelerate JVM/.NET class loading, JIT compilation,
+                      and cache warming. After the duration expires (or the container reaches
+                      Ready), the CPU is reduced to the steady-state recommendation.
+                      Only applies to CPU resources.
+                    properties:
+                      duration:
+                        description: |-
+                          Duration is the maximum time the boost remains active after pod
+                          creation or container restart. The boost is removed when the
+                          container reaches Ready or this duration expires, whichever comes first.
+                          Must be >= 10s and <= 1h.
+                        type: string
+                      multiplier:
+                        description: |-
+                          Multiplier scales the recommended CPU request during startup.
+                          For example, "3.0" means 3x the steady-state recommendation.
+                          Must be > 1.0 and <= 10.0.
+                        type: string
+                    required:
+                    - duration
+                    - multiplier
+                    type: object
+                type: object
+              metricsSource:
+                description: MetricsSource configures where and how to collect metrics.
+                properties:
+                  cloudwatch:
+                    description: CloudWatch configures an Amazon CloudWatch Container
+                      Insights metrics source.
+                    properties:
+                      clusterName:
+                        description: |-
+                          ClusterName is the EKS cluster name for Container Insights metrics.
+                          Required for metric filtering.
+                        type: string
+                      region:
+                        description: Region is the AWS region (e.g. "us-east-1").
+                          Required.
+                        type: string
+                      roleArn:
+                        description: |-
+                          RoleARN is an optional IAM role ARN to assume for cross-account access.
+                          If not set, uses the pod's service account IAM role (IRSA/Pod Identity).
+                        type: string
+                    required:
+                    - clusterName
+                    - region
+                    type: object
+                  datadog:
+                    description: Datadog configures a Datadog metrics source.
+                    properties:
+                      apiKeySecretRef:
+                        description: |-
+                          APIKeySecretRef references a Secret containing the Datadog API key.
+                          The Secret must contain an "api-key" key and optionally an "app-key" key.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      site:
+                        default: datadoghq.com
+                        description: |-
+                          Site is the Datadog site (e.g. "datadoghq.com", "datadoghq.eu", "us5.datadoghq.com").
+                          Defaults to "datadoghq.com".
+                        type: string
+                    required:
+                    - apiKeySecretRef
+                    type: object
+                  historyWindow:
+                    description: |-
+                      HistoryWindow is the time window for historical metrics data.
+                      Defaults to 7d (168h) if not specified.
+                    type: string
+                  minimumDataPoints:
+                    description: |-
+                      MinimumDataPoints is the minimum number of data points required
+                      before generating recommendations. Minimum 1, default 48 samples.
+                      With the default queryStep of 5m, 48 samples is about 4 hours of data.
+                      Defaults to 48 if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  prometheus:
+                    description: Prometheus configures a Prometheus metrics source.
+                    properties:
+                      address:
+                        description: Address is the URL of the Prometheus-compatible
+                          query endpoint.
+                        type: string
+                      bearerTokenSecret:
+                        description: |-
+                          BearerTokenSecret references a Kubernetes Secret containing a bearer
+                          token for authenticating with managed Prometheus services.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      headers:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Headers are custom HTTP headers added to every query request.
+                          Use for non-secret tenant or routing headers (e.g. "X-Scope-OrgID"
+                          for Mimir). Do not put credentials here; use BearerTokenSecret for
+                          authentication tokens.
+                        type: object
+                      queryParameters:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          QueryParameters are appended to every query request URL.
+                          Use for backend-specific settings such as Thanos deduplication
+                          (e.g. {"dedup": "true", "partial_response": "true"}). Reserved
+                          query keys controlled by the operator (`query`, `start`, `end`, `step`,
+                          `time`, `timeout`) are rejected.
+                        type: object
+                      tls:
+                        description: TLS configures TLS settings for the connection.
+                        properties:
+                          insecureSkipVerify:
+                            description: |-
+                              InsecureSkipVerify disables TLS certificate verification.
+                              Use only for self-signed certificates in development.
+                            type: boolean
+                        type: object
+                    required:
+                    - address
+                    type: object
+                  queryStep:
+                    description: |-
+                      QueryStep is the step interval for Prometheus range queries and ETA
+                      calculations. Should match your Prometheus scrape interval for
+                      accurate time estimates. Minimum 10s, maximum 1h. Default 5m.
+                    type: string
+                  rateWindow:
+                    description: |-
+                      RateWindow is the window used in the PromQL rate() function for CPU
+                      queries. Defaults to queryStep if not set. Must be >= 30s and <= historyWindow.
+                      Advanced users may set this independently to control CPU rate smoothing
+                      (e.g. a short rateWindow for responsive tracking with a longer queryStep).
+                    type: string
+                  vpa:
+                    description: VPA configures consumption of existing VerticalPodAutoscaler
+                      recommendations.
+                    properties:
+                      name:
+                        description: Name is the name of the VerticalPodAutoscaler
+                          object.
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the VPA. Defaults
+                          to the policy's namespace.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              paused:
+                description: |-
+                  Paused stops the operator from reconciling this policy. Metrics
+                  collection, recommendations, and resizes are all halted. Existing
+                  resizes are not reverted. Use this during maintenance windows or
+                  when debugging unexpected behavior. The operator sets Ready=False
+                  with reason=Paused while this field is true.
+                type: boolean
+              targetRef:
+                description: TargetRef identifies the workload(s) to be attuned.
+                properties:
+                  kind:
+                    description: Kind is the kind of the target resource.
+                    enum:
+                    - Deployment
+                    - StatefulSet
+                    - DaemonSet
+                    - CronJob
+                    - Job
+                    - ReplicaSet
+                    type: string
+                  name:
+                    description: Name is the name of a specific target resource.
+                    type: string
+                  selector:
+                    description: Selector selects target resources by labels.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - kind
+                type: object
+              updateStrategy:
+                description: UpdateStrategy configures how and when to apply resource
+                  changes.
+                properties:
+                  autoRevert:
+                    description: |-
+                      AutoRevert automatically reverts changes if degradation is detected.
+                      Defaults to true if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    type: boolean
+                  canary:
+                    description: Canary configures canary rollout behavior when Type
+                      is Canary.
+                    properties:
+                      autoPromote:
+                        description: |-
+                          AutoPromote controls whether the operator automatically promotes the
+                          resize to all pods after the observation period passes without safety
+                          violations. When false (default), the user must manually switch the
+                          mode to Auto to resize the remaining pods.
+                        type: boolean
+                      observationPeriod:
+                        description: ObservationPeriod is how long to observe canary
+                          pods before proceeding.
+                        type: string
+                      percentage:
+                        description: Percentage is the percentage of pods to resize
+                          first.
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    required:
+                    - observationPeriod
+                    - percentage
+                    type: object
+                  cooldown:
+                    description: |-
+                      Cooldown is the minimum time between successive resize operations.
+                      Defaults to 1h if not specified.
+                    type: string
+                  export:
+                    description: |-
+                      Export configures how recommendations are exported for external
+                      consumption (e.g. GitOps workflows with ArgoCD or Flux).
+                    properties:
+                      configMap:
+                        description: ConfigMap enables exporting recommendations to
+                          ConfigMaps.
+                        type: boolean
+                    type: object
+                  initialSizing:
+                    description: |-
+                      InitialSizing enables a mutating admission webhook that sets resource
+                      requests/limits on new pods at creation time, based on existing
+                      recommendations. This eliminates the "deploy with bad defaults, wait
+                      for first reconcile" gap. Requires the namespace label
+                      attune.io/initial-sizing=enabled. Defaults to false.
+                    type: boolean
+                  maxConcurrentResizes:
+                    default: 1
+                    description: |-
+                      MaxConcurrentResizes is the maximum number of pods to resize
+                      concurrently within a single reconcile cycle. Default: 1 (serial).
+                    format: int32
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                  maxTotalCpuIncrease:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxTotalCPUIncrease is the maximum aggregate CPU increase allowed
+                      across all pods in a single reconcile cycle (e.g. "2000m", "4").
+                      Once exhausted, remaining pods are deferred to the next cycle.
+                      Decreases do not consume budget. Default: unlimited.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxTotalMemoryIncrease:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxTotalMemoryIncrease is the maximum aggregate memory increase
+                      allowed across all pods in a single reconcile cycle (e.g. "4Gi").
+                      Once exhausted, remaining pods are deferred to the next cycle.
+                      Decreases do not consume budget. Default: unlimited.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  resizeMethod:
+                    description: |-
+                      ResizeMethod controls what happens when an in-place resize fails.
+                        InPlaceOnly (default): skip the pod and retry next cycle.
+                        InPlaceOrRecreate: fall back to pod eviction if in-place resize
+                        fails or is marked Infeasible by kubelet. The owning controller
+                        recreates the pod with updated resources. Evictions respect
+                        PodDisruptionBudgets and never evict the last replica.
+                      Defaults to InPlaceOnly if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    enum:
+                    - InPlaceOnly
+                    - InPlaceOrRecreate
+                    type: string
+                  safetyObservationPeriod:
+                    description: |-
+                      SafetyObservationPeriod is how long to observe a pod after resize before
+                      concluding the resize is safe. Applies to all modes (Auto, OneShot, Canary).
+                      Takes precedence over canary.observationPeriod when set. Must be >= 1m.
+                      Defaults to 5m if neither this nor canary.observationPeriod is set.
+                    type: string
+                  schedule:
+                    description: |-
+                      Schedule restricts when resize operations can occur. Recommendations
+                      are always computed; only resize execution is gated. If omitted,
+                      resizes can occur at any time (current behavior).
+                    properties:
+                      daysOfWeek:
+                        description: |-
+                          DaysOfWeek restricts resizes to specific days. Values: Monday through Sunday.
+                          If omitted, all days are allowed.
+                        items:
+                          enum:
+                          - Monday
+                          - Tuesday
+                          - Wednesday
+                          - Thursday
+                          - Friday
+                          - Saturday
+                          - Sunday
+                          type: string
+                        type: array
+                      timezone:
+                        default: UTC
+                        description: |-
+                          Timezone for interpreting window start/end times. Must be a valid
+                          IANA timezone name (e.g. "America/New_York"). Default: "UTC".
+                        type: string
+                      windows:
+                        description: |-
+                          Windows defines time-of-day ranges when resizes are allowed.
+                          If multiple windows are specified, resizes are allowed during any of them.
+                        items:
+                          description: TimeWindow defines a daily time range.
+                          properties:
+                            end:
+                              description: |-
+                                End time in HH:MM format (24-hour). If end < start, the window
+                                wraps past midnight (e.g. start=22:00, end=06:00).
+                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              type: string
+                            start:
+                              description: Start time in HH:MM format (24-hour).
+                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              type: string
+                          required:
+                          - end
+                          - start
+                          type: object
+                        type: array
+                    type: object
+                  sloGuardrails:
+                    description: |-
+                      SLOGuardrails defines application-level SLO metrics to check after
+                      a resize. If any metric breaches its threshold during the safety
+                      observation period, the resize is automatically reverted.
+                      Requires a Prometheus-compatible metrics source.
+                    items:
+                      description: |-
+                        SLOGuardrail defines an application-level metric that is checked after
+                        a resize to detect degradation. If the metric breaches the threshold,
+                        the safety monitor triggers an automatic revert.
+                      properties:
+                        comparison:
+                          default: above
+                          description: Comparison is "above" or "below". "above" reverts
+                            when value > threshold.
+                          enum:
+                          - above
+                          - below
+                          type: string
+                        evaluationWindow:
+                          description: EvaluationWindow is how long after resize to
+                            check. Defaults to 5m.
+                          type: string
+                        name:
+                          description: Name identifies this guardrail for logging
+                            and status reporting.
+                          type: string
+                        query:
+                          description: |-
+                            Query is a PromQL query that returns a scalar value.
+                            Template variables: {{ .Namespace }}, {{ .WorkloadName }}, {{ .PodName }}
+                          type: string
+                        threshold:
+                          description: Threshold is the value that triggers a revert.
+                          type: string
+                      required:
+                      - name
+                      - query
+                      - threshold
+                      type: object
+                    maxItems: 10
+                    type: array
+                  type:
+                    description: |-
+                      Mode determines the update behavior, graduated from safe to automated:
+                        Recommend: collects metrics and writes recommendations to status, no pod changes.
+                        OneShot: resizes one pod per reconcile cycle.
+                        Canary: resizes a percentage of pods first, then the rest after observation.
+                        Auto: resizes all eligible pods each cycle.
+                        Observe: collects metrics and tracks data points but does not surface recommendations or savings.
+                      Start with Recommend in production and promote after reviewing status.
+                      Defaults to Recommend if not set (applied by the controller, not the webhook,
+                      so that AttuneDefaults cluster configuration can override it).
+                    enum:
+                    - Observe
+                    - Recommend
+                    - OneShot
+                    - Canary
+                    - Auto
+                    type: string
+                type: object
+              weight:
+                default: 100
+                description: |-
+                  Weight determines the priority of this policy when multiple policies
+                  match the same workload. Higher values take precedence.
+                format: int32
+                maximum: 1000
+                minimum: 1
+                type: integer
+            required:
+            - cpu
+            - memory
+            - metricsSource
+            - targetRef
+            type: object
+          status:
+            description: AttunePolicyStatus defines the observed state of AttunePolicy.
+            properties:
+              canary:
+                description: Canary tracks the canary rollout phase when autoPromote
+                  is enabled.
+                properties:
+                  observedGeneration:
+                    description: |-
+                      ObservedGeneration is the policy generation when this canary cycle
+                      started. If the policy spec changes (generation increments), the
+                      canary observation resets so the new configuration is re-validated.
+                    format: int64
+                    type: integer
+                  phase:
+                    description: |-
+                      Phase indicates the current canary state.
+                      CanaryInProgress: canary pods resized, observing for safety violations.
+                      FullRollout: observation passed with no violations, all pods are being resized.
+                    type: string
+                  pods:
+                    description: |-
+                      Pods lists the names of pods selected for the canary subset.
+                      Populated when Mode is Canary and pods have been resized.
+                    items:
+                      type: string
+                    maxItems: 100
+                    type: array
+                  startTime:
+                    description: StartTime is when the canary subset was first resized.
+                    format: date-time
+                    type: string
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the policy's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              cooldown:
+                description: Cooldown exposes the effective cooldown including exponential
+                  backoff.
+                properties:
+                  backoffMultiplier:
+                    description: BackoffMultiplier is the current backoff multiplier
+                      (1, 2, 4, 8, or 16).
+                    format: int32
+                    type: integer
+                  consecutiveReverts:
+                    description: ConsecutiveReverts is the number of consecutive reverts
+                      driving the backoff.
+                    format: int32
+                    type: integer
+                  effectiveCooldown:
+                    description: EffectiveCooldown is the current cooldown duration
+                      including backoff.
+                    type: string
+                type: object
+              lastReconcileTime:
+                description: |-
+                  LastReconcileTime is the timestamp of the most recent reconciliation.
+                  Serves as a heartbeat to confirm the operator is actively evaluating
+                  this policy, even when no state changes occur.
+                format: date-time
+                type: string
+              recommendations:
+                description: Recommendations contains per-workload resource recommendations.
+                items:
+                  description: WorkloadRecommendation contains recommendations for
+                    a single workload.
+                  properties:
+                    containers:
+                      description: Containers contains per-container recommendations.
+                      items:
+                        description: ContainerRecommendation contains recommendations
+                          for a single container.
+                        properties:
+                          confidence:
+                            description: Confidence is the confidence score of the
+                              recommendation (0-1).
+                            type: number
+                          current:
+                            description: Current contains the current resource values.
+                            properties:
+                              cpuLimit:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPULimit is the CPU limit value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              cpuRequest:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPURequest is the CPU request value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memoryLimit:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: MemoryLimit is the memory limit value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memoryRequest:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: MemoryRequest is the memory request value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                            required:
+                            - cpuLimit
+                            - cpuRequest
+                            - memoryLimit
+                            - memoryRequest
+                            type: object
+                          dataPoints:
+                            description: DataPoints is the number of data points used
+                              to generate the recommendation.
+                            format: int32
+                            type: integer
+                          explanation:
+                            description: Explanation contains the reasoning chain
+                              behind the recommendation.
+                            properties:
+                              cpu:
+                                description: CPU contains the CPU recommendation reasoning.
+                                properties:
+                                  afterBounds:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterBounds is the value after bounds
+                                      clamping.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterBurst:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterBurst is the value after applying
+                                      the burst factor.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterChangeFilter:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterChangeFilter is the value after
+                                      change filtering.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterConfidence:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterConfidence is the value after
+                                      applying the confidence adjustment.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterOverhead:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterOverhead is the value after
+                                      applying the overhead.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  bounds:
+                                    description: Bounds are the configured minimum
+                                      and maximum limits.
+                                    properties:
+                                      max:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        description: Max is the maximum allowed resource
+                                          value.
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      min:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        description: Min is the minimum allowed resource
+                                          value.
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                    required:
+                                    - max
+                                    - min
+                                    type: object
+                                  boundsApplied:
+                                    description: BoundsApplied indicates whether the
+                                      value was clamped to min, max, or neither.
+                                    type: string
+                                  burstFactor:
+                                    description: |-
+                                      BurstFactor is the multiplier applied when burst is detected (max > 3x p95).
+                                      1.0 when no burst. Uses logarithmic scaling to avoid excessive inflation.
+                                    type: number
+                                  changeFilterApplied:
+                                    description: ChangeFilterApplied indicates whether
+                                      the result was filtered or capped.
+                                    type: string
+                                  confidence:
+                                    description: Confidence is the profile confidence
+                                      score used for adjustment.
+                                    type: number
+                                  confidenceFactor:
+                                    description: ConfidenceFactor is the multiplier
+                                      derived from the confidence score.
+                                    type: number
+                                  final:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Final is the final resource recommendation
+                                      after any post-processing.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  finalAdjustment:
+                                    description: FinalAdjustment describes any controller-level
+                                      adjustment after the estimator chain.
+                                    type: string
+                                  maxChangePercent:
+                                    description: MaxChangePercent is the maximum allowed
+                                      change threshold.
+                                    type: number
+                                  minChangePercent:
+                                    description: MinChangePercent is the minimum change
+                                      threshold required to alter the current value.
+                                    type: number
+                                  overhead:
+                                    description: Overhead is the configured overhead
+                                      percentage applied to the raw percentile.
+                                    type: number
+                                  rawPercentile:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: RawPercentile is the selected percentile
+                                      before any adjustments.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                required:
+                                - afterBounds
+                                - afterChangeFilter
+                                - afterConfidence
+                                - afterOverhead
+                                - bounds
+                                - confidence
+                                - confidenceFactor
+                                - final
+                                - maxChangePercent
+                                - minChangePercent
+                                - overhead
+                                - rawPercentile
+                                type: object
+                              memory:
+                                description: Memory contains the memory recommendation
+                                  reasoning.
+                                properties:
+                                  afterBounds:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterBounds is the value after bounds
+                                      clamping.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterBurst:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterBurst is the value after applying
+                                      the burst factor.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterChangeFilter:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterChangeFilter is the value after
+                                      change filtering.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterConfidence:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterConfidence is the value after
+                                      applying the confidence adjustment.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  afterOverhead:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: AfterOverhead is the value after
+                                      applying the overhead.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  bounds:
+                                    description: Bounds are the configured minimum
+                                      and maximum limits.
+                                    properties:
+                                      max:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        description: Max is the maximum allowed resource
+                                          value.
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      min:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        description: Min is the minimum allowed resource
+                                          value.
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                    required:
+                                    - max
+                                    - min
+                                    type: object
+                                  boundsApplied:
+                                    description: BoundsApplied indicates whether the
+                                      value was clamped to min, max, or neither.
+                                    type: string
+                                  burstFactor:
+                                    description: |-
+                                      BurstFactor is the multiplier applied when burst is detected (max > 3x p95).
+                                      1.0 when no burst. Uses logarithmic scaling to avoid excessive inflation.
+                                    type: number
+                                  changeFilterApplied:
+                                    description: ChangeFilterApplied indicates whether
+                                      the result was filtered or capped.
+                                    type: string
+                                  confidence:
+                                    description: Confidence is the profile confidence
+                                      score used for adjustment.
+                                    type: number
+                                  confidenceFactor:
+                                    description: ConfidenceFactor is the multiplier
+                                      derived from the confidence score.
+                                    type: number
+                                  final:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: Final is the final resource recommendation
+                                      after any post-processing.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  finalAdjustment:
+                                    description: FinalAdjustment describes any controller-level
+                                      adjustment after the estimator chain.
+                                    type: string
+                                  maxChangePercent:
+                                    description: MaxChangePercent is the maximum allowed
+                                      change threshold.
+                                    type: number
+                                  minChangePercent:
+                                    description: MinChangePercent is the minimum change
+                                      threshold required to alter the current value.
+                                    type: number
+                                  overhead:
+                                    description: Overhead is the configured overhead
+                                      percentage applied to the raw percentile.
+                                    type: number
+                                  rawPercentile:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: RawPercentile is the selected percentile
+                                      before any adjustments.
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                required:
+                                - afterBounds
+                                - afterChangeFilter
+                                - afterConfidence
+                                - afterOverhead
+                                - bounds
+                                - confidence
+                                - confidenceFactor
+                                - final
+                                - maxChangePercent
+                                - minChangePercent
+                                - overhead
+                                - rawPercentile
+                                type: object
+                            type: object
+                          lastUpdated:
+                            description: LastUpdated is the timestamp of the last
+                              recommendation update.
+                            format: date-time
+                            type: string
+                          name:
+                            description: Name is the container name.
+                            type: string
+                          recommended:
+                            description: Recommended contains the recommended resource
+                              values.
+                            properties:
+                              cpuLimit:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPULimit is the CPU limit value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              cpuRequest:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: CPURequest is the CPU request value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memoryLimit:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: MemoryLimit is the memory limit value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              memoryRequest:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: MemoryRequest is the memory request value.
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                            required:
+                            - cpuLimit
+                            - cpuRequest
+                            - memoryLimit
+                            - memoryRequest
+                            type: object
+                        required:
+                        - confidence
+                        - current
+                        - dataPoints
+                        - lastUpdated
+                        - name
+                        - recommended
+                        type: object
+                      type: array
+                    kind:
+                      description: Kind is the kind of the workload (e.g. Deployment,
+                        StatefulSet).
+                      type: string
+                    lastDataTime:
+                      description: |-
+                        LastDataTime is the timestamp when Prometheus last returned non-empty
+                        data for this workload. Used for staleness detection.
+                      format: date-time
+                      type: string
+                    stale:
+                      description: |-
+                        Stale indicates the recommendation is based on cached data because
+                        Prometheus did not return fresh data during the most recent query.
+                        Resizes are not executed with stale recommendations.
+                      type: boolean
+                    workload:
+                      description: Workload is the name of the workload.
+                      type: string
+                  required:
+                  - containers
+                  - kind
+                  - workload
+                  type: object
+                maxItems: 500
+                type: array
+              resizeHistory:
+                description: ResizeHistory records past resize operations.
+                items:
+                  description: ResizeHistoryEntry records a single resize operation.
+                  properties:
+                    container:
+                      description: Container is the name of the resized container.
+                      type: string
+                    from:
+                      description: From is the previous resource value.
+                      type: string
+                    method:
+                      description: Method is the resize method used.
+                      enum:
+                      - InPlace
+                      - Eviction
+                      type: string
+                    reason:
+                      description: |-
+                        Reason explains why the resize was reverted or failed.
+                        Only populated when Result is Reverted or Failed.
+                        Values include: oomkill, restart, notready, throttle,
+                        annotation-conflict, immediate-safety-check, slo:<name>.
+                      type: string
+                    resource:
+                      description: Resource is the resource type that was resized.
+                      enum:
+                      - cpu
+                      - memory
+                      - cpu+memory
+                      type: string
+                    result:
+                      description: Result is the outcome of the resize operation.
+                      enum:
+                      - Success
+                      - Failed
+                      - Reverted
+                      - Evicted
+                      type: string
+                    timestamp:
+                      description: Timestamp is when the resize operation occurred.
+                      format: date-time
+                      type: string
+                    to:
+                      description: To is the new resource value.
+                      type: string
+                    workload:
+                      description: Workload is the name of the resized workload.
+                      type: string
+                  required:
+                  - container
+                  - from
+                  - method
+                  - resource
+                  - result
+                  - timestamp
+                  - to
+                  - workload
+                  type: object
+                maxItems: 50
+                type: array
+              savings:
+                description: Savings summarizes estimated resource savings.
+                properties:
+                  cpuRequestIncrease:
+                    description: |-
+                      CPURequestIncrease is the total CPU request increase for under-provisioned
+                      workloads (e.g. "500m"). Empty when all recommendations are decreases.
+                    type: string
+                  cpuRequestReduction:
+                    description: CPURequestReduction is the total CPU request reduction
+                      (e.g. "200m").
+                    type: string
+                  cpuRequestTotal:
+                    description: CPURequestTotal is the total current CPU requests
+                      across all workloads (e.g. "2000m").
+                    type: string
+                  estimatedMonthlyCostIncrease:
+                    description: |-
+                      EstimatedMonthlyCostIncrease is the estimated monthly cost increase for
+                      under-provisioned workloads based on configured or default pricing (e.g. "$5.00").
+                    type: string
+                  estimatedMonthlySavings:
+                    description: |-
+                      EstimatedMonthlySavings is the estimated monthly cost savings based on
+                      configured or default pricing (e.g. "$12.50").
+                    type: string
+                  memoryRequestIncrease:
+                    description: |-
+                      MemoryRequestIncrease is the total memory request increase for under-provisioned
+                      workloads (e.g. "512Mi"). Empty when all recommendations are decreases.
+                    type: string
+                  memoryRequestReduction:
+                    description: MemoryRequestReduction is the total memory request
+                      reduction (e.g. "256Mi").
+                    type: string
+                  memoryRequestTotal:
+                    description: MemoryRequestTotal is the total current memory requests
+                      across all workloads (e.g. "2Gi").
+                    type: string
+                type: object
+              workloadErrors:
+                description: |-
+                  WorkloadErrors records per-workload errors from the most recent
+                  reconcile cycle. Capped at 10 entries to limit status size.
+                items:
+                  description: WorkloadError records an error encountered while processing
+                    a specific workload.
+                  properties:
+                    error:
+                      description: Error is a human-readable description of the error.
+                      type: string
+                    workload:
+                      description: Workload is the name of the affected workload.
+                      type: string
+                  required:
+                  - error
+                  - workload
+                  type: object
+                maxItems: 10
+                type: array
+              workloads:
+                description: Workloads summarizes workload discovery and resize counts.
+                properties:
+                  dataPointsCollected:
+                    description: |-
+                      DataPointsCollected is the maximum number of data points collected across
+                      all containers in the discovered workloads.
+                    format: int32
+                    type: integer
+                  dataPointsRequired:
+                    description: |-
+                      DataPointsRequired is the minimum number of data points needed before
+                      generating recommendations (from metricsSource.minimumDataPoints).
+                    format: int32
+                    type: integer
+                  discovered:
+                    description: Discovered is the number of workloads matching the
+                      target selector.
+                    format: int32
+                    type: integer
+                  pending:
+                    description: Pending is the number of workloads awaiting resize.
+                    format: int32
+                    type: integer
+                  resized:
+                    description: Resized is the number of workloads that have been
+                      resized.
+                    format: int32
+                    type: integer
+                  withRecommendations:
+                    description: WithRecommendations is the number of workloads with
+                      active recommendations.
+                    format: int32
+                    type: integer
+                required:
+                - discovered
+                - pending
+                - resized
+                - withRecommendations
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

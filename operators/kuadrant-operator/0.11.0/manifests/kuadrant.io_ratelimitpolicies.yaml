@@ -1,0 +1,1384 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  creationTimestamp: null
+  labels:
+    app: kuadrant
+    gateway.networking.k8s.io/policy: inherited
+  name: ratelimitpolicies.kuadrant.io
+spec:
+  group: kuadrant.io
+  names:
+    kind: RateLimitPolicy
+    listKind: RateLimitPolicyList
+    plural: ratelimitpolicies
+    singular: ratelimitpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: RateLimitPolicy Accepted
+      jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      priority: 2
+      type: string
+    - description: RateLimitPolicy Enforced
+      jsonPath: .status.conditions[?(@.type=="Enforced")].status
+      name: Enforced
+      priority: 2
+      type: string
+    - description: Type of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.kind
+      name: TargetRefKind
+      priority: 2
+      type: string
+    - description: Name of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.name
+      name: TargetRefName
+      priority: 2
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta2
+    schema:
+      openAPIV3Schema:
+        description: RateLimitPolicy enables rate limiting for service workloads in
+          a Gateway API network
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
+            properties:
+              defaults:
+                description: |-
+                  Defaults define explicit default values for this policy and for policies inheriting this policy.
+                  Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
+                properties:
+                  limits:
+                    additionalProperties:
+                      description: Limit represents a complete rate limit configuration
+                      properties:
+                        counters:
+                          description: |-
+                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                          items:
+                            description: |-
+                              ContextSelector defines one item from the well known attributes
+                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                              They are named by a dot-separated path (e.g. request.path)
+                              Example: "request.path" -> The path portion of the URL
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          type: array
+                        rates:
+                          description: Rates holds the list of limit rates
+                          items:
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
+                            properties:
+                              duration:
+                                description: Duration defines the time period for
+                                  which the Limit specified above applies.
+                                type: integer
+                              limit:
+                                description: Limit defines the max value allowed for
+                                  a given period of time
+                                type: integer
+                              unit:
+                                description: |-
+                                  Duration defines the time uni
+                                  Possible values are: "second", "minute", "hour", "day"
+                                enum:
+                                - second
+                                - minute
+                                - hour
+                                - day
+                                type: string
+                            required:
+                            - duration
+                            - limit
+                            - unit
+                            type: object
+                          type: array
+                        routeSelectors:
+                          description: RouteSelectors defines semantics for matching
+                            an HTTP request based on conditions
+                          items:
+                            description: |-
+                              RouteSelector defines semantics for matching an HTTP request based on conditions
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: |-
+                                  Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
+                                  https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                                items:
+                                  description: |-
+                                    Hostname is the fully qualified domain name of a network host. This matches
+                                    the RFC 1123 definition of a hostname with 2 notable exceptions:
+
+
+                                     1. IPs are not allowed.
+                                     2. A hostname may be prefixed with a wildcard label (`*.`). The wildcard
+                                        label must appear by itself as the first label.
+
+
+                                    Hostname can be "precise" which is a domain name without the terminating
+                                    dot of a network host (e.g. "foo.example.com") or "wildcard", which is a
+                                    domain name prefixed with a single wildcard label (e.g. `*.example.com`).
+
+
+                                    Note that as per RFC1035 and RFC1123, a *label* must consist of lower case
+                                    alphanumeric characters or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed.
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: |-
+                                  Matches define conditions used for matching the rule against incoming HTTP requests.
+                                  https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given\naction. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will\nevaluate to true only if all conditions
+                                    are satisfied.\n\n\nFor example, the match below
+                                    will match a HTTP request only if its path\nstarts
+                                    with `/foo` AND it contains the `version: v1`
+                                    header:\n\n\n```\nmatch:\n\n\n\tpath:\n\t  value:
+                                    \"/foo\"\n\theaders:\n\t- name: \"version\"\n\t
+                                    \ value \"v1\"\n\n\n```"
+                                  properties:
+                                    headers:
+                                      description: |-
+                                        Headers specifies HTTP request header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match all the specified headers
+                                        to select the route.
+                                      items:
+                                        description: |-
+                                          HTTPHeaderMatch describes how to select a HTTP route by matching HTTP request
+                                          headers.
+                                        properties:
+                                          name:
+                                            description: |-
+                                              Name is the name of the HTTP Header to be matched. Name matching MUST be
+                                              case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+
+
+                                              If multiple entries specify equivalent header names, only the first
+                                              entry with an equivalent name MUST be considered for a match. Subsequent
+                                              entries with an equivalent header name MUST be ignored. Due to the
+                                              case-insensitivity of header names, "foo" and "Foo" are considered
+                                              equivalent.
+
+
+                                              When a header is repeated in an HTTP request, it is
+                                              implementation-specific behavior as to how this is represented.
+                                              Generally, proxies should follow the guidance from the RFC:
+                                              https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2 regarding
+                                              processing a repeated header, with special handling for "Set-Cookie".
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: |-
+                                              Type specifies how to match against the value of the header.
+
+
+                                              Support: Core (Exact)
+
+
+                                              Support: Implementation-specific (RegularExpression)
+
+
+                                              Since RegularExpression HeaderMatchType has implementation-specific
+                                              conformance, implementations can support POSIX, PCRE or any other dialects
+                                              of regular expressions. Please read the implementation's documentation to
+                                              determine the supported dialect.
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: |-
+                                        Method specifies HTTP method matcher.
+                                        When specified, this route will be matched only if the request has the
+                                        specified method.
+
+
+                                        Support: Extended
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: |-
+                                        Path specifies a HTTP request path matcher. If this field is not
+                                        specified, a default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: |-
+                                            Type specifies how to match against the path Value.
+
+
+                                            Support: Core (Exact, PathPrefix)
+
+
+                                            Support: Implementation-specific (RegularExpression)
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
+                                    queryParams:
+                                      description: |-
+                                        QueryParams specifies HTTP query parameter matchers. Multiple match
+                                        values are ANDed together, meaning, a request must match all the
+                                        specified query parameters to select the route.
+
+
+                                        Support: Extended
+                                      items:
+                                        description: |-
+                                          HTTPQueryParamMatch describes how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: |-
+                                              Name is the name of the HTTP query param to be matched. This must be an
+                                              exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+
+
+                                              If multiple entries specify equivalent query param names, only the first
+                                              entry with an equivalent name MUST be considered for a match. Subsequent
+                                              entries with an equivalent query param name MUST be ignored.
+
+
+                                              If a query param is repeated in an HTTP request, the behavior is
+                                              purposely left undefined, since different data planes have different
+                                              capabilities. However, it is *recommended* that implementations should
+                                              match against the first value of the param if the data plane supports it,
+                                              as this behavior is expected in other load balancing contexts outside of
+                                              the Gateway API.
+
+
+                                              Users SHOULD NOT route traffic based on repeated query params to guard
+                                              themselves against potential differences in the implementations.
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: |-
+                                              Type specifies how to match against the value of the query parameter.
+
+
+                                              Support: Extended (Exact)
+
+
+                                              Support: Implementation-specific (RegularExpression)
+
+
+                                              Since RegularExpression QueryParamMatchType has Implementation-specific
+                                              conformance, implementations can support POSIX, PCRE or any other
+                                              dialects of regular expressions. Please read the implementation's
+                                              documentation to determine the supported dialect.
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                maxItems: 8
+                                type: array
+                            type: object
+                          maxItems: 15
+                          type: array
+                        when:
+                          description: |-
+                            When holds the list of conditions for the policy to be enforced.
+                            Called also "soft" conditions as route selectors must also match
+                          items:
+                            description: |-
+                              RouteSelector defines semantics for matching an HTTP request based on conditions
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the selector
+                                  Possible values are: "eq" (equal to), "neq" (not equal to)
+                                enum:
+                                - eq
+                                - neq
+                                - startswith
+                                - endswith
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Selector defines one item from the well known selectors
+                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              value:
+                                description: The value of reference for the comparison.
+                                type: string
+                            required:
+                            - operator
+                            - selector
+                            - value
+                            type: object
+                          type: array
+                      type: object
+                    description: Limits holds the struct of limits indexed by a unique
+                      name
+                    maxProperties: 14
+                    type: object
+                type: object
+              limits:
+                additionalProperties:
+                  description: Limit represents a complete rate limit configuration
+                  properties:
+                    counters:
+                      description: |-
+                        Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                        TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                      items:
+                        description: |-
+                          ContextSelector defines one item from the well known attributes
+                          Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                          Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                          They are named by a dot-separated path (e.g. request.path)
+                          Example: "request.path" -> The path portion of the URL
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      type: array
+                    rates:
+                      description: Rates holds the list of limit rates
+                      items:
+                        description: Rate defines the actual rate limit that will
+                          be used when there is a match
+                        properties:
+                          duration:
+                            description: Duration defines the time period for which
+                              the Limit specified above applies.
+                            type: integer
+                          limit:
+                            description: Limit defines the max value allowed for a
+                              given period of time
+                            type: integer
+                          unit:
+                            description: |-
+                              Duration defines the time uni
+                              Possible values are: "second", "minute", "hour", "day"
+                            enum:
+                            - second
+                            - minute
+                            - hour
+                            - day
+                            type: string
+                        required:
+                        - duration
+                        - limit
+                        - unit
+                        type: object
+                      type: array
+                    routeSelectors:
+                      description: RouteSelectors defines semantics for matching an
+                        HTTP request based on conditions
+                      items:
+                        description: |-
+                          RouteSelector defines semantics for matching an HTTP request based on conditions
+                          https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                        properties:
+                          hostnames:
+                            description: |-
+                              Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            items:
+                              description: |-
+                                Hostname is the fully qualified domain name of a network host. This matches
+                                the RFC 1123 definition of a hostname with 2 notable exceptions:
+
+
+                                 1. IPs are not allowed.
+                                 2. A hostname may be prefixed with a wildcard label (`*.`). The wildcard
+                                    label must appear by itself as the first label.
+
+
+                                Hostname can be "precise" which is a domain name without the terminating
+                                dot of a network host (e.g. "foo.example.com") or "wildcard", which is a
+                                domain name prefixed with a single wildcard label (e.g. `*.example.com`).
+
+
+                                Note that as per RFC1035 and RFC1123, a *label* must consist of lower case
+                                alphanumeric characters or '-', and must start and end with an alphanumeric
+                                character. No other punctuation is allowed.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                            type: array
+                          matches:
+                            description: |-
+                              Matches define conditions used for matching the rule against incoming HTTP requests.
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            items:
+                              description: "HTTPRouteMatch defines the predicate used
+                                to match requests to a given\naction. Multiple match
+                                types are ANDed together, i.e. the match will\nevaluate
+                                to true only if all conditions are satisfied.\n\n\nFor
+                                example, the match below will match a HTTP request
+                                only if its path\nstarts with `/foo` AND it contains
+                                the `version: v1` header:\n\n\n```\nmatch:\n\n\n\tpath:\n\t
+                                \ value: \"/foo\"\n\theaders:\n\t- name: \"version\"\n\t
+                                \ value \"v1\"\n\n\n```"
+                              properties:
+                                headers:
+                                  description: |-
+                                    Headers specifies HTTP request header matchers. Multiple match values are
+                                    ANDed together, meaning, a request must match all the specified headers
+                                    to select the route.
+                                  items:
+                                    description: |-
+                                      HTTPHeaderMatch describes how to select a HTTP route by matching HTTP request
+                                      headers.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          Name is the name of the HTTP Header to be matched. Name matching MUST be
+                                          case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+
+
+                                          If multiple entries specify equivalent header names, only the first
+                                          entry with an equivalent name MUST be considered for a match. Subsequent
+                                          entries with an equivalent header name MUST be ignored. Due to the
+                                          case-insensitivity of header names, "foo" and "Foo" are considered
+                                          equivalent.
+
+
+                                          When a header is repeated in an HTTP request, it is
+                                          implementation-specific behavior as to how this is represented.
+                                          Generally, proxies should follow the guidance from the RFC:
+                                          https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2 regarding
+                                          processing a repeated header, with special handling for "Set-Cookie".
+                                        maxLength: 256
+                                        minLength: 1
+                                        pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                        type: string
+                                      type:
+                                        default: Exact
+                                        description: |-
+                                          Type specifies how to match against the value of the header.
+
+
+                                          Support: Core (Exact)
+
+
+                                          Support: Implementation-specific (RegularExpression)
+
+
+                                          Since RegularExpression HeaderMatchType has implementation-specific
+                                          conformance, implementations can support POSIX, PCRE or any other dialects
+                                          of regular expressions. Please read the implementation's documentation to
+                                          determine the supported dialect.
+                                        enum:
+                                        - Exact
+                                        - RegularExpression
+                                        type: string
+                                      value:
+                                        description: Value is the value of HTTP Header
+                                          to be matched.
+                                        maxLength: 4096
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  maxItems: 16
+                                  type: array
+                                  x-kubernetes-list-map-keys:
+                                  - name
+                                  x-kubernetes-list-type: map
+                                method:
+                                  description: |-
+                                    Method specifies HTTP method matcher.
+                                    When specified, this route will be matched only if the request has the
+                                    specified method.
+
+
+                                    Support: Extended
+                                  enum:
+                                  - GET
+                                  - HEAD
+                                  - POST
+                                  - PUT
+                                  - DELETE
+                                  - CONNECT
+                                  - OPTIONS
+                                  - TRACE
+                                  - PATCH
+                                  type: string
+                                path:
+                                  default:
+                                    type: PathPrefix
+                                    value: /
+                                  description: |-
+                                    Path specifies a HTTP request path matcher. If this field is not
+                                    specified, a default prefix match on the "/" path is provided.
+                                  properties:
+                                    type:
+                                      default: PathPrefix
+                                      description: |-
+                                        Type specifies how to match against the path Value.
+
+
+                                        Support: Core (Exact, PathPrefix)
+
+
+                                        Support: Implementation-specific (RegularExpression)
+                                      enum:
+                                      - Exact
+                                      - PathPrefix
+                                      - RegularExpression
+                                      type: string
+                                    value:
+                                      default: /
+                                      description: Value of the HTTP path to match
+                                        against.
+                                      maxLength: 1024
+                                      type: string
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: value must be an absolute path and start
+                                      with '/' when type one of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? self.value.startsWith(''/'') : true'
+                                  - message: must not contain '//' when type one of
+                                      ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''//'') : true'
+                                  - message: must not contain '/./' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''/./'') : true'
+                                  - message: must not contain '/../' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''/../'') : true'
+                                  - message: must not contain '%2f' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''%2f'') : true'
+                                  - message: must not contain '%2F' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''%2F'') : true'
+                                  - message: must not contain '#' when type one of
+                                      ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.contains(''#'') : true'
+                                  - message: must not end with '/..' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.endsWith(''/..'') : true'
+                                  - message: must not end with '/.' when type one
+                                      of ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? !self.value.endsWith(''/.'') : true'
+                                  - message: type must be one of ['Exact', 'PathPrefix',
+                                      'RegularExpression']
+                                    rule: self.type in ['Exact','PathPrefix'] || self.type
+                                      == 'RegularExpression'
+                                  - message: must only contain valid characters (matching
+                                      ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                      for types ['Exact', 'PathPrefix']
+                                    rule: '(self.type in [''Exact'',''PathPrefix''])
+                                      ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                      : true'
+                                queryParams:
+                                  description: |-
+                                    QueryParams specifies HTTP query parameter matchers. Multiple match
+                                    values are ANDed together, meaning, a request must match all the
+                                    specified query parameters to select the route.
+
+
+                                    Support: Extended
+                                  items:
+                                    description: |-
+                                      HTTPQueryParamMatch describes how to select a HTTP route by matching HTTP
+                                      query parameters.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          Name is the name of the HTTP query param to be matched. This must be an
+                                          exact string match. (See
+                                          https://tools.ietf.org/html/rfc7230#section-2.7.3).
+
+
+                                          If multiple entries specify equivalent query param names, only the first
+                                          entry with an equivalent name MUST be considered for a match. Subsequent
+                                          entries with an equivalent query param name MUST be ignored.
+
+
+                                          If a query param is repeated in an HTTP request, the behavior is
+                                          purposely left undefined, since different data planes have different
+                                          capabilities. However, it is *recommended* that implementations should
+                                          match against the first value of the param if the data plane supports it,
+                                          as this behavior is expected in other load balancing contexts outside of
+                                          the Gateway API.
+
+
+                                          Users SHOULD NOT route traffic based on repeated query params to guard
+                                          themselves against potential differences in the implementations.
+                                        maxLength: 256
+                                        minLength: 1
+                                        pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                        type: string
+                                      type:
+                                        default: Exact
+                                        description: |-
+                                          Type specifies how to match against the value of the query parameter.
+
+
+                                          Support: Extended (Exact)
+
+
+                                          Support: Implementation-specific (RegularExpression)
+
+
+                                          Since RegularExpression QueryParamMatchType has Implementation-specific
+                                          conformance, implementations can support POSIX, PCRE or any other
+                                          dialects of regular expressions. Please read the implementation's
+                                          documentation to determine the supported dialect.
+                                        enum:
+                                        - Exact
+                                        - RegularExpression
+                                        type: string
+                                      value:
+                                        description: Value is the value of HTTP query
+                                          param to be matched.
+                                        maxLength: 1024
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  maxItems: 16
+                                  type: array
+                                  x-kubernetes-list-map-keys:
+                                  - name
+                                  x-kubernetes-list-type: map
+                              type: object
+                            maxItems: 8
+                            type: array
+                        type: object
+                      maxItems: 15
+                      type: array
+                    when:
+                      description: |-
+                        When holds the list of conditions for the policy to be enforced.
+                        Called also "soft" conditions as route selectors must also match
+                      items:
+                        description: |-
+                          RouteSelector defines semantics for matching an HTTP request based on conditions
+                          https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                        properties:
+                          operator:
+                            description: |-
+                              The binary operator to be applied to the content fetched from the selector
+                              Possible values are: "eq" (equal to), "neq" (not equal to)
+                            enum:
+                            - eq
+                            - neq
+                            - startswith
+                            - endswith
+                            - incl
+                            - excl
+                            - matches
+                            type: string
+                          selector:
+                            description: |-
+                              Selector defines one item from the well known selectors
+                              TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          value:
+                            description: The value of reference for the comparison.
+                            type: string
+                        required:
+                        - operator
+                        - selector
+                        - value
+                        type: object
+                      type: array
+                  type: object
+                description: Limits holds the struct of limits indexed by a unique
+                  name
+                maxProperties: 14
+                type: object
+              overrides:
+                description: |-
+                  Overrides define override values for this policy and for policies inheriting this policy.
+                  Overrides are mutually exclusive with implicit defaults and explicit Defaults defined by RateLimitPolicyCommonSpec.
+                properties:
+                  limits:
+                    additionalProperties:
+                      description: Limit represents a complete rate limit configuration
+                      properties:
+                        counters:
+                          description: |-
+                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                          items:
+                            description: |-
+                              ContextSelector defines one item from the well known attributes
+                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                              They are named by a dot-separated path (e.g. request.path)
+                              Example: "request.path" -> The path portion of the URL
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          type: array
+                        rates:
+                          description: Rates holds the list of limit rates
+                          items:
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
+                            properties:
+                              duration:
+                                description: Duration defines the time period for
+                                  which the Limit specified above applies.
+                                type: integer
+                              limit:
+                                description: Limit defines the max value allowed for
+                                  a given period of time
+                                type: integer
+                              unit:
+                                description: |-
+                                  Duration defines the time uni
+                                  Possible values are: "second", "minute", "hour", "day"
+                                enum:
+                                - second
+                                - minute
+                                - hour
+                                - day
+                                type: string
+                            required:
+                            - duration
+                            - limit
+                            - unit
+                            type: object
+                          type: array
+                        routeSelectors:
+                          description: RouteSelectors defines semantics for matching
+                            an HTTP request based on conditions
+                          items:
+                            description: |-
+                              RouteSelector defines semantics for matching an HTTP request based on conditions
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: |-
+                                  Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
+                                  https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                                items:
+                                  description: |-
+                                    Hostname is the fully qualified domain name of a network host. This matches
+                                    the RFC 1123 definition of a hostname with 2 notable exceptions:
+
+
+                                     1. IPs are not allowed.
+                                     2. A hostname may be prefixed with a wildcard label (`*.`). The wildcard
+                                        label must appear by itself as the first label.
+
+
+                                    Hostname can be "precise" which is a domain name without the terminating
+                                    dot of a network host (e.g. "foo.example.com") or "wildcard", which is a
+                                    domain name prefixed with a single wildcard label (e.g. `*.example.com`).
+
+
+                                    Note that as per RFC1035 and RFC1123, a *label* must consist of lower case
+                                    alphanumeric characters or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed.
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: |-
+                                  Matches define conditions used for matching the rule against incoming HTTP requests.
+                                  https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given\naction. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will\nevaluate to true only if all conditions
+                                    are satisfied.\n\n\nFor example, the match below
+                                    will match a HTTP request only if its path\nstarts
+                                    with `/foo` AND it contains the `version: v1`
+                                    header:\n\n\n```\nmatch:\n\n\n\tpath:\n\t  value:
+                                    \"/foo\"\n\theaders:\n\t- name: \"version\"\n\t
+                                    \ value \"v1\"\n\n\n```"
+                                  properties:
+                                    headers:
+                                      description: |-
+                                        Headers specifies HTTP request header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match all the specified headers
+                                        to select the route.
+                                      items:
+                                        description: |-
+                                          HTTPHeaderMatch describes how to select a HTTP route by matching HTTP request
+                                          headers.
+                                        properties:
+                                          name:
+                                            description: |-
+                                              Name is the name of the HTTP Header to be matched. Name matching MUST be
+                                              case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+
+
+                                              If multiple entries specify equivalent header names, only the first
+                                              entry with an equivalent name MUST be considered for a match. Subsequent
+                                              entries with an equivalent header name MUST be ignored. Due to the
+                                              case-insensitivity of header names, "foo" and "Foo" are considered
+                                              equivalent.
+
+
+                                              When a header is repeated in an HTTP request, it is
+                                              implementation-specific behavior as to how this is represented.
+                                              Generally, proxies should follow the guidance from the RFC:
+                                              https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2 regarding
+                                              processing a repeated header, with special handling for "Set-Cookie".
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: |-
+                                              Type specifies how to match against the value of the header.
+
+
+                                              Support: Core (Exact)
+
+
+                                              Support: Implementation-specific (RegularExpression)
+
+
+                                              Since RegularExpression HeaderMatchType has implementation-specific
+                                              conformance, implementations can support POSIX, PCRE or any other dialects
+                                              of regular expressions. Please read the implementation's documentation to
+                                              determine the supported dialect.
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: |-
+                                        Method specifies HTTP method matcher.
+                                        When specified, this route will be matched only if the request has the
+                                        specified method.
+
+
+                                        Support: Extended
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: |-
+                                        Path specifies a HTTP request path matcher. If this field is not
+                                        specified, a default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: |-
+                                            Type specifies how to match against the path Value.
+
+
+                                            Support: Core (Exact, PathPrefix)
+
+
+                                            Support: Implementation-specific (RegularExpression)
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
+                                    queryParams:
+                                      description: |-
+                                        QueryParams specifies HTTP query parameter matchers. Multiple match
+                                        values are ANDed together, meaning, a request must match all the
+                                        specified query parameters to select the route.
+
+
+                                        Support: Extended
+                                      items:
+                                        description: |-
+                                          HTTPQueryParamMatch describes how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: |-
+                                              Name is the name of the HTTP query param to be matched. This must be an
+                                              exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+
+
+                                              If multiple entries specify equivalent query param names, only the first
+                                              entry with an equivalent name MUST be considered for a match. Subsequent
+                                              entries with an equivalent query param name MUST be ignored.
+
+
+                                              If a query param is repeated in an HTTP request, the behavior is
+                                              purposely left undefined, since different data planes have different
+                                              capabilities. However, it is *recommended* that implementations should
+                                              match against the first value of the param if the data plane supports it,
+                                              as this behavior is expected in other load balancing contexts outside of
+                                              the Gateway API.
+
+
+                                              Users SHOULD NOT route traffic based on repeated query params to guard
+                                              themselves against potential differences in the implementations.
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: |-
+                                              Type specifies how to match against the value of the query parameter.
+
+
+                                              Support: Extended (Exact)
+
+
+                                              Support: Implementation-specific (RegularExpression)
+
+
+                                              Since RegularExpression QueryParamMatchType has Implementation-specific
+                                              conformance, implementations can support POSIX, PCRE or any other
+                                              dialects of regular expressions. Please read the implementation's
+                                              documentation to determine the supported dialect.
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                maxItems: 8
+                                type: array
+                            type: object
+                          maxItems: 15
+                          type: array
+                        when:
+                          description: |-
+                            When holds the list of conditions for the policy to be enforced.
+                            Called also "soft" conditions as route selectors must also match
+                          items:
+                            description: |-
+                              RouteSelector defines semantics for matching an HTTP request based on conditions
+                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the selector
+                                  Possible values are: "eq" (equal to), "neq" (not equal to)
+                                enum:
+                                - eq
+                                - neq
+                                - startswith
+                                - endswith
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Selector defines one item from the well known selectors
+                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              value:
+                                description: The value of reference for the comparison.
+                                type: string
+                            required:
+                            - operator
+                            - selector
+                            - value
+                            type: object
+                          type: array
+                      type: object
+                    description: Limits holds the struct of limits indexed by a unique
+                      name
+                    maxProperties: 14
+                    type: object
+                type: object
+              targetRef:
+                description: TargetRef identifies an API object to apply policy to.
+                properties:
+                  group:
+                    description: Group is the group of the target resource.
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  kind:
+                    description: Kind is kind of the target resource.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                    type: string
+                  name:
+                    description: Name is the name of the target resource.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - group
+                - kind
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
+                    and 'Gateway'
+                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+            required:
+            - targetRef
+            type: object
+            x-kubernetes-validations:
+            - message: route selectors not supported when targeting a Gateway
+              rule: self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x,
+                has(self.limits[x].routeSelectors))
+            - message: Implicit and explicit defaults are mutually exclusive
+              rule: '!(has(self.defaults) && has(self.limits))'
+            - message: Overrides and explicit defaults are mutually exclusive
+              rule: '!(has(self.defaults) && has(self.overrides))'
+            - message: Overrides and implicit defaults are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.limits))'
+            - message: Overrides are only allowed for policies targeting a Gateway
+                resource
+              rule: '!(has(self.overrides) && self.targetRef.kind != ''Gateway'')'
+          status:
+            description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
+            properties:
+              conditions:
+                description: |-
+                  Represents the observations of a foo's current state.
+                  Known .status.conditions.type are: "Available"
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

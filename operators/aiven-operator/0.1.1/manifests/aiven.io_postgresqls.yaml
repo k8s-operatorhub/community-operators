@@ -1,0 +1,720 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: aiven-operator-system/aiven-operator-serving-cert
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: postgresqls.aiven.io
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        caBundle: Cg==
+        service:
+          name: webhook-service
+          namespace: system
+          path: /convert
+          port: 443
+      conversionReviewVersions:
+      - v1
+      - v1beta1
+  group: aiven.io
+  names:
+    kind: PostgreSQL
+    listKind: PostgreSQLList
+    plural: postgresqls
+    singular: postgresql
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.project
+      name: Project
+      type: string
+    - jsonPath: .spec.cloudName
+      name: Region
+      type: string
+    - jsonPath: .spec.plan
+      name: Plan
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PostgreSQL is the Schema for the postgresql API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PostgreSQLSpec defines the desired state of postgres instance
+            properties:
+              authSecretRef:
+                description: Authentication reference to Aiven token in a secret
+                properties:
+                  key:
+                    minLength: 1
+                    type: string
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              cloudName:
+                description: Cloud the service runs in.
+                maxLength: 256
+                type: string
+              connInfoSecretTarget:
+                description: Information regarding secret creation
+                properties:
+                  name:
+                    description: Name of the Secret resource to be created
+                    type: string
+                required:
+                - name
+                type: object
+              maintenanceWindowDow:
+                description: Day of week when maintenance operations should be performed.
+                  One monday, tuesday, wednesday, etc.
+                enum:
+                - monday
+                - tuesday
+                - wednesday
+                - thursday
+                - friday
+                - saturday
+                - sunday
+                - never
+                type: string
+              maintenanceWindowTime:
+                description: Time of day when maintenance operations should be performed.
+                  UTC time in HH:mm:ss format.
+                maxLength: 8
+                type: string
+              plan:
+                description: Subscription plan.
+                maxLength: 128
+                type: string
+              project:
+                description: Target project.
+                format: ^[a-zA-Z0-9_-]*$
+                maxLength: 63
+                type: string
+              projectVpcId:
+                description: Identifier of the VPC the service should be in, if any.
+                maxLength: 36
+                type: string
+              terminationProtection:
+                description: Prevent service from being deleted. It is recommended
+                  to have this enabled for all services.
+                type: boolean
+              userConfig:
+                description: PostgreSQL specific user configuration options
+                properties:
+                  admin_password:
+                    description: Custom password for admin user. Defaults to random
+                      string. This must be set only when a new service is being created.
+                    format: ^[a-zA-Z0-9-_]+$
+                    maxLength: 256
+                    type: string
+                  admin_username:
+                    description: Custom username for admin user. This must be set
+                      only when a new service is being created.
+                    format: ^[_A-Za-z0-9][-._A-Za-z0-9]{0,63}$
+                    maxLength: 64
+                    type: string
+                  backup_hour:
+                    description: The hour of day (in UTC) when backup for the service
+                      is started. New backup is only started if previous backup has
+                      already completed.
+                    format: int64
+                    maximum: 23
+                    minimum: 0
+                    type: integer
+                  backup_minute:
+                    description: The minute of an hour when backup for the service
+                      is started. New backup is only started if previous backup has
+                      already completed.
+                    format: int64
+                    maximum: 59
+                    minimum: 0
+                    type: integer
+                  ip_filter:
+                    description: IP filter Allow incoming connections from CIDR address
+                      block, e.g. '10.20.0.0/16'
+                    items:
+                      type: string
+                    type: array
+                  migration:
+                    description: Migrate data from existing server
+                    properties:
+                      dbname:
+                        description: Database name for bootstrapping the initial connection
+                        maxLength: 63
+                        type: string
+                      host:
+                        description: Hostname or IP address of the server where to
+                          migrate data from
+                        maxLength: 255
+                        type: string
+                      password:
+                        description: Password for authentication with the server where
+                          to migrate data from
+                        maxLength: 256
+                        type: string
+                      port:
+                        description: Port number of the server where to migrate data
+                          from
+                        format: int64
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      ssl:
+                        description: The server where to migrate data from is secured
+                          with SSL
+                        type: boolean
+                      username:
+                        description: User name for authentication with the server
+                          where to migrate data from
+                        maxLength: 256
+                        type: string
+                    type: object
+                  pg:
+                    description: postgresql.conf configuration values
+                    properties:
+                      autovacuum_analyze_scale_factor:
+                        description: autovacuum_analyze_scale_factor Specifies a fraction
+                          of the table size to add to autovacuum_analyze_threshold
+                          when deciding whether to trigger an ANALYZE. The default
+                          is 0.2 (20% of table size)
+                        format: int64
+                        maximum: 1
+                        minimum: 0
+                        type: integer
+                      autovacuum_analyze_threshold:
+                        description: autovacuum_analyze_threshold Specifies the minimum
+                          number of inserted, updated or deleted tuples needed to
+                          trigger an  ANALYZE in any one table. The default is 50
+                          tuples.
+                        format: int64
+                        maximum: 2147483647
+                        minimum: 0
+                        type: integer
+                      autovacuum_freeze_max_age:
+                        description: autovacuum_freeze_max_age Specifies the maximum
+                          age (in transactions) that a table's pg_class.relfrozenxid
+                          field can attain before a VACUUM operation is forced to
+                          prevent transaction ID wraparound within the table. Note
+                          that the system will launch autovacuum processes to prevent
+                          wraparound even when autovacuum is otherwise disabled. This
+                          parameter will cause the server to be restarted.
+                        format: int64
+                        maximum: 1500000000
+                        minimum: 200000000
+                        type: integer
+                      autovacuum_max_workers:
+                        description: autovacuum_max_workers Specifies the maximum
+                          number of autovacuum processes (other than the autovacuum
+                          launcher) that may be running at any one time. The default
+                          is three. This parameter can only be set at server start.
+                        format: int64
+                        maximum: 20
+                        minimum: 1
+                        type: integer
+                      autovacuum_naptime:
+                        description: autovacuum_naptime Specifies the minimum delay
+                          between autovacuum runs on any given database. The delay
+                          is measured in seconds, and the default is one minute
+                        format: int64
+                        maximum: 86400
+                        minimum: 0
+                        type: integer
+                      autovacuum_vacuum_cost_delay:
+                        description: autovacuum_vacuum_cost_delay Specifies the cost
+                          delay value that will be used in automatic VACUUM operations.
+                          If -1 is specified, the regular vacuum_cost_delay value
+                          will be used. The default value is 20 milliseconds
+                        format: int64
+                        maximum: 100
+                        type: integer
+                      autovacuum_vacuum_cost_limit:
+                        description: autovacuum_vacuum_cost_limit Specifies the cost
+                          limit value that will be used in automatic VACUUM operations.
+                          If -1 is specified (which is the default), the regular vacuum_cost_limit
+                          value will be used.
+                        format: int64
+                        maximum: 10000
+                        type: integer
+                      autovacuum_vacuum_scale_factor:
+                        description: autovacuum_vacuum_scale_factor Specifies a fraction
+                          of the table size to add to autovacuum_vacuum_threshold
+                          when deciding whether to trigger a VACUUM. The default is
+                          0.2 (20% of table size)
+                        format: int64
+                        maximum: 1
+                        minimum: 0
+                        type: integer
+                      autovacuum_vacuum_threshold:
+                        description: autovacuum_vacuum_threshold Specifies the minimum
+                          number of updated or deleted tuples needed to trigger a
+                          VACUUM in any one table. The default is 50 tuples
+                        format: int64
+                        maximum: 2147483647
+                        minimum: 0
+                        type: integer
+                      deadlock_timeout:
+                        description: deadlock_timeout This is the amount of time,
+                          in milliseconds, to wait on a lock before checking to see
+                          if there is a deadlock condition.
+                        format: int64
+                        maximum: 1800000
+                        minimum: 500
+                        type: integer
+                      idle_in_transaction_session_timeout:
+                        description: idle_in_transaction_session_timeout Time out
+                          sessions with open transactions after this number of milliseconds
+                        format: int64
+                        maximum: 604800000
+                        minimum: 0
+                        type: integer
+                      jit:
+                        description: jit Controls system-wide use of Just-in-Time
+                          Compilation (JIT).
+                        type: boolean
+                      log_autovacuum_min_duration:
+                        description: log_autovacuum_min_duration Causes each action
+                          executed by autovacuum to be logged if it ran for at least
+                          the specified number of milliseconds. Setting this to zero
+                          logs all autovacuum actions. Minus-one (the default) disables
+                          logging autovacuum actions.
+                        format: int64
+                        maximum: 2147483647
+                        type: integer
+                      log_error_verbosity:
+                        description: log_error_verbosity Controls the amount of detail
+                          written in the server log for each message that is logged.
+                        enum:
+                        - TERSE
+                        - DEFAULT
+                        - VERBOSE
+                        type: string
+                      log_min_duration_statement:
+                        description: log_min_duration_statement Log statements that
+                          take more than this number of milliseconds to run, -1 disables
+                        format: int64
+                        maximum: 86400000
+                        type: integer
+                      max_files_per_process:
+                        description: max_files_per_process PostgreSQL maximum number
+                          of files that can be open per process
+                        format: int64
+                        maximum: 4096
+                        minimum: 1000
+                        type: integer
+                      max_locks_per_transaction:
+                        description: max_locks_per_transaction PostgreSQL maximum
+                          locks per transaction
+                        format: int64
+                        maximum: 640
+                        minimum: 64
+                        type: integer
+                      max_logical_replication_workers:
+                        description: max_logical_replication_workers PostgreSQL maximum
+                          logical replication workers (taken from the pool of max_parallel_workers)
+                        format: int64
+                        maximum: 64
+                        minimum: 4
+                        type: integer
+                      max_parallel_workers:
+                        description: max_parallel_workers Sets the maximum number
+                          of workers that the system can support for parallel queries
+                        format: int64
+                        maximum: 96
+                        minimum: 0
+                        type: integer
+                      max_parallel_workers_per_gather:
+                        description: max_parallel_workers_per_gather Sets the maximum
+                          number of workers that can be started by a single Gather
+                          or Gather Merge node
+                        format: int64
+                        maximum: 96
+                        minimum: 0
+                        type: integer
+                      max_pred_locks_per_transaction:
+                        description: max_pred_locks_per_transaction PostgreSQL maximum
+                          predicate locks per transaction
+                        format: int64
+                        maximum: 640
+                        minimum: 64
+                        type: integer
+                      max_prepared_transactions:
+                        description: max_prepared_transactions PostgreSQL maximum
+                          prepared transactions
+                        format: int64
+                        maximum: 10000
+                        minimum: 0
+                        type: integer
+                      max_replication_slots:
+                        description: max_replication_slots PostgreSQL maximum replication
+                          slots
+                        format: int64
+                        maximum: 64
+                        minimum: 8
+                        type: integer
+                      max_stack_depth:
+                        description: max_stack_depth Maximum depth of the stack in
+                          bytes
+                        format: int64
+                        maximum: 6291456
+                        minimum: 2097152
+                        type: integer
+                      max_standby_archive_delay:
+                        description: max_standby_archive_delay Max standby archive
+                          delay in milliseconds
+                        format: int64
+                        maximum: 43200000
+                        minimum: 1
+                        type: integer
+                      max_standby_streaming_delay:
+                        description: max_standby_streaming_delay Max standby streaming
+                          delay in milliseconds
+                        format: int64
+                        maximum: 43200000
+                        minimum: 1
+                        type: integer
+                      max_wal_senders:
+                        description: max_wal_senders PostgreSQL maximum WAL senders
+                        format: int64
+                        maximum: 64
+                        minimum: 8
+                        type: integer
+                      max_worker_processes:
+                        description: max_worker_processes Sets the maximum number
+                          of background processes that the system can support
+                        format: int64
+                        maximum: 96
+                        minimum: 8
+                        type: integer
+                      pg_partman_bgw.interval:
+                        description: pg_partman_bgw.interval Sets the time interval
+                          to run pg_partman's scheduled tasks
+                        format: int64
+                        maximum: 604800
+                        minimum: 3600
+                        type: integer
+                      pg_partman_bgw.role:
+                        description: pg_partman_bgw.role Controls which role to use
+                          for pg_partman's scheduled background tasks.
+                        format: ^[_A-Za-z0-9][-._A-Za-z0-9]{0,63}$
+                        maxLength: 64
+                        type: string
+                      pg_stat_statements.track:
+                        description: pg_stat_statements.track Controls which statements
+                          are counted. Specify top to track top-level statements (those
+                          issued directly by clients), all to also track nested statements
+                          (such as statements invoked within functions), or none to
+                          disable statement statistics collection. The default value
+                          is top.
+                        enum:
+                        - all
+                        - top
+                        - none
+                        type: string
+                      temp_file_limit:
+                        description: temp_file_limit PostgreSQL temporary file limit
+                          in KiB, -1 for unlimited
+                        format: int64
+                        maximum: 2147483647
+                        type: integer
+                      timezone:
+                        description: timezone PostgreSQL service timezone
+                        maxLength: 64
+                        type: string
+                      track_activity_query_size:
+                        description: track_activity_query_size Specifies the number
+                          of bytes reserved to track the currently executing command
+                          for each active session.
+                        format: int64
+                        maximum: 10240
+                        minimum: 1024
+                        type: integer
+                      track_commit_timestamp:
+                        description: track_commit_timestamp Record commit time of
+                          transactions.
+                        enum:
+                        - "off"
+                        - "on"
+                        type: string
+                      track_functions:
+                        description: track_functions Enables tracking of function
+                          call counts and time used.
+                        enum:
+                        - all
+                        - pl
+                        - none
+                        type: string
+                      wal_sender_timeout:
+                        description: wal_sender_timeout Terminate replication connections
+                          that are inactive for longer than this amount of time, in
+                          milliseconds.
+                        format: int64
+                        maximum: 600000
+                        minimum: 5000
+                        type: integer
+                      wal_writer_delay:
+                        description: wal_writer_delay WAL flush interval in milliseconds.
+                          Note that setting this value to lower than the default 200ms
+                          may negatively impact performance
+                        format: int64
+                        maximum: 200
+                        minimum: 10
+                        type: integer
+                    type: object
+                  pg_service_to_fork_from:
+                    description: Name of the PostgreSQL Service from which to fork
+                      (deprecated, use service_to_fork_from). This has effect only
+                      when a new service is being created.
+                    maxLength: 63
+                    type: string
+                  pg_version:
+                    description: PostgreSQL major version
+                    enum:
+                    - "9.5"
+                    - "9.6"
+                    - "10"
+                    - "11"
+                    - "12"
+                    type: string
+                  pgbouncer:
+                    description: PGBouncer connection pooling settings
+                    properties:
+                      ignore_startup_parameters:
+                        description: List of parameters to ignore when given in startup
+                          packet
+                        items:
+                          type: string
+                        type: array
+                      server_reset_query_always:
+                        description: Run server_reset_query (DISCARD ALL) in all pooling
+                          modes
+                        type: boolean
+                    type: object
+                  pglookout:
+                    description: PGLookout settings
+                    properties:
+                      max_failover_replication_time_lag:
+                        description: max_failover_replication_time_lag Number of seconds
+                          of master unavailability before triggering database failover
+                          to standby
+                        format: int64
+                        minimum: 10
+                        type: integer
+                    type: object
+                  private_access:
+                    description: Allow access to selected service ports from private
+                      networks
+                    properties:
+                      pg:
+                        description: Allow clients to connect to pg with a DNS name
+                          that always resolves to the service's private IP addresses.
+                          Only available in certain network locations
+                        type: boolean
+                      pgbouncer:
+                        description: Allow clients to connect to pgbouncer with a
+                          DNS name that always resolves to the service's private IP
+                          addresses. Only available in certain network locations
+                        type: boolean
+                      prometheus:
+                        description: Allow clients to connect to prometheus with a
+                          DNS name that always resolves to the service's private IP
+                          addresses. Only available in certain network locations
+                        type: boolean
+                    type: object
+                  public_access:
+                    description: Allow access to selected service ports from the public
+                      Internet
+                    properties:
+                      pg:
+                        description: Allow clients to connect to pg from the public
+                          internet for service nodes that are in a project VPC or
+                          another type of private network
+                        type: boolean
+                      pgbouncer:
+                        description: Allow clients to connect to pgbouncer from the
+                          public internet for service nodes that are in a project
+                          VPC or another type of private network
+                        type: boolean
+                      prometheus:
+                        description: Allow clients to connect to prometheus from the
+                          public internet for service nodes that are in a project
+                          VPC or another type of private network
+                        type: boolean
+                    type: object
+                  recovery_target_time:
+                    description: Recovery target time when forking a service. This
+                      has effect only when a new service is being created.
+                    maxLength: 32
+                    type: string
+                  service_to_fork_from:
+                    description: Name of another service to fork from. This has effect
+                      only when a new service is being created.
+                    maxLength: 63
+                    type: string
+                  shared_buffers_percentage:
+                    description: shared_buffers_percentage Percentage of total RAM
+                      that the database server uses for shared memory buffers. Valid
+                      range is 20-60 (float), which corresponds to 20% - 60%. This
+                      setting adjusts the shared_buffers configuration value. The
+                      absolute maximum is 12 GB.
+                    format: int64
+                    maximum: 60
+                    minimum: 20
+                    type: integer
+                  synchronous_replication:
+                    description: Synchronous replication type. Note that the service
+                      plan also needs to support synchronous replication.
+                    enum:
+                    - quorum
+                    - "off"
+                    type: string
+                  timescaledb:
+                    description: TimescaleDB extension configuration values
+                    properties:
+                      max_background_workers:
+                        description: timescaledb.max_background_workers The number
+                          of background workers for timescaledb operations. You should
+                          configure this setting to the sum of your number of databases
+                          and the total number of concurrent background workers you
+                          want running at any given point in time.
+                        format: int64
+                        maximum: 4096
+                        minimum: 1
+                        type: integer
+                    type: object
+                  variant:
+                    description: Variant of the PostgreSQL service, may affect the
+                      features that are exposed by default
+                    enum:
+                    - aiven
+                    - timescale
+                    type: string
+                  work_mem:
+                    description: work_mem Sets the maximum amount of memory to be
+                      used by a query operation (such as a sort or hash table) before
+                      writing to temporary disk files, in MB. Default is 1MB + 0.075%
+                      of total RAM (up to 32MB).
+                    format: int64
+                    maximum: 1024
+                    minimum: 1
+                    type: integer
+                type: object
+            required:
+            - authSecretRef
+            - project
+            type: object
+          status:
+            description: ServiceStatus defines the observed state of service
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of a service state
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    type FooStatus struct{     // Represents the observations of a
+                    foo's current state.     // Known .status.conditions.type are:
+                    \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type
+                    \    // +patchStrategy=merge     // +listType=map     // +listMapKey=type
+                    \    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`
+                    \n     // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              state:
+                description: Service state
+                type: string
+            required:
+            - conditions
+            - state
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

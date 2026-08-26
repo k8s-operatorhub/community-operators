@@ -1,0 +1,104 @@
+
+on: issue_comment
+name: Issue Comments - merge
+env:
+  OPP_PRODUCTION_TYPE: "k8s"
+  OPP_THIS_REPO_NAME: "community-operators"
+  OPP_THIS_REPO_ORG: "k8s-operatorhub"
+
+jobs:
+  handle_comments:
+    name: Check comments for /merge
+    if: |
+      startsWith(github.event.comment.body, '/merge')
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: labels
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: | 
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              issue_number: context.payload.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            })
+            console.log(labels.data)
+            return labels.data
+
+      - name: Merge command handler
+        id: command
+        uses: xt0rted/slash-command-action@865ee04a1dfc8aa2571513eee8e84b5377153511  # v1.2.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          command: merge
+          reaction: "true"
+          reaction-type: "eyes"
+          allow-edits: "false"
+          permission-level: write
+
+      - name: Merge message when not able to merge and inform user about authorized_changes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          steps.command.outputs.command-name == 'merge' &&
+          steps.command.outputs.command-arguments == 'possible' &&
+          (!contains(fromJSON(steps.labels.outputs.result).*.name, 'authorized-changes')) &&
+          (contains(fromJSON(steps.labels.outputs.result).*.name, 'installation-validated')) &&
+          (contains(fromJSON(steps.labels.outputs.result).*.name, 'package-validated')) &&
+          (!contains(fromJSON(steps.labels.outputs.result).*.name, 'do-not-merge/work-in-progress')) &&
+          (!contains(fromJSON(steps.labels.outputs.result).*.name, 'do-not-merge/hold'))
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Current PR can be merged automatically, but there is missing `authorized-changes` label. One can find out more info [here](https://${{ env.OPP_THIS_REPO_ORG }}.github.io/${{ env.OPP_THIS_REPO_NAME }}/operator-ci-yaml/#reviewers).'
+            })
+
+      - name: Message when automerge is disabled
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          steps.command.outputs.command-name == 'merge' &&
+          steps.command.outputs.command-arguments == 'possible' &&
+          (contains(fromJSON(steps.labels.outputs.result).*.name, 'automerge-disabled'))
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Automatic merge is disabled temporarily due to a maintenance.'
+            })
+
+      - name: Message when dco-failed is missing
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          steps.command.outputs.command-name == 'merge' &&
+          steps.command.outputs.command-arguments == 'possible' &&
+          (contains(fromJSON(steps.labels.outputs.result).*.name, 'dco-failed'))
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'DCO is missing. Please signoff your commits !!!'
+            })
+
+      - name: automerge
+        if: steps.command.outputs.command-name == 'merge' && steps.command.outputs.command-arguments == 'possible'
+        uses: "pascalgn/automerge-action@01fb84a9d077930bf9d16d1f7fa3fe2ffe45aabe"  # v0.14.2
+        env:
+          GITHUB_TOKEN: "${{ secrets.FRAMEWORK_MERGE }}"
+          MERGE_LABELS: "authorized-changes,package-validated,installation-validated,!do-not-merge/hold,!do-not-merge/work-in-progress,!automerge-disabled,!dco-failed"
+          MERGE_REMOVE_LABELS: ""
+          MERGE_METHOD: "squash"
+          MERGE_COMMIT_MESSAGE: "pull-request-title"
+          MERGE_FORKS: "true"
+          MERGE_RETRIES: "6"
+          MERGE_RETRY_SLEEP: "10000"

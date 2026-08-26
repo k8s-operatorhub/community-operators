@@ -1,0 +1,46 @@
+name: "Documentation"
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      number-of-prs:
+        description: 'Number of PRs'     
+        required: true
+        default: '100'
+
+env:
+  OPP_THIS_REPO: "k8s-operatorhub/community-operators"
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    container: quay.io/operator_testing/community-operators-mkdocs
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        persist-credentials: false
+        repository: redhat-openshift-ecosystem/community-operators-pipeline
+        ref: documentation
+
+    - name: Generate docs
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        NPR: ${{ github.event.inputs.number-of-prs || 100 }}
+      run: |
+        OPP_THIS_REPO_SED="https://github.com/$OPP_THIS_REPO"
+        OPP_THIS_REPO_SED=${OPP_THIS_REPO_SED//\//\\/}
+        sed -i 's/repo_url.*/repo_url: '$OPP_THIS_REPO_SED'/g' mkdocs.yml
+
+        sed -i 's/  cluster_type:.*/  cluster_type: k8s/g' mkdocs.yml
+
+        cat mkdocs.yml
+        ci/operator-flow/doc.sh ${NPR} ${OPP_THIS_REPO}
+
+        mkdocs build
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@373f7f263a76c20808c831209c920827a82a2847  # v3.9.3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site

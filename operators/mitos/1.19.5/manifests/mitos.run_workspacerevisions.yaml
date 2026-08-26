@@ -1,0 +1,245 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: workspacerevisions.mitos.run
+spec:
+  group: mitos.run
+  names:
+    kind: WorkspaceRevision
+    listKind: WorkspaceRevisionList
+    plural: workspacerevisions
+    singular: workspacerevision
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.workspaceRef.name
+      name: Workspace
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              contentManifest:
+                description: |-
+                  ContentManifest is the content-addressed manifest digest of the revision's
+                  artifact (a lowercase hex sha256). It is set by dehydrate (a later W4
+                  slice). A revision with a valid ContentManifest is committed; once
+                  committed the manifest is immutable.
+                type: string
+              memorySnapshotPrincipal:
+                description: |-
+                  MemorySnapshotPrincipal is the principal (the capturing claim's
+                  ServiceAccount) the paired memory snapshot is bound to. A memory snapshot
+                  carries secrets-in-RAM, so it is never served across principals: a resume
+                  loads the memory image only when the activating claim's principal matches
+                  this value. Set together with MemorySnapshotRef; nil for a content-only
+                  revision.
+                type: string
+              memorySnapshotRef:
+                description: |-
+                  MemorySnapshotRef pairs the revision with a memory snapshot, making the
+                  revision resumable. Principal-bound per the secrets policy.
+                type: string
+              source:
+                description: |-
+                  Source records the lineage origin of the revision: a sandbox claim that
+                  produced it, or a parent revision it forks from. Exactly one is set in a
+                  well-formed lineage; both unset marks a root revision.
+                properties:
+                  fromClaim:
+                    description: FromClaim names the sandbox claim whose dehydrate
+                      produced this revision.
+                    type: string
+                  fromWorkspaceRevision:
+                    description: |-
+                      FromWorkspaceRevision names the parent revision this revision forks from,
+                      the DAG lineage edge. The parent must be a revision in the same workspace.
+                    properties:
+                      revision:
+                        description: Revision is the name of the parent revision.
+                        type: string
+                      workspace:
+                        description: Workspace is the name of the workspace the parent
+                          revision lives in.
+                        type: string
+                    required:
+                    - revision
+                    - workspace
+                    type: object
+                type: object
+              workspaceRef:
+                description: WorkspaceRef names the Workspace this revision belongs
+                  to.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - workspaceRef
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              diffSummary:
+                description: |-
+                  DiffSummary records the content-hash diff of this revision against the
+                  workspace head revision before it, when a terminate {diff: true} output
+                  requested it. It is a path-level summary (added, removed, modified file
+                  names plus counts); the file contents stay in the content store, never in
+                  the status. Unset when no diff was requested or the revision is a root.
+                properties:
+                  added:
+                    items:
+                      type: string
+                    type: array
+                  addedCount:
+                    description: |-
+                      AddedCount, RemovedCount, and ModifiedCount summarize the lists for a quick
+                      human read and for indexers that do not want the full path lists.
+                    format: int32
+                    type: integer
+                  modified:
+                    items:
+                      type: string
+                    type: array
+                  modifiedCount:
+                    format: int32
+                    type: integer
+                  parentRevision:
+                    description: |-
+                      ParentRevision is the head revision the diff was computed against. Empty
+                      when this revision is the first in the workspace (a root: everything added).
+                    type: string
+                  removed:
+                    items:
+                      type: string
+                    type: array
+                  removedCount:
+                    format: int32
+                    type: integer
+                type: object
+              gitPushes:
+                description: |-
+                  GitPushes records the git rendezvous pushes this revision's terminate
+                  performed (the per-attempt branch and the remote), so the fork-and-merge
+                  rendezvous is auditable. The push content is the workspace repo paths; git
+                  is the merge layer and the engine never merges working trees.
+                items:
+                  description: GitPushRecord is one git rendezvous push performed
+                    on terminate.
+                  properties:
+                    branch:
+                      description: Branch is the per-attempt branch the push landed
+                        on.
+                      type: string
+                    remote:
+                      description: Remote is the rendezvous remote the workspace repo
+                        paths were pushed to.
+                      type: string
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: |-
+                  Phase is Pending until the revision's ContentManifest is a valid
+                  content-addressed digest, then Committed. A committed revision is
+                  immutable.
+                enum:
+                - Pending
+                - Committed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

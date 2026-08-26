@@ -1,0 +1,600 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: ntncellconfigs.ntn.operators.dev
+spec:
+  group: ntn.operators.dev
+  names:
+    kind: NTNCellConfig
+    listKind: NTNCellConfigList
+    plural: ntncellconfigs
+    shortNames:
+    - ntncc
+    singular: ntncellconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider.type
+      name: Provider
+      type: string
+    - jsonPath: .spec.ntn.cellSpecificKoffset
+      name: Koffset
+      type: integer
+    - jsonPath: .spec.ntn.payloadType
+      name: Payload
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NTNCellConfig manages NTN-specific radio parameters for a gNB cell,
+          delegating configuration to the specified NTN backend provider.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NTNCellConfigSpec defines the desired NTN cell configuration.
+            properties:
+              cellOverrides:
+                description: cellOverrides allows fine-tuning PUCCH, PDSCH, PRACH,
+                  and RRC parameters.
+                properties:
+                  pdschMaxHarqRetxs:
+                    default: 0
+                    description: pdschMaxHarqRetxs sets the max HARQ retransmissions
+                      (0 = disabled for NTN).
+                    type: integer
+                  prachMaxMsg3HarqRetx:
+                    default: 0
+                    description: prachMaxMsg3HarqRetx sets the max msg3 HARQ retransmissions.
+                    type: integer
+                  rrcGuardTimeMs:
+                    default: 12800
+                    description: rrcGuardTimeMs sets the RRC procedure guard time
+                      in ms.
+                    type: integer
+                  sibSchedule:
+                    description: |-
+                      sibSchedule tunes SIB19 broadcast scheduling. Any unset sub-field
+                      falls back to the defaults (siWindowLength=5, siPeriod=16,
+                      siWindowPosition=1). Tune when PDCCH capacity is tight or when
+                      SIB19 broadcast cadence needs to track short ntn-UlSyncValidityDur.
+                    properties:
+                      siPeriod:
+                        description: |-
+                          siPeriod is the SIB19 broadcast period in radio frames.
+                          Shorter periods keep UEs' NTN assistance fresh but cost air time.
+                        enum:
+                        - 8
+                        - 16
+                        - 32
+                        - 64
+                        - 128
+                        - 256
+                        - 512
+                        type: integer
+                      siWindowLength:
+                        description: |-
+                          siWindowLength is the SI window length in slots. OCUDU accepts
+                          the standard set; picking a larger value increases PDCCH pressure.
+                        enum:
+                        - 5
+                        - 10
+                        - 20
+                        - 40
+                        - 80
+                        - 160
+                        - 320
+                        - 640
+                        - 1280
+                        type: integer
+                      siWindowPosition:
+                        description: |-
+                          siWindowPosition is the slot offset within the SI period. Adjust
+                          to avoid collision with SIB1/SIB2 scheduling windows. Pointer so 0
+                          (the first slot) can be distinguished from unset.
+                        maximum: 79
+                        minimum: 0
+                        type: integer
+                    type: object
+                type: object
+              ephemerisRef:
+                description: |-
+                  ephemerisRef is the name of a SatelliteEphemeris CR in the same namespace.
+                  When set, the controller re-reconciles this NTNCellConfig whenever the
+                  referenced SatelliteEphemeris is updated and invokes runtime ephemeris push
+                  on the provider reconcile path. The static ephemeris in spec.ntn
+                  (ephemerisECEF or ephemerisOrbital) remains required as the source payload.
+                minLength: 1
+                type: string
+              ntn:
+                description: ntn contains NTN-specific radio parameters per 3GPP TS
+                  38.213 / OCUDU geo_ntn.yml.
+                properties:
+                  cellSpecificKoffset:
+                    default: 150
+                    description: cellSpecificKoffset sets the cell-specific k-offset
+                      for NTN (0-1023).
+                    maximum: 1023
+                    minimum: 0
+                    type: integer
+                  distanceThreshold:
+                    description: |-
+                      distanceThreshold sets the distance threshold for cell
+                      selection in metres.
+                    minimum: 0
+                    type: integer
+                  ephemerisECEF:
+                    description: |-
+                      ephemerisECEF defines the satellite position and velocity in ECEF coordinates.
+                      Mutually exclusive with ephemerisOrbital.
+                    properties:
+                      posX:
+                        description: posX is the X position of the satellite (-67108864
+                          to 67108863).
+                        maximum: 67108863
+                        minimum: -67108864
+                        type: integer
+                      posY:
+                        description: posY is the Y position of the satellite (-67108864
+                          to 67108863).
+                        maximum: 67108863
+                        minimum: -67108864
+                        type: integer
+                      posZ:
+                        description: posZ is the Z position of the satellite (-67108864
+                          to 67108863).
+                        maximum: 67108863
+                        minimum: -67108864
+                        type: integer
+                      velX:
+                        default: 0
+                        description: velX is the X velocity of the satellite (0 for
+                          GEO).
+                        type: integer
+                      velY:
+                        default: 0
+                        description: velY is the Y velocity of the satellite (0 for
+                          GEO).
+                        type: integer
+                      velZ:
+                        default: 0
+                        description: velZ is the Z velocity of the satellite (0 for
+                          GEO).
+                        type: integer
+                    required:
+                    - posX
+                    - posY
+                    - posZ
+                    type: object
+                  ephemerisOrbital:
+                    description: |-
+                      ephemerisOrbital defines the satellite orbit using Keplerian elements.
+                      Mutually exclusive with ephemerisECEF. Preferred for LEO satellites
+                      where source data is in OMM/TLE form (CelesTrak, SpaceTrack).
+                    properties:
+                      argOfPeriapsis:
+                        description: argOfPeriapsis is the argument of periapsis in
+                          1e-4 degrees (0-3600000).
+                        maximum: 3600000
+                        minimum: 0
+                        type: integer
+                      eccentricity:
+                        description: eccentricity is the orbital eccentricity scaled
+                          by 1e6 (0-999999 for e < 1.0).
+                        maximum: 999999
+                        minimum: 0
+                        type: integer
+                      inclination:
+                        description: inclination is the orbital inclination in 1e-4
+                          degrees (0-1800000 = 0°-180°).
+                        maximum: 1800000
+                        minimum: 0
+                        type: integer
+                      meanAnomaly:
+                        description: meanAnomaly is the mean anomaly in 1e-4 degrees
+                          (0-3600000).
+                        maximum: 3600000
+                        minimum: 0
+                        type: integer
+                      rightAscension:
+                        description: rightAscension is the right ascension of the
+                          ascending node in 1e-4 degrees (0-3600000).
+                        maximum: 3600000
+                        minimum: 0
+                        type: integer
+                      semiMajorAxis:
+                        description: semiMajorAxis is the semi-major axis in metres.
+                        minimum: 6370000
+                        type: integer
+                    required:
+                    - argOfPeriapsis
+                    - eccentricity
+                    - inclination
+                    - meanAnomaly
+                    - rightAscension
+                    - semiMajorAxis
+                    type: object
+                  epochTime:
+                    description: epochTime defines the SFN/subframe reference for
+                      NTN timing alignment.
+                    properties:
+                      sfn:
+                        description: sfn is the System Frame Number (0-1023).
+                        maximum: 1023
+                        minimum: 0
+                        type: integer
+                      subframeNumber:
+                        description: subframeNumber is the subframe within the SFN
+                          (0-9).
+                        maximum: 9
+                        minimum: 0
+                        type: integer
+                    required:
+                    - sfn
+                    - subframeNumber
+                    type: object
+                  feederLinkInfo:
+                    description: feederLinkInfo provides feeder link parameters for
+                      Doppler compensation.
+                    properties:
+                      dlFreqHz:
+                        description: dlFreqHz is the downlink frequency in Hz. Required
+                          when feederLinkInfo is set.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      enableDopplerCompensation:
+                        description: enableDopplerCompensation enables feeder link
+                          Doppler compensation.
+                        type: boolean
+                      ulFreqHz:
+                        description: ulFreqHz is the uplink frequency in Hz. Required
+                          when feederLinkInfo is set.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    required:
+                    - dlFreqHz
+                    - enableDopplerCompensation
+                    - ulFreqHz
+                    type: object
+                  movingRefLocation:
+                    description: |-
+                      movingRefLocation defines the Earth-moving reference location for LEO NTN cells.
+                      3GPP Release 18 SIB19 field. Used by UEs for timing/Doppler estimation.
+                    properties:
+                      latitude:
+                        description: latitude in 1e-4 degrees (-900000 to 900000 =
+                          -90° to 90°).
+                        maximum: 900000
+                        minimum: -900000
+                        type: integer
+                      longitude:
+                        description: longitude in 1e-4 degrees (-1800000 to 1800000
+                          = -180° to 180°).
+                        maximum: 1800000
+                        minimum: -1800000
+                        type: integer
+                    required:
+                    - latitude
+                    - longitude
+                    type: object
+                  neighborCells:
+                    description: |-
+                      neighborCells lists neighbor NTN cells for measurement/handover.
+                      OCUDU YAML renders as "ncells:" for compatibility.
+                    items:
+                      description: NTNNeighborCell describes a neighbor NTN cell.
+                      properties:
+                        frequency:
+                          description: frequency is the neighbor cell's ARFCN (NR-ARFCN,
+                            always >= 1).
+                          minimum: 1
+                          type: integer
+                        physicalCellID:
+                          description: physicalCellID of the neighbor (0-1007).
+                          maximum: 1007
+                          minimum: 0
+                          type: integer
+                      required:
+                      - physicalCellID
+                      type: object
+                    type: array
+                  ntnGatewayLocation:
+                    description: ntnGatewayLocation specifies the NTN gateway (ground
+                      station) coordinates.
+                    properties:
+                      altitude:
+                        description: altitude in metres above sea level. Required
+                          when ntnGatewayLocation is set.
+                        type: integer
+                      latitude:
+                        description: latitude in 1e-4 degrees (-900000 to 900000).
+                        maximum: 900000
+                        minimum: -900000
+                        type: integer
+                      longitude:
+                        description: longitude in 1e-4 degrees (-1800000 to 1800000).
+                        maximum: 1800000
+                        minimum: -1800000
+                        type: integer
+                    required:
+                    - altitude
+                    - latitude
+                    - longitude
+                    type: object
+                  ntnUlSyncValidityDur:
+                    description: ntnUlSyncValidityDur sets the UL synchronization
+                      validity duration in seconds.
+                    enum:
+                    - 5
+                    - 10
+                    - 15
+                    - 20
+                    - 25
+                    - 30
+                    - 35
+                    - 40
+                    - 45
+                    - 50
+                    - 55
+                    - 60
+                    - 120
+                    - 180
+                    - 240
+                    - 900
+                    type: integer
+                  payloadType:
+                    default: transparent
+                    description: payloadType specifies the satellite payload architecture.
+                    enum:
+                    - transparent
+                    - regenerative
+                    type: string
+                  polarization:
+                    description: |-
+                      polarization specifies the antenna polarization for downlink and uplink.
+                      Per 3GPP TS 38.331 SIB19, ntn-PolarizationDL-r17 and ntn-PolarizationUL-r17
+                      are independent IEs. OCUDU collapses them under a single `polarization:` map
+                      with `dl:` / `ul:` sub-keys, matching this CRD layout.
+                    properties:
+                      dl:
+                        description: dl is the downlink polarization broadcast in
+                          SIB19 ntn-PolarizationDL-r17.
+                        enum:
+                        - rhcp
+                        - lhcp
+                        - linear
+                        type: string
+                      ul:
+                        description: ul is the uplink polarization broadcast in SIB19
+                          ntn-PolarizationUL-r17.
+                        enum:
+                        - rhcp
+                        - lhcp
+                        - linear
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: at least one of dl or ul must be set
+                      rule: has(self.dl) || has(self.ul)
+                  referenceLocation:
+                    description: referenceLocation defines the NTN cell reference
+                      location.
+                    properties:
+                      latitude:
+                        description: latitude in 1e-4 degrees (-900000 to 900000).
+                        maximum: 900000
+                        minimum: -900000
+                        type: integer
+                      longitude:
+                        description: longitude in 1e-4 degrees (-1800000 to 1800000).
+                        maximum: 1800000
+                        minimum: -1800000
+                        type: integer
+                    required:
+                    - latitude
+                    - longitude
+                    type: object
+                  satSwitchWithResync:
+                    description: |-
+                      satSwitchWithResync provides satellite switch handover hints to UEs during
+                      satellite-to-satellite transitions. 3GPP Release 18 SIB19 field.
+                    properties:
+                      t304:
+                        description: t304 is the handover timer value in milliseconds
+                          per 3GPP TS 38.331.
+                        enum:
+                        - 50
+                        - 100
+                        - 150
+                        - 200
+                        - 500
+                        - 1000
+                        - 2000
+                        - 10000
+                        type: integer
+                      targetPCI:
+                        description: targetPCI is the Physical Cell Identity of the
+                          target cell after switch (0-1007).
+                        maximum: 1007
+                        minimum: 0
+                        type: integer
+                    required:
+                    - t304
+                    - targetPCI
+                    type: object
+                  tService:
+                    description: tService sets the expected NTN service duration in
+                      seconds.
+                    minimum: 1
+                    type: integer
+                  taCommon:
+                    default: 0
+                    description: taCommon sets the common Timing Advance value (0-66485757).
+                    maximum: 66485757
+                    minimum: 0
+                    type: integer
+                  taInfo:
+                    description: |-
+                      taInfo provides extended Timing Advance parameters per 3GPP TS 38.213.
+                      When set, taInfo.taCommon takes precedence over the top-level taCommon field.
+                    properties:
+                      taCommon:
+                        description: |-
+                          taCommon is the common Timing Advance value (0-66485757). Required when
+                          taInfo is set — explicitly provide 0 for GEO satellites.
+                        maximum: 66485757
+                        minimum: 0
+                        type: integer
+                      taCommonDrift:
+                        description: taCommonDrift is the TA drift rate.
+                        type: integer
+                      taCommonDriftVariant:
+                        description: taCommonDriftVariant is the TA drift rate variant.
+                        type: integer
+                      taCommonOffset:
+                        description: taCommonOffset is an additional TA offset.
+                        type: integer
+                    required:
+                    - taCommon
+                    type: object
+                  taReport:
+                    description: taReport enables UE TA reporting.
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of ephemerisECEF or ephemerisOrbital must be
+                    set
+                  rule: has(self.ephemerisECEF) || has(self.ephemerisOrbital)
+                - message: ephemerisECEF and ephemerisOrbital are mutually exclusive
+                  rule: '!(has(self.ephemerisECEF) && has(self.ephemerisOrbital))'
+                - message: ephemerisECEF position must not be all zeros
+                  rule: '!has(self.ephemerisECEF) || self.ephemerisECEF.posX != 0
+                    || self.ephemerisECEF.posY != 0 || self.ephemerisECEF.posZ !=
+                    0'
+              provider:
+                description: provider specifies which NTN backend to configure.
+                properties:
+                  endpoint:
+                    description: endpoint is the provider-specific endpoint (e.g.,
+                      O1 NETCONF address).
+                    type: string
+                  namespace:
+                    description: namespace where the provider resources (e.g., OCUDU
+                      gNB) are deployed.
+                    type: string
+                  type:
+                    description: type is the provider type. Currently only "ocudu"
+                      is supported.
+                    enum:
+                    - ocudu
+                    type: string
+                required:
+                - type
+                type: object
+            required:
+            - ntn
+            - provider
+            type: object
+          status:
+            description: NTNCellConfigStatus defines the observed state of NTNCellConfig.
+            properties:
+              appliedKoffset:
+                description: appliedKoffset is the last successfully applied k-offset
+                  value.
+                type: integer
+              conditions:
+                description: conditions represent the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              configMapRef:
+                description: configMapRef is the name of the ConfigMap containing
+                  the generated config.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

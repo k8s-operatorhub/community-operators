@@ -1,0 +1,389 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: pinot-operator.v0.0.1
+  namespace: placeholder
+  annotations:
+    categories: 'Big Data, Database'
+    certified: 'False'
+    description: 'pinot-operator allows creating Apache Pinot cluster and manage their lifecycle'
+    containerImage: 'docker.io/datainfrahq/pinot-operator:v0.0.1'
+    capabilities: Full Lifecycle
+    createdAt: 2023-04-17 00:00:00
+    repository: 'https://github.com/datainfrahq/pinot-operator'
+    alm-examples: |-
+      [
+        {
+            "apiVersion":"datainfra.io/v1beta1",
+            "kind":"Pinot",
+            "metadata":{
+              "name":"pinot-simple"
+            },
+            "spec":{
+              "external":{
+                  "zookeeper":{
+                    "spec":{
+                        "zkAddress":"zkcr-zookeeper-headless.pinot:2181"
+                    }
+                  }
+              },
+              "nodes":[
+                  {
+                    "name":"pinot-controller",
+                    "kind":"Statefulset",
+                    "replicas":1,
+                    "nodeType":"controller",
+                    "k8sConfig":"controller",
+                    "pinotNodeConfig":"controller"
+                  },
+                  {
+                    "name":"pinot-broker",
+                    "kind":"Statefulset",
+                    "replicas":1,
+                    "nodeType":"broker",
+                    "k8sConfig":"broker",
+                    "pinotNodeConfig":"broker"
+                  },
+                  {
+                    "name":"pinot-server",
+                    "kind":"Statefulset",
+                    "replicas":1,
+                    "nodeType":"server",
+                    "k8sConfig":"server",
+                    "pinotNodeConfig":"server"
+                  },
+                  {
+                    "name":"pinot-minion",
+                    "kind":"Statefulset",
+                    "replicas":1,
+                    "nodeType":"minion",
+                    "k8sConfig":"minion",
+                    "pinotNodeConfig":"minion"
+                  }
+              ],
+              "deploymentOrder":[
+                  "controller",
+                  "broker",
+                  "server",
+                  "minion"
+              ],
+              "k8sConfig":[
+                  {
+                    "name":"controller",
+                    "serviceAccountName":"default",
+                    "port":[
+                        {
+                          "name":"controller",
+                          "containerPort":9000,
+                          "protocol":"TCP"
+                        }
+                    ],
+                    "env":[
+                        {
+                          "name":"LOG4J_CONSOLE_LEVEL",
+                          "value":"info"
+                        }
+                    ],
+                    "image":"apachepinot/pinot:latest",
+                    "storageConfig":[
+                        {
+                          "name":"pinotcontroller",
+                          "mountPath":"/var/pinot/controller/data",
+                          "spec":{
+                              "accessModes":[
+                                "ReadWriteOnce"
+                              ],
+                              "storageClassName":"civo-volume",
+                              "resources":{
+                                "requests":{
+                                    "storage":"1Gi"
+                                }
+                              }
+                          }
+                        }
+                    ]
+                  },
+                  {
+                    "name":"broker",
+                    "serviceAccountName":"default",
+                    "port":[
+                        {
+                          "name":"broker",
+                          "containerPort":8099,
+                          "protocol":"TCP"
+                        }
+                    ],
+                    "env":[
+                        {
+                          "name":"LOG4J_CONSOLE_LEVEL",
+                          "value":"info"
+                        }
+                    ],
+                    "image":"apachepinot/pinot:latest",
+                    "storageConfig":[
+                        {
+                          "name":"broker",
+                          "mountPath":"/var/pinot/broker/data",
+                          "spec":{
+                              "accessModes":[
+                                "ReadWriteOnce"
+                              ],
+                              "storageClassName":"civo-volume",
+                              "resources":{
+                                "requests":{
+                                    "storage":"1Gi"
+                                }
+                              }
+                          }
+                        }
+                    ]
+                  },
+                  {
+                    "name":"server",
+                    "serviceAccountName":"default",
+                    "port":[
+                        {
+                          "name":"server",
+                          "containerPort":8097,
+                          "protocol":"TCP"
+                        }
+                    ],
+                    "image":"apachepinot/pinot:latest",
+                    "env":[
+                        {
+                          "name":"LOG4J_CONSOLE_LEVEL",
+                          "value":"info"
+                        }
+                    ],
+                    "storageConfig":[
+                        {
+                          "name":"server",
+                          "mountPath":"/var/pinot/server/data",
+                          "spec":{
+                              "accessModes":[
+                                "ReadWriteOnce"
+                              ],
+                              "storageClassName":"civo-volume",
+                              "resources":{
+                                "requests":{
+                                    "storage":"1Gi"
+                                }
+                              }
+                          }
+                        }
+                    ]
+                  },
+                  {
+                    "name":"minion",
+                    "serviceAccountName":"default",
+                    "image":"apachepinot/pinot:latest",
+                    "port":[
+                        {
+                          "name":"minion",
+                          "containerPort":9514,
+                          "protocol":"TCP"
+                        }
+                    ],
+                    "env":[
+                        {
+                          "name":"LOG4J_CONSOLE_LEVEL",
+                          "value":"info"
+                        }
+                    ],
+                    "storageConfig":[
+                        {
+                          "name":"minion",
+                          "mountPath":"/var/pinot/minion/data",
+                          "spec":{
+                              "accessModes":[
+                                "ReadWriteOnce"
+                              ],
+                              "storageClassName":"civo-volume",
+                              "resources":{
+                                "requests":{
+                                    "storage":"1Gi"
+                                }
+                              }
+                          }
+                        }
+                    ]
+                  }
+              ],
+              "pinotNodeConfig":[
+                  {
+                    "name":"controller",
+                    "java_opts":"-XX:ActiveProcessorCount=2 -Xms256M -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Xlog:gc*:file=/opt/pinot/gc-pinot-controller.log -Dlog4j2.configurationFile=/opt/pinot/conf/log4j2.xml -Dplugins.dir=/opt/pinot/plugins",
+                    "data":"controller.port=9000\ncontroller.data.dir=/var/pinot/controller/data \npinot.set.instance.id.to.hostname=true\ncontroller.task.scheduler.enabled=true"
+                  },
+                  {
+                    "name":"broker",
+                    "java_opts":"-XX:ActiveProcessorCount=2 -Xms256M -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Xlog:gc*:file=/opt/pinot/gc-pinot-broker.log -Dlog4j2.configurationFile=/opt/pinot/conf/log4j2.xml -Dplugins.dir=/opt/pinot/plugins",
+                    "data":"pinot.broker.client.queryPort=8099\npinot.broker.routing.table.builder.class=random\npinot.set.instance.id.to.hostname=true"
+                  },
+                  {
+                    "name":"server",
+                    "java_opts":"-Xms512M -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Xlog:gc*:file=/opt/pinot/gc-pinot-server.log -Dlog4j2.configurationFile=/opt/pinot/conf/log4j2.xml -Dplugins.dir=/opt/pinot/plugins",
+                    "data":"pinot.server.netty.port=8098\npinot.server.adminapi.port=8097\npinot.server.instance.dataDir=/var/pinot/server/data/index\npinot.server.instance.segmentTarDir=/var/pinot/server/data/segment\npinot.set.instance.id.to.hostname=true\npinot.server.instance.realtime.alloc.offheap=true"
+                  },
+                  {
+                    "name":"minion",
+                    "java_opts":"-XX:ActiveProcessorCount=2 -Xms256M -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Xlog:gc*:file=/opt/pinot/gc-pinot-minion.log -Dlog4j2.configurationFile=/opt/pinot/conf/log4j2.xml -Dplugins.dir=/opt/pinot/plugins",
+                    "data":"pinot.minion.port=9514\ndataDir=/var/pinot/minion/data\npinot.set.instance.id.to.hostname=true"
+                  }
+              ]
+            }
+         }
+      ]
+spec:
+  displayName: pinot-operator
+  description: 
+    'Pinot Kubernetes Operator for deploying and managing heterogenous apache pinot kubernetes clusters. 
+     This operator is based on Dsoi-Spec and is built using operator-runtime. 
+     This is a radical new approach that brings ease of use and decouples application and kubernetes in a way that it becomes easier for day 2 operations. 
+     The goal of this project is to build a control plane for managing apache pinot clusters. 
+     The underlying controllers are built on conditions ie orthogonal concepts and not state machines.
+     Apache®, Apache Pinot, Pinot® are either registered trademarks or trademarks of the Apache Software Foundation in the United States and/or other countries. This project, pinot-operator, is not an Apache Software Foundation project.
+    '
+  maturity: stable
+  version: 0.0.1
+  minKubeVersion: 1.23.0
+  keywords:
+    - Big Data
+    - Database
+  maintainers:
+    - name: Adheip Singh
+      email: adheip.singh@datainfra.io
+  provider:
+    name: 'DataInfra'
+  links:
+    - name: Apache Pinot Website
+      url: 'https://pinot.apache.org/'
+    - name: Pinot Operator Repository
+      url: 'https://github.com/datainfrahq/pinot-operator'
+  icon:
+    - base64data: >-
+        PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJhIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4NDEuODg5ODMgMTk4LjQyNTIiPjxwYXRoIGQ9Im0yOC43OTcyMywxMjUuNTU3MTdsLTExLjg3NzQ2LDMuODU4MzhjLS40NzA2MS0xLjM0NDcyLS45MzI1NC0yLjc4ODE1LTEuMzk5MjEtNC4zNzYxN2w2MC4wMDE2MS0xOS40OTU4MWMuMzYzMjMsMS41NDY5Ni44NjMwNSwzLjA2NDMyLDEuNDkwOCw0LjUzMjQybC00NC41MjUwNywyNS43NzIzOS0zLjY5MDY4LTEwLjI5MTIxWm0tNC4yMDg2Ny0xMy4xMTcxNmw1MC4zMTUzNS0xMC43NTMyNGMtLjE1MDgyLTEuNjM1Ny0uMTU0NzctMy4xNDQ4Ni0uMDE1LTQuNzcwNzhIMTEuODEzM2MtLjA1MjExLDEuNTI1NjQtLjA1MjExLDMuMDY1OTksMCw0LjU5NDloMTIuNDQ4MzVsLjMyNjksMTAuOTI5MTJabTU0LjIwOTc1LDEuMTA5NjFsLTUxLjA0OTcsMzcuMDg5NjJjLjgwNjk5LDEuMTYzOSwxLjY4OTc5LDIuMzY1NiwyLjcyMDI0LDMuNzAwNTVsMTAuMDc0NzYtNy4zMTU3Myw2LjY4NzI5LDguNjQ3MzIsMzQuMzgzOTgtMzguMjcxNThjLTEuMDQ3MDQtMS4yMDE3LTEuOTkxNDItMi40OTA1Ni0yLjgxNjU3LTMuODUwMTlabS00Ny4xMTQyMy00OS4zOTI5N2w0Ny4wMjQyMSwyMC44NzM0OWMuODE3MjYtMS4zNjc4MiwxLjc1Mzc1LTIuNjYzMjksMi43OTI4OC0zLjg2ODI1TDMwLjQ2ODg2LDQ0LjA4NTUxYy0xLjAzNTE5LDEuMzQzMTQtMS45MTc5OSwyLjU0NjUyLTIuNzIwMjQsMy43MDIyM2wxMC4wOTM3MSw3LjMzMzY5LTYuMTU4MjQsOS4wMzUyMlptNTkuODkxMDcsOS42MzA0YzEuNDY4NjktLjYyODA0LDIuOTg3MTMtMS4xMjc3Nyw0LjUzMjQyLTEuNDg5NDJsLTE5LjQ5NTcxLTYwLjAwMTUxYy0xLjYwNDUxLjQ3MzQ4LTMuMDQ3OTMuOTMzNzMtNC4zNzYwNywxLjM5OTAxbDMuODU5NjYsMTEuODc3NjYtMTAuMjkyNjksMy42ODkxLDI1Ljc3MjM5LDQ0LjUyNTE3Wm0tNy4xODg3LDQ2LjM2MzExbC0zNy4wNzUwMSw1MS4wMzIwM2MxLjMzOTk4LDEuMDMyNDMsMi41NDE3OSwxLjkxNjksMy43MDA5NSwyLjcyMDgzbDcuMzMzOTktMTAuMDk0LDkuMDMzMjUsNi4xNTk5MiwyMC44NzUxNy00Ny4wMjU2Yy0xLjM3MTU3LS44MjA0MS0yLjY2NjU1LTEuNzU1ODItMy44NjgzNS0yLjc5MzE4Wm0tLjEzMzQ1LTQxLjc1ODM0YzEuMTk3MDYtMS4wNDU1NiwyLjQ4NzMtMS45OTA4MywzLjg0ODYxLTIuODE3NzZMNTEuMDEzOTcsMjQuNTIzOTZjLTEuMTU5MTYuODAzODMtMi4zODA3LDEuNzAxNDMtMy43MDQxMSwyLjcyMDczbDcuMzE4OTgsMTAuMDcyNTgtOC42NDg3LDYuNjg5MjYsMzguMjcyODYsMzQuMzg1MjdabS01OS45MzkyMyw5LjM0NDI2bDUxLjE2NzM1LDUuMzIxNTRjLjM1Mzc1LTEuNTQ4NjQuODQzMzEtMy4wNzA5MywxLjQ2MTU5LTQuNTQyMjlsLTYwLjAyMjkzLTE5LjUwMjQyYy0uNDcwNjEsMS4zNDMxNC0uOTMyNTQsMi43ODY1Ny0xLjM5OTIxLDQuMzc0NTlsMTEuODU3NzIsMy44NTM1NC0zLjA2NDUxLDEwLjQ5NTAzWm04MC40MjE5Ni0xNi4wNzE0MlY4LjU4ODk1Yy0uNzYzNTYtLjAyNzkzLTEuNTI3OTEtLjA1MjYxLTIuMjk3LS4wNTI2MS0uNzcwNjcsMC0xLjUzNTAyLjAyNDY4LTIuMjk3NzkuMDUyNjF2MTIuNDQ5NzNsLTEwLjkyOTkxLjMyNTUyLDEwLjc1MzgzLDUwLjMxMzU3Yy44NTI3OS0uMDc1NjEsMS42Njg0Ny0uMTEzNDEsMi40NzM4OC0uMTEzNDEuNzU0ODgsMCwxLjUxMjkxLjAzMjg3LDIuMjk3LjEwMDI4Wm0tMzIuNDk5OTUsMTEzLjA2NzExYzEuMzQxNTYuNDcwMjIsMi43ODQ5OS45MzA0Nyw0LjM3NjA3LDEuMzk5MDFsMy44NTMzNC0xMS44NTc5MSwxMC40OTU2MiwzLjA2NTk5LDUuMzIxMjUtNTEuMTY4NDNjLTEuNTQ4NDQtLjM1MzQ1LTMuMDcwODMtLjg0MzQxLTQuNTQ0MjYtMS40NjE0OWwtMTkuNTAyMDIsNjAuMDIyODNabTQ4LjI1MzY1LTEwNi40NTY3MWwzNy4wNzU4LTUxLjAzMDM1Yy0xLjMzNTI1LTEuMDI5MTctMi41Mzc4NC0xLjkxMzU0LTMuNzAxNzQtMi43MjA3M2wtNy4zMzMyLDEwLjA5MzktOS4wMzQwNC02LjE1ODM0LTIwLjg3NTE3LDQ3LjAyMjQ0YzEuMzY4NDEuODE4NzQsMi42NjMzOSwxLjc1NDE0LDMuODY4MzUsMi43OTMwOFptNTEuODk5MzMtMTUuNjk2NTVsLTQ0LjUyNTg2LDI1Ljc3MjM5Yy42Mjc3NSwxLjQ2ODEsMS4xMjc1OCwyLjk4NTQ1LDEuNDkwOCw0LjUzMjQybDYwLjAwMjQtMTkuNDk1ODFjLS40NjgyNC0xLjU5MTI4LS45MzAxNy0zLjAzNDcxLTEuNC00LjM3NDU5bC0xMS44NzgyNSwzLjg2MDA2LTMuNjg5MS0xMC4yOTQ0N1ptLTQ2LjMxMTE5LDIyLjI5ODc2bDUxLjA0OTctMzcuMDg3OTRjLS44MDM4My0xLjE1ODk2LTEuNzAxNjMtMi4zODIwOC0yLjcyMTAzLTMuNzAzODFsLTEwLjA3MzE4LDcuMzE4ODktNi42ODg4Ny04LjY0ODktMzQuMzg0NzcsMzguMjczMjZjMS4wNDU0NiwxLjE5Njc3LDEuOTkxNDIsMi40ODczLDIuODE4MTUsMy44NDg1MVptNTQuNTM1ODcsMTIuMDM4NzRsLS4zMjY5LTEwLjkyOTEyLTUwLjMxNDU2LDEwLjc1MzI0Yy4xNDc2NiwxLjYzNDEyLjE1NDc3LDMuMTQzMjguMDE1LDQuNzcwNzhoNjMuMDc2MzljLjA1NjA2LTEuNTI4OS4wNTQ0OC0zLjA2OTI1LDAtNC41OTQ5aC0xMi40NDk5M1pNMTMyLjY0MDEsMTMuNjk1MTJjLTEuMzMxMy0uNDY1MjgtMi43NzQ3Mi0uOTI3MjEtNC4zNzYwNy0xLjM5OTAxbC0zLjg1MzM0LDExLjg1NzkxLTEwLjQ5NTYyLTMuMDY0MzItNS4zMTk2Nyw1MS4xNzAxMWMxLjU0NTI5LjM1MDEsMy4wNjc2Ny44MzgzOCw0LjU0MjY4LDEuNDU4MTNsMTkuNTAyMDItNjAuMDIyODNabS0xOS4zMzkzNiwxMTAuOTQzMTNjLTEuNDY4NjkuNjI3OTQtMi45ODU1NSwxLjEyNzc3LTQuNTMyNDIsMS40OTFsMTkuNDk1NzEsNjAuMDAxNTFjMS41ODc5Mi0uNDY2ODYsMy4wMzEzNS0uOTI4NzksNC4zNzYwNy0xLjM5OTAxbC0zLjg1ODA4LTExLjg3NzY2LDEwLjI5MTktMy42OTA2OC0yNS43NzMxOC00NC41MjUxN1ptLTEwLjg2MjAxLDIuMjI0MjZjLS43NTY0NiwwLTEuNTE0NDktLjAzMjg3LTIuMjk3NzktLjEwMDI4djYzLjA3NzM4Yy43NjI3Ny4wMjYyNSwxLjUyNzEyLjA0OTI1LDIuMjk3NzkuMDQ5MjUuNzY5MDksMCwxLjUzMzQ0LS4wMjMsMi4yOTctLjA0OTI1di0xMi40NDk3M2wxMC45MjkxMi0uMzI3Mi0xMC43NTM4My01MC4zMTUyNWMtLjg0OTYzLjA3NzI4LTEuNjY1MzEuMTE1MDktMi40NzIzLjExNTA5Wm03MC43NTM4Niw3LjQwOTRsLTQ3LjAyNS0yMC44NzUxN2MtLjgxNzI2LDEuMzY3ODItMS43NTM3NSwyLjY2MzI5LTIuNzkyODgsMy44Njk5M2w1MS4wMzIzMiwzNy4wNzMxM2MxLjAyOTY2LTEuMzMzMjcsMS45MTMyNS0yLjUzNDk3LDIuNzIwMjQtMy43MDA1NWwtMTAuMDkzNzEtNy4zMzM3OSw2LjE1OTAzLTkuMDMzNTRabS01Mi41Njk3MS0xNC4yMzY4NGMtMS4xOTU0OCwxLjA0Mzk4LTIuNDg1NzIsMS45ODc1Ny0zLjg0ODYxLDIuODE2MThsMzcuMDg5MjIsNTEuMDUxNzdjMS4xNTYtLjgwMDY3LDIuMzU4NTktMS42ODUxNSwzLjcwMjUzLTIuNzIwODNsLTcuMzE4OTgtMTAuMDc0MTYsOC42NDk0OS02LjY4NzY4LTM4LjI3MzY1LTM0LjM4NTI3Wm01OS45NDA4MS05LjM0NDI2bC01MS4xNzIwOS01LjMxOTg2Yy0uMzUwNTksMS41NDUyOS0uODM4NTgsMy4wNjc2Ny0xLjQ1ODQzLDQuNTQyMjlsNjAuMDIyOTMsMTkuNTAyMzJjLjQ3MDYxLTEuMzQxNDYuOTMyNTQtMi43ODY0NywxLjQtNC4zNzYxN2wtMTEuODU4NTEtMy44NTM1NCwzLjA2NjA5LTEwLjQ5NTAzWiIgZmlsbD0iIzQzNjFlZSIvPjxnPjxwYXRoIGQ9Im0yMjMuNzk4OTgsMTU1LjcxMTc0VjUyLjE3MDRoMzkuNzkxMzVjNy43ODkxNiwwLDE0Ljk4NzE3LDEuMzMxMywyMS41OTY0NSwzLjk5MzkxLDYuNjA0NDMsMi42NjI2MSwxMi4zNzMwMiw2LjMzNjcyLDE3LjMwNTc1LDExLjAxOTkxLDQuOTMwMzEsNC42ODQ0LDguODAxODcsMTAuMTgyODUsMTEuNjEyMjcsMTYuNDkyOTIsMi44MTA0LDYuMzExMjgsNC4yMTU2LDEzLjExNTU5LDQuMjE1NiwyMC40MTE3MiwwLDcuMjk4NTUtMS4zODMzOSwxNC4wNzc0My00LjE0MjkxLDIwLjMzNzgzLTIuNzYxOTQsNi4yNjI4My02LjYzMzUxLDExLjcxMTYxLTExLjYxMjI3LDE2LjM0NjM0cy0xMC43NzQsOC4yODM0LTE3LjM3ODQzLDEwLjk0NjAxYy02LjYwOTI4LDIuNjYyNjEtMTMuODA3MjksMy45OTI3LTIxLjU5NjQ1LDMuOTkyN2gtMzkuNzkxMzVabTIxLjQ0ODY2LTE5LjA4MTYzaDE4LjA0NzExYzQuNjMyMzEsMCw4Ljk0NzI0LS44MzU4NSwxMi45NDIzNy0yLjUxNDgyLDMuOTkyNy0xLjY3NDEyLDcuNDkzNTktMy45OTI3LDEwLjUwMjY1LTYuOTUwODksMy4wMDY2NC0yLjk1ODE5LDUuMzI1MjItNi4zODM5Niw2Ljk1MDg5LTEwLjI4MjE4LDEuNjI4MDktMy44OTMzNywyLjQ0MjE0LTguMTU3NDIsMi40NDIxNC0xMi43OTMzNywwLTQuNTMyOTgtLjgxNDA1LTguODAwNjYtMi40NDIxNC0xMi43OTQ1OC0xLjYyNTY3LTMuOTkzOTEtMy45NDQyNS03LjQ5MjM3LTYuOTUwODktMTAuNTAxNDQtMy4wMDkwNi0zLjAwNjY0LTYuNTA5OTUtNS4zNDgyNC0xMC41MDI2NS03LjAyNTk5LTMuOTk1MTMtMS42NzY1NS04LjI2MTYtMi41MTQ4Mi0xMi43OTQ1OC0yLjUxNDgyaC0xOC4xOTQ5djY1LjM3ODA5WiIgZmlsbD0iIzQzNjFlZSIvPjxwYXRoIGQ9Im0zNTQuNTU5OTksMTU3LjA0MTg0Yy01LjQyNDU1LDAtMTAuMjU3OTUtMS4wMTAyOS0xNC40OTc3OC0zLjAzMDg3LTQuMjM5ODItMi4wMjA1OC03LjU0MjA0LTQuODA2NzUtOS45MDkwNy04LjM1ODUxLTIuMzY3MDMtMy41NDkzNC0zLjU0OTM0LTcuNjM4OTUtMy41NDkzNC0xMi4yNzYxMSwwLTcuMzk2NjgsMi43NTk1Mi0xMy4xMzg2MSw4LjI4MzQtMTcuMjMzMDcsNS41MjE0Ni00LjA4OTYxLDEzLjIxMTI5LTYuMTM5MjcsMjMuMDc0MzMtNi4xMzkyNyw2LjcwMzc3LDAsMTMuMDE3NDcsMS4wMzY5NCwxOC45MzM4NCwzLjEwODR2LTUuNjIwOGMwLTQuNDM3MjgtMS4zODMzOS03Ljc5MDM3LTQuMTQyOTEtMTAuMDU4MDctMi43NjE5NC0yLjI2NzctNi44MDMxLTMuNDAyNzYtMTIuMTI4MzItMy40MDI3Ni0zLjE1Njg1LDAtNi42NTUzMS41MTg0Ny0xMC41MDI2NSwxLjU1Mjk5LTMuODQ0OTEsMS4wMzU3My04LjE4NjQ5LDIuNjM5NTktMTMuMDE3NDcsNC44MDc5NmwtNy4yNDY0Ni0xNS4wODc3MmM2LjExMjYxLTIuNjYyNjEsMTEuOTI5NjUtNC42ODE5OCwxNy40NTM1NC02LjA2NDE2LDUuNTIxNDYtMS4zNzk3NiwxMS4wNDI5Mi0yLjA3MTQ2LDE2LjU2NjgxLTIuMDcxNDYsMTAuNTUxMSwwLDE4LjY4NjcyLDIuNDkxODEsMjQuNDA2ODUsNy40NzA1Nyw1LjcxNzcxLDQuOTc5OTgsOC41Nzg5OCwxMi4wMDU5Nyw4LjU3ODk4LDIxLjA3Njc3djQ5Ljk5NmgtMTkuOTY4MzZ2LTUuNDczMDFjLTMuMTU2ODUsMi4zNjcwMy02LjU2MDgyLDQuMDkyMDQtMTAuMjA3MDcsNS4xNzc0My0zLjY0ODY3LDEuMDgyOTctNy42OTIyNSwxLjYyNTY3LTEyLjEyODMyLDEuNjI1NjdabS04LjcyNjc3LTI0LjEwODg1YzAsMi45NTgxOSwxLjI3OTIyLDUuMzAwOTksMy44NDQ5MSw3LjAyNTk5LDIuNTYzMjgsMS43MjUsNS45NjQ4MywyLjU4NzUsMTAuMjA3MDcsMi41ODc1LDMuMzUwNjcsMCw2LjQzMjQyLS4zOTI0OSw5LjI0NTI0LTEuMTgyMzEsMi44MTA0LS43ODc0LDUuMzk3OS0yLjA3MTQ2LDcuNzY0OTMtMy44NDczNHYtMTEuMjQxNTljLTIuNDY2MzctMS4wODI5Ny01LjAyOTY0LTEuODQ4NTYtNy42OTIyNS0yLjI5MTkzcy01LjUyMzg4LS42NjYyNi04LjU3ODk4LS42NjYyNmMtNC42MzcxNiwwLTguMjYxNi44NDA3LTEwLjg3MzMzLDIuNTE0ODItMi42MTE3MywxLjY3ODk3LTMuOTE3Niw0LjA0Ni0zLjkxNzYsNy4xMDExWiIgZmlsbD0iIzQzNjFlZSIvPjxwYXRoIGQ9Im00NDYuNDE2MzksMTU2Ljg5NDA1Yy04LjQ4MjA3LDAtMTQuOTE2OTEtMS45NDU0Ny0xOS4zMDIxLTUuODQxMjctNC4zOTAwMy0zLjg5NTc5LTYuNTgyNjMtOS41NDA4Mi02LjU4MjYzLTE2LjkzNzQ5di0zOC42MDU0MWgtMTUuODI3ODd2LTE2Ljg2MjM5aDE1LjgyNzg3di0xOS42NzI3OGwyMC4xMTYxNS00LjU4NTA3djI0LjI1Nzg1aDIyLjE4NzZ2MTYuODYyMzloLTIyLjE4NzZ2MzQuMzE3MTRjMCwzLjU0OTM0LjgxNDA1LDYuMDg4MzksMi40Mzk3Miw3LjYxNzE1LDEuNjI4MDksMS41Mjg3Niw0LjM2MzM4LDIuMjkxOTMsOC4yMTA3MiwyLjI5MTkzLDIuMDcxNDYsMCwzLjkyMDAyLS4xMjExNCw1LjU0NTY5LS4zNjgyNiwxLjYyODA5LS4yNDcxMiwzLjQyNTc4LS42NjYyNiw1LjQwMDMyLTEuMjU3NDF2MTYuNTY2ODFjLTIuMDcxNDYuNjkwNDktNC42MzcxNiwxLjIzMDc2LTcuNjkyMjUsMS42MjU2Ny0zLjA1NzUyLjM5MjQ5LTUuNzY4NTguNTkxMTUtOC4xMzU2Mi41OTExNVoiIGZpbGw9IiM0MzYxZWUiLz48cGF0aCBkPSJtNDk3LjE1Mzc1LDE1Ny4wNDE4NGMtNS40MjQ1NSwwLTEwLjI1Nzk1LTEuMDEwMjktMTQuNDk3NzgtMy4wMzA4Ny00LjIzOTgyLTIuMDIwNTgtNy41NDIwNC00LjgwNjc1LTkuOTA5MDctOC4zNTg1MS0yLjM2NzAzLTMuNTQ5MzQtMy41NDkzNC03LjYzODk1LTMuNTQ5MzQtMTIuMjc2MTEsMC03LjM5NjY4LDIuNzU5NTItMTMuMTM4NjEsOC4yODM0LTE3LjIzMzA3LDUuNTIxNDYtNC4wODk2MSwxMy4yMTEyOS02LjEzOTI3LDIzLjA3NDMzLTYuMTM5MjcsNi43MDM3NywwLDEzLjAxNzQ3LDEuMDM2OTQsMTguOTMzODQsMy4xMDg0di01LjYyMDhjMC00LjQzNzI4LTEuMzgzMzktNy43OTAzNy00LjE0MjkxLTEwLjA1ODA3LTIuNzYxOTQtMi4yNjc3LTYuODAzMS0zLjQwMjc2LTEyLjEyODMyLTMuNDAyNzYtMy4xNTY4NSwwLTYuNjU1MzEuNTE4NDctMTAuNTAyNjUsMS41NTI5OS0zLjg0NDkxLDEuMDM1NzMtOC4xODY0OSwyLjYzOTU5LTEzLjAxNzQ3LDQuODA3OTZsLTcuMjQ2NDYtMTUuMDg3NzJjNi4xMTI2MS0yLjY2MjYxLDExLjkyOTY1LTQuNjgxOTgsMTcuNDUzNTQtNi4wNjQxNiw1LjUyMTQ2LTEuMzc5NzYsMTEuMDQyOTItMi4wNzE0NiwxNi41NjY4MS0yLjA3MTQ2LDEwLjU1MTEsMCwxOC42ODY3MiwyLjQ5MTgxLDI0LjQwNjg1LDcuNDcwNTcsNS43MTc3MSw0Ljk3OTk4LDguNTc4OTgsMTIuMDA1OTcsOC41Nzg5OCwyMS4wNzY3N3Y0OS45OTZoLTE5Ljk2ODM2di01LjQ3MzAxYy0zLjE1Njg1LDIuMzY3MDMtNi41NjA4Miw0LjA5MjA0LTEwLjIwNzA3LDUuMTc3NDMtMy42NDg2NywxLjA4Mjk3LTcuNjkyMjUsMS42MjU2Ny0xMi4xMjgzMiwxLjYyNTY3Wm0tOC43MjY3Ny0yNC4xMDg4NWMwLDIuOTU4MTksMS4yNzkyMiw1LjMwMDk5LDMuODQ0OTEsNy4wMjU5OSwyLjU2MzI4LDEuNzI1LDUuOTY0ODMsMi41ODc1LDEwLjIwNzA3LDIuNTg3NSwzLjM1MDY3LDAsNi40MzI0Mi0uMzkyNDksOS4yNDUyNC0xLjE4MjMxLDIuODEwNC0uNzg3NCw1LjM5NzktMi4wNzE0Niw3Ljc2NDkzLTMuODQ3MzR2LTExLjI0MTU5Yy0yLjQ2NjM3LTEuMDgyOTctNS4wMjk2NC0xLjg0ODU2LTcuNjkyMjUtMi4yOTE5M3MtNS41MjM4OC0uNjY2MjYtOC41Nzg5OC0uNjY2MjZjLTQuNjM3MTYsMC04LjI2MTYuODQwNy0xMC44NzMzMywyLjUxNDgyLTIuNjExNzMsMS42Nzg5Ny0zLjkxNzYsNC4wNDYtMy45MTc2LDcuMTAxMVoiIGZpbGw9IiM0MzYxZWUiLz48cGF0aCBkPSJtNTU4LjI0MTE0LDE1NS43MTE3NFY1Mi4xNzA0aDExLjM4OTM4djEwMy41NDEzNWgtMTEuMzg5MzhaIiBmaWxsPSIjNDM2MWVlIi8+PHBhdGggZD0ibTU5MC4zNDAyNCwxNTUuNzExNzR2LTc0LjEwNjA3aDEwLjk0NjAxdjguNzI3OThjNS44MTcwNC02LjgwNDMxLDEzLjYwODYyLTEwLjIwNzA3LDIzLjM3MjMzLTEwLjIwNzA3LDUuNjIwOCwwLDEwLjU3NTMzLDEuMjA4OTYsMTQuODY2MDMsMy42MjQ0NCw0LjI4ODI4LDIuNDE3OTEsNy42Mzg5NSw1Ljc2ODU4LDEwLjA1Njg2LDEwLjA1ODA3LDIuNDE1NDksNC4yODk0OSwzLjYyNDQ0LDkuMjk2MTIsMy42MjQ0NCwxNS4wMTI2MXY0Ni44OTAwM2gtMTAuNzk4MjN2LTQ0LjY3MDc5YzAtNi42MDY4Ni0xLjg0ODU2LTExLjgwNzMtNS41NDU2OS0xNS42MDQ5OC0zLjY5OTU1LTMuNzk0MDQtOC43NTM0Mi01LjY5NDY5LTE1LjE2MTYxLTUuNjk0NjktNC40Mzg0OSwwLTguMzgyNzQuOTg3MjctMTEuODM1MTcsMi45NTgxOS0zLjQ1MjQzLDEuOTc0NTUtNi4zMTEyOCw0Ljc4NDk0LTguNTc4OTgsOC40MzExOXY1NC41ODEwN2gtMTAuOTQ2MDFaIiBmaWxsPSIjNDM2MWVlIi8+PHBhdGggZD0ibTY3OS45NzczOSwxNTUuNzExNzR2LTY0Ljc4NjkzaC0xNy40NTM1NHYtOS4zMTkxM2gxNy40NTM1NHYtMTQuMDUxOTljMC03LjI5NjEzLDEuOTcyMTItMTIuODY4NDcsNS45MTYzNy0xNi43MTQ2czkuNjE1OTItNS43Njg1OCwxNy4wMTI2LTUuNzY4NThjMS45Njk3LDAsMy43NDU1OC4wOTkzMyw1LjMyMjguMjk1NTgsMS41NzcyMS4xOTg2NywzLjEwODQuNTQyNyw0LjU4NjI4LDEuMDM1NzN2OS43NjI1Yy0xLjY3NjU1LS40OTE4Mi0zLjIwNTMxLS44NjI1LTQuNTg2MjgtMS4xMDk2Mi0xLjM4MDk3LS4yNDQ3LTIuOTA5NzMtLjM2OTQ3LTQuNTgzODYtLjM2OTQ3LTQuMzQxNTgsMC03LjU2ODY5LDEuMDYxMTctOS42ODg2LDMuMTc5ODctMi4xMjIzMywyLjEyMjMzLTMuMTgxMDgsNS40NDk5OS0zLjE4MTA4LDkuOTg0MTh2MTMuNzU2NDFoMjIuMDM5ODJ2OS4zMTkxM2gtMjIuMDM5ODJ2NjQuNzg2OTNoLTEwLjc5ODIzWiIgZmlsbD0iIzQzNjFlZSIvPjxwYXRoIGQ9Im03MjQuNjQ4MTcsMTU1LjcxMTc0di03NC4xMDYwN2gxMC45NDYwMXYxMC41MDI2NWMyLjI2NzctMy44NDYxMyw1LjE1MzItNi44MjczMyw4LjY1NDA5LTguOTQ5NjYsMy40OTg0Ni0yLjExODcsNy41MTc4MS0zLjE3OTg3LDEyLjA1NTY0LTMuMTc5ODcsMi41NjMyOCwwLDQuODgxODUuMzQ2NDUsNi45NTA4OSwxLjAzNTczdjEwLjA1ODA3Yy0xLjI4MTY0LS40OTE4Mi0yLjU2NTctLjgzNTg1LTMuODQ0OTEtMS4wMzU3My0xLjI4MTY0LS4xOTYyNC0yLjU2NTctLjI5NTU4LTMuODQ0OTEtLjI5NTU4LTQuNTM3ODIsMC04LjUwNjMsMS4zMDgyOS0xMS45MDc4NSwzLjkyMDAyLTMuNDAxNTUsMi42MTQxNS02LjA5MDgxLDYuMzg2MzktOC4wNjI5MywxMS4zMTU0OHY1MC43MzQ5NWgtMTAuOTQ2MDFaIiBmaWxsPSIjNDM2MWVlIi8+PHBhdGggZD0ibTc5NS41MDQxMSwxNTcuMDQxODRjLTUuNDI0NTUsMC0xMC4xODI4NS0uOTM3NjEtMTQuMjc0ODgtMi44MTA0LTQuMDkyMDQtMS44NzAzNy03LjI5NzM0LTQuNDg0NTItOS42MTM1LTcuODM3NjItMi4zMTg1OC0zLjM1MzEtMy40NzY2Ni03LjI0ODg5LTMuNDc2NjYtMTEuNjg3MzgsMC02Ljk5OTM0LDIuNjYyNjEtMTIuNTIwODEsNy45ODc4My0xNi41NjY4MSw1LjMyNTIyLTQuMDQxMTYsMTIuNTIwODEtNi4wNjQxNiwyMS41OTY0NS02LjA2NDE2LDcuOTg3ODMsMCwxNS4yMzQyOSwxLjY3ODk3LDIxLjc0NDI0LDUuMDI5NjR2LTkuNzYzNzFjMC01LjkxNTE2LTEuNjc4OTctMTAuMzc1NDYtNS4wMjk2NC0xMy4zODQ1Mi0zLjM1NTUyLTMuMDA2NjQtOC4yMzQ5NS00LjUxMTE3LTE0LjY0NTU2LTQuNTExMTctMy42NDg2NywwLTcuMzIxNTcuNTE3MjYtMTEuMDE4NywxLjU1Mjk5cy03Ljc2NDkzLDIuNjg4MDUtMTIuMjAzNDIsNC45NTU3NWwtNC4xNDI5MS04LjQzMTE5YzUuMzI1MjItMi41NjMyOCwxMC4yNTU1My00LjQzODQ5LDE0Ljc5MzM1LTUuNjIwOCw0LjUzNTQtMS4xODM1Miw5LjA3MDgtMS43NzU4OCwxMy42MDg2Mi0xLjc3NTg4LDkuMzY2MzgsMCwxNi41ODg2MSwyLjIxOTI1LDIxLjY2OTEzLDYuNjU2NTIsNS4wNzgxLDQuNDM3MjgsNy42MTcxNSwxMC43OTgyMyw3LjYxNzE1LDE5LjA4MDQydjQ5Ljg0ODIyaC0xMC42NDgwMnYtNy4yNDg4OWMtMy4zNTU1MiwyLjg2MTI4LTcuMDI4NDIsNS4wMDc4NC0xMS4wMjExMiw2LjQzNDg0LTMuOTkyNywxLjQyOTQzLTguMzA3NjMsMi4xNDQxNC0xMi45NDIzNywyLjE0NDE0Wm0tMTYuODYyMzktMjIuNjMwOTdjMCw0LjE0MjkxLDEuNzQ5MjMsNy41MjAyNCw1LjI1MDExLDEwLjEzMTk3LDMuNDk4NDYsMi42MTQxNSw4LjAxMjA2LDMuOTIwMDIsMTMuNTM1OTQsMy45MjAwMiw0LjQzNjA3LDAsOC40Nzk2NS0uNjg4MDYsMTIuMTI4MzItMi4wNjkwMywzLjY0NjI1LTEuMzgwOTcsNi45NTA4OS0zLjU1MTc2LDkuOTExNS02LjUwOTk1di0xMy45MDQyYy0zLjA1OTk0LTIuMDcxNDYtNi4zMTM3LTMuNTczNTctOS43NjM3MS00LjUxMTE3LTMuNDUyNDMtLjkzNTE4LTcuMzQ4MjItMS40MDUyLTExLjY4NDk1LTEuNDA1Mi01LjkxNjM3LDAtMTAuNjI4NjMsMS4zMDgyOS0xNC4xMjcwOSwzLjkyMDAyLTMuNTAwODgsMi42MTQxNS01LjI1MDExLDYuMDkwODEtNS4yNTAxMSwxMC40Mjc1NFoiIGZpbGw9IiM0MzYxZWUiLz48L2c+PC9zdmc+
+      mediatype: image/svg+xml
+  apiservicedefinitions: { }
+  customresourcedefinitions:
+    owned:
+      - name: pinots.datainfra.io
+        displayName: pinot-operator
+        kind: Pinot
+        version: v1beta1
+        description: Represents an Apache Pinot Cluster
+  install:
+    strategy: deployment
+    spec:
+      permissions:
+        - serviceAccountName: pinot-operator
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+                - configmaps
+                - services
+                - persistentvolumeclaims
+              verbs:
+                - list
+                - watch
+                - create
+                - update
+                - delete
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - apps
+              resources:
+                - statefulsets
+                - deployments
+              verbs:
+                - list
+                - watch
+                - create
+                - update
+                - delete
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - list
+                - watch
+                - create
+                - update
+                - patch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - list
+                - watch
+                - create
+                - update
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingresses
+              verbs:
+                - list
+                - watch
+                - create
+                - update
+            - apiGroups:
+                - datainfra.io
+              resources:
+                - pinots
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - datainfra.io
+              resources:
+                - pinots/finalizers
+              verbs:
+                - get
+                - update
+                - patch
+      deployments:
+        - name: pinot-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: pinot-operator
+            template:
+              metadata:
+                labels:
+                  app: pinot-operator
+              spec:
+                serviceAccountName: pinot-operator
+                containers:
+                  - name: pinot-operator
+                    image: docker.io/datainfrahq/pinot-operator:v0.0.1
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: true
+    - type: AllNamespaces
+      supported: false

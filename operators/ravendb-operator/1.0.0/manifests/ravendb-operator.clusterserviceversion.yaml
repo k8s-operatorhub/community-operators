@@ -1,0 +1,549 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[
+        {
+          "apiVersion": "ravendb.ravendb.io/v1",
+          "kind": "RavenDBCluster",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/name": "ravendb-operator",
+              "app.kubernetes.io/managed-by": "kustomize"
+            },
+            "annotations": {
+              "ravendb.io/upgrade-ping-interval": "5s"
+            },
+            "name": "ravendbcluster-sample",
+            "namespace": "ravendb"
+          },
+          "spec": {
+            "nodes": [
+              {
+                "tag": "a",
+                "publicServerUrl": "https://a.domain.development.run:443",
+                "publicServerUrlTcp": "tcp://a-tcp.domain.development.run:443",
+                "certSecretRef": "ravendb-certs-a"
+              },
+              {
+                "tag": "b",
+                "publicServerUrl": "https://b.domain.development.run:443",
+                "publicServerUrlTcp": "tcp://b-tcp.domain.development.run:443",
+                "certSecretRef": "ravendb-certs-b"
+              },
+              {
+                "tag": "c",
+                "publicServerUrl": "https://c.domain.development.run:443",
+                "publicServerUrlTcp": "tcp://c-tcp.domain.development.run:443",
+                "certSecretRef": "ravendb-certs-c"
+              }
+            ],
+            "image": "ravendb/ravendb:latest",
+            "imagePullPolicy": "IfNotPresent",
+            "mode": "LetsEncrypt",
+            "email": "user@ravendb.net",
+            "licenseSecretRef": "ravendb-license",
+            "domain": "domain.development.run",
+            "clientCertSecretRef": "ravendb-client-cert",
+            "externalAccessConfiguration": {
+              "type": "ingress-controller",
+              "ingressControllerContext": {
+                "ingressClassName": "nginx"
+              }
+            },
+            "storage": {
+              "data": {
+                "size": "10Gi",
+                "storageClassName": "local-path"
+              }
+            }
+          }
+        }
+      ]'
+    capabilities: Basic Install
+    categories: Database
+    createdAt: "2025-11-19T10:56:14Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    containerImage: docker.io/ravendb/ravendb-operator:1.0.0
+  name: ravendb-operator.v1.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - displayName: Raven DBCluster
+      kind: RavenDBCluster
+      name: ravendbclusters.ravendb.ravendb.io
+      version: v1
+      description: Represents a RavenDB cluster
+      resources:
+        - kind: StatefulSet
+          name: ravendb-<nodeTag>
+          version: v1
+        - kind: Service
+          name: ravendb-<nodeTag>
+          version: v1
+        - kind: Ingress
+          name: ravendb
+          version: v1
+        - kind: ServiceAccount
+          name: ravendb-ops-sa
+          version: v1
+        - kind: Job
+          name: ravendb-cluster-init
+          version: v1
+        - kind: ConfigMap
+          name: ravendb-bootstrapper-hook
+          version: v1
+        - kind: ConfigMap
+          name: ravendb-cert-hook
+          version: v1
+      specDescriptors:
+        - path: image
+          displayName: RavenDB Image
+          description: Container image to use for RavenDB nodes.
+        - path: imagePullPolicy
+          displayName: Image Pull Policy
+          description: Image pull policy for the RavenDB container.
+        - path: mode
+          displayName: Security Mode
+          description: Cluster security mode (LetsEncrypt or None(self-signed)).
+        - path: email
+          displayName: Let's Encrypt Email
+          description: Email used for Let's Encrypt certificate registration when mode is LetsEncrypt.
+        - path: licenseSecretRef
+          displayName: License Secret
+          description: Name of the Secret containing the RavenDB license.json.
+        - path: clusterCertSecretRef
+          displayName: Cluster Certificate Secret
+          description: Secret containing the shared cluster server certificate used in self-signed mode.
+        - path: clientCertSecretRef
+          displayName: Client Certificate Secret
+          description: Secret containing the admin client certificate (PFX) used by the bootstrapper.
+        - path: caCertSecretRef
+          displayName: CA Certificate Secret
+          description: Secret containing the CA certificate in self-signed mode.
+        - path: domain
+          displayName: Cluster Domain
+          description: DNS suffix used for per-node hostnames (e.g. a.<domain>, a-tcp.<domain>).
+        - path: nodes
+          displayName: Nodes
+          description: List of RavenDB nodes with tags and public URLs.
+        - path: nodes[].tag
+          displayName: Node Tag
+          description: Logical RavenDB node tag (1–4 characters) used for naming and routing.
+        - path: nodes[].publicServerUrl
+          displayName: Public HTTPS URL
+          description: Public HTTPS URL of the node (e.g. https://a.example.com).
+        - path: nodes[].publicServerUrlTcp
+          displayName: Public TCP URL
+          description: Public TCP URL of the node (e.g. tcp://a-tcp.example.com:38888).
+        - path: nodes[].certSecretRef
+          displayName: Node Certificate Secret
+          description: per-node Secret containing the server certificate; used in LetsEncrypt mode.
+        - path: env
+          displayName: Additional Environment Variables
+          description: Extra environment variables to inject into the RavenDB container.
+        - path: externalAccessConfiguration
+          displayName: External Access Configuration
+          description: Provider-specific configuration for exposing nodes externally (AWS NLB, Azure LB, or Ingress controller).
+        - path: externalAccessConfiguration.type
+          displayName: External Access Type
+          description: Type of external access (aws-nlb, azure-lb, ingress-controller).
+        - path: externalAccessConfiguration.awsExternalAccessContext.nodeMappings
+          displayName: AWS Node Mappings
+          description: AWS NLB configuration per node tag, including EIP allocation and subnet.
+        - path: externalAccessConfiguration.azureExternalAccessContext.nodeMappings
+          displayName: Azure Node Mappings
+          description: Azure LoadBalancer IP assignment per node tag.
+        - path: externalAccessConfiguration.ingressControllerContext.ingressClassName
+          displayName: Ingress Class
+          description: IngressClass used when exposing nodes via Ingress (nginx, traefik, haproxy).
+        - path: externalAccessConfiguration.ingressControllerContext.additionalAnnotations
+          displayName: Ingress Annotations
+          description: Additional annotations applied to the generated Ingress resource.
+        - path: storage
+          displayName: Storage
+          description: Storage configuration for data, logs, and additional volumes.
+        - path: storage.data.size
+          displayName: Data Volume Size
+          description: Persistent volume size for the main RavenDB data directory.
+        - path: storage.data.storageClassName
+          displayName: Data StorageClass
+          description: StorageClass used for the data volume.
+        - path: storage.data.accessModes
+          displayName: Data Access Modes
+          description: PVC access modes for the data volume (e.g. ReadWriteOnce).
+        - path: storage.data.volumeAttributesClassName
+          displayName: Data VolumeAttributesClass
+          description: Optional VolumeAttributesClass for the data PVC.
+        - path: storage.logs.ravendb.size
+          displayName: Logs Volume Size
+          description: Persistent volume size for RavenDB logs.
+        - path: storage.logs.ravendb.path
+          displayName: Logs Path
+          description: Mount path for RavenDB logs inside the container.
+        - path: storage.logs.audit.size
+          displayName: Audit Logs Volume Size
+          description: Persistent volume size for audit logs.
+        - path: storage.logs.audit.path
+          displayName: Audit Logs Path
+          description: Mount path for audit logs inside the container.
+        - path: storage.additionalVolumes
+          displayName: Additional Volumes
+          description: Extra volumes mounted into the RavenDB pod from ConfigMaps, Secrets, or PVCs.
+        - path: storage.additionalVolumes[].name
+          displayName: Additional Volume Name
+          description: Name of the additional volume.
+        - path: storage.additionalVolumes[].mountPath
+          displayName: Additional Volume Mount Path
+          description: Path at which the additional volume is mounted.
+      statusDescriptors:
+        - path: phase
+          displayName: Cluster Phase
+          description: High-level phase of the cluster lifecycle (Deploying, Running, Error).
+        - path: conditions
+          displayName: Cluster Conditions
+          description: Detailed status conditions such as Ready, Progressing, Degraded.
+        - path: message
+          displayName: Status Message
+          description: Human-readable summary of the current cluster state.
+        - path: nodes
+          displayName: Node Statuses
+          description: Per-node status including phase, last attempted image and last error.
+        - path: observedGeneration
+          displayName: Observed Generation
+          description: Last spec generation observed by the controller.
+  description: >
+    RavenDB Operator automates the lifecycle of secure RavenDB clusters on Kubernetes,
+    including cluster bootstrap, certificate management, storage provisioning, and
+    rolling upgrades. It reconciles RavenDBCluster custom resources into StatefulSets,
+    Services, Ingresses, and Jobs, and continuously evaluates cluster health and
+    readiness so you can operate RavenDB in a Kubernetes-native way.  
+  displayName: RavenDB Operator
+  icon:
+  - base64data: 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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+          - update
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - ingresses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ravendb.ravendb.io
+          resources:
+          - ravendbclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ravendb.ravendb.io
+          resources:
+          - ravendbclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - ravendb.ravendb.io
+          resources:
+          - ravendbclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        serviceAccountName: ravendb-operator-sa
+      deployments:
+      - label:
+          app: ravendb-operator
+        name: ravendb-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: ravendb-operator
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app: ravendb-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: docker.io/ravendb/ravendb-operator:1.0.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: cert
+                  readOnly: true
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: ravendb-operator-sa
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - name: cert
+                secret:
+                  defaultMode: 420
+                  secretName: webhook-server-cert
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: ravendb-operator-sa
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - database
+  - nosql
+  - document-database
+  - nosql-data-storage
+  links:
+  - name: Ravendb Operator
+    url: https://github.com/ravendb/ravendb-operator
+  - name: RavenDB Documentation
+    url: https://ravendb.net/docs
+  maintainers:
+  - email: omer.ratsaby@ravendb.net
+    name: Omer Ratsaby (thegoldenplatypus)
+  - email: support@ravendb.net
+    name: RavenDB Team
+  maturity: alpha
+  minKubeVersion: 1.27.0
+  provider:
+    name: ravendb-operator
+  version: 1.0.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: ravendb-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mravendbcluster.kb.io
+    rules:
+    - apiGroups:
+      - ravendb.ravendb.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - ravendbclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-ravendb-ravendb-io-v1-ravendbcluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: ravendb-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vravendbcluster.kb.io
+    rules:
+    - apiGroups:
+      - ravendb.ravendb.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - ravendbclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-ravendb-ravendb-io-v1-ravendbcluster

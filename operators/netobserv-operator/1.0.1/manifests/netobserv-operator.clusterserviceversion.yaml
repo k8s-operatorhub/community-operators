@@ -1,0 +1,612 @@
+apiVersion: operators.coreos.com/v1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "flows.netobserv.io/v1alpha1",
+          "kind": "FlowCollector",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "agent": {
+              "ebpf": {
+                "cacheActiveTimeout": "5s",
+                "cacheMaxFlows": 100000,
+                "excludeInterfaces": [
+                  "lo"
+                ],
+                "imagePullPolicy": "IfNotPresent",
+                "interfaces": [],
+                "kafkaBatchSize": 10485760,
+                "logLevel": "info",
+                "resources": {
+                  "limits": {
+                    "memory": "800Mi"
+                  },
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "50Mi"
+                  }
+                },
+                "sampling": 50
+              },
+              "type": "EBPF"
+            },
+            "consolePlugin": {
+              "autoscaler": {
+                "maxReplicas": 3,
+                "metrics": [
+                  {
+                    "resource": {
+                      "name": "cpu",
+                      "target": {
+                        "averageUtilization": 50,
+                        "type": "Utilization"
+                      }
+                    },
+                    "type": "Resource"
+                  }
+                ],
+                "minReplicas": 1,
+                "status": "DISABLED"
+              },
+              "imagePullPolicy": "IfNotPresent",
+              "logLevel": "info",
+              "port": 9001,
+              "portNaming": {
+                "enable": true,
+                "portNames": {
+                  "3100": "loki"
+                }
+              },
+              "quickFilters": [
+                {
+                  "default": true,
+                  "filter": {
+                    "dst_namespace!": "openshift-,netobserv",
+                    "src_namespace!": "openshift-,netobserv"
+                  },
+                  "name": "Applications"
+                },
+                {
+                  "filter": {
+                    "dst_namespace": "openshift-,netobserv",
+                    "src_namespace": "openshift-,netobserv"
+                  },
+                  "name": "Infrastructure"
+                },
+                {
+                  "default": true,
+                  "filter": {
+                    "dst_kind": "Pod",
+                    "src_kind": "Pod"
+                  },
+                  "name": "Pods network"
+                },
+                {
+                  "filter": {
+                    "dst_kind": "Service"
+                  },
+                  "name": "Services network"
+                }
+              ],
+              "register": true
+            },
+            "deploymentModel": "DIRECT",
+            "exporters": [],
+            "kafka": {
+              "address": "kafka-cluster-kafka-bootstrap.netobserv",
+              "tls": {
+                "caCert": {
+                  "certFile": "ca.crt",
+                  "name": "kafka-cluster-cluster-ca-cert",
+                  "type": "secret"
+                },
+                "enable": false,
+                "userCert": {
+                  "certFile": "user.crt",
+                  "certKey": "user.key",
+                  "name": "flp-kafka",
+                  "type": "secret"
+                }
+              },
+              "topic": "network-flows"
+            },
+            "loki": {
+              "batchSize": 10485760,
+              "batchWait": "1s",
+              "maxBackoff": "5s",
+              "maxRetries": 2,
+              "minBackoff": "1s",
+              "tls": {
+                "caCert": {
+                  "certFile": "service-ca.crt",
+                  "name": "loki-ca-bundle",
+                  "type": "configmap"
+                },
+                "enable": false,
+                "insecureSkipVerify": false
+              },
+              "url": "http://loki.netobserv.svc:3100/"
+            },
+            "namespace": "netobserv",
+            "processor": {
+              "dropUnusedFields": true,
+              "imagePullPolicy": "IfNotPresent",
+              "kafkaConsumerAutoscaler": null,
+              "kafkaConsumerBatchSize": 10485760,
+              "kafkaConsumerQueueCapacity": 1000,
+              "kafkaConsumerReplicas": 3,
+              "logLevel": "info",
+              "metrics": {
+                "ignoreTags": [
+                  "egress",
+                  "packets"
+                ],
+                "server": {
+                  "port": 9102
+                }
+              },
+              "port": 2055,
+              "profilePort": 6060,
+              "resources": {
+                "limits": {
+                  "memory": "800Mi"
+                },
+                "requests": {
+                  "cpu": "100m",
+                  "memory": "100Mi"
+                }
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Monitoring
+    console.openshift.io/plugins: '["netobserv-plugin"]'
+    containerImage: quay.io/netobserv/network-observability-operator:1.0.1
+    createdAt: "2023-01-25T18:13:58Z"
+    description: Network flows collector and monitoring solution
+    operators.operatorframework.io/builder: operator-sdk-v1.25.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/netobserv/network-observability-operator
+  name: netobserv-operator.v1.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: FlowCollector is the Schema for the flowcollectors API, which pilots
+        and configures netflow collection.
+      displayName: Flow Collector
+      kind: FlowCollector
+      name: flowcollectors.flows.netobserv.io
+      version: v1alpha1
+  description: |-
+    NetObserv Operator is an OpenShift / Kubernetes operator for network observability. It deploys a monitoring pipeline to collect and enrich network flows. These flows can be produced by the NetObserv eBPF agent, or by any device or CNI able to export flows in IPFIX format, such as OVN-Kubernetes.
+
+    The operator provides dashboards, metrics, and keeps flows accessible in a queryable log store, Grafana Loki. When used in OpenShift, new views are available in the Console.
+
+    ## Dependencies
+
+    ### Loki
+
+    [Loki](https://grafana.com/oss/loki/), from GrafanaLabs, is the backend that is used to store all collected flows. The NetObserv Operator does not install Loki directly, however we provide some guidance to help you there.
+
+    For normal usage, we recommend two options:
+
+    - Installing the [Loki Operator](https://loki-operator.dev/docs/prologue/quickstart.md/). We have written [a guide](https://github.com/netobserv/documents/blob/main/loki_operator.md) to help you through those steps. Please note that it requires configuring an object storage. Note also that the Loki Operator can also be used for [OpenShift cluster logging](https://docs.openshift.com/container-platform/4.11/logging/cluster-logging.html). If you do so, you should not share the same `LokiStack` for Logging and NetObserv.
+
+    - Installing using [Grafana's official documentation](https://grafana.com/docs/loki/latest/). Here also we wrote a ["distributed Loki" step by step guide](https://github.com/netobserv/documents/blob/main/loki_distributed.md).
+
+    For a quick try that is not suitable for production and not scalable (it deploys a single pod, configures a 1GB storage PVC, with 24 hours of retention), you can simply run the following commands:
+
+    ```
+    kubectl create namespace netobserv
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/252bb624cf0425a1b66f59ce68fb939f246ef77b/examples/zero-click-loki/1-storage.yaml) -n netobserv
+    kubectl apply -f <(curl -L https://raw.githubusercontent.com/netobserv/documents/252bb624cf0425a1b66f59ce68fb939f246ef77b/examples/zero-click-loki/2-loki.yaml) -n netobserv
+    ```
+
+    ### Kafka
+
+    [Apache Kafka](https://kafka.apache.org/) can optionally be used for a more resilient and scalable architecture. You can use for instance [Strimzi](https://strimzi.io/), an operator-based distribution of Kafka for Kubernetes and OpenShift.
+
+    ### Grafana
+
+    [Grafana](https://grafana.com/oss/grafana/) can optionally be installed for custom dashboards and query capabilities.
+
+    ## Configuration
+
+    The `FlowCollector` resource is used to configure the operator and its managed components. A comprehensive documentation is [available here](https://github.com/netobserv/network-observability-operator/blob/1.0.1/docs/FlowCollector.md), and a full sample file [there](https://github.com/netobserv/network-observability-operator/blob/1.0.1/config/samples/flows_v1alpha1_flowcollector.yaml).
+
+    To edit configuration in cluster, run:
+
+    ```bash
+    kubectl edit flowcollector cluster
+    ```
+
+    As it operates cluster-wide, only a single `FlowCollector` is allowed, and it has to be named `cluster`.
+
+    A couple of settings deserve special attention:
+
+    - Agent (`spec.agent.type`) can be `EBPF` (default) or `IPFIX`. eBPF is recommended, as it should work in more situations and offers better performances. If you can't, or don't want to use eBPF, note that the IPFIX option is fully functional only when using [OVN-Kubernetes](https://github.com/ovn-org/ovn-kubernetes/) CNI. Other CNIs are not officially supported, but you may still be able to configure them manually if they allow IPFIX exports.
+
+    - Sampling (`spec.agent.ebpf.sampling` and `spec.agent.ipfix.sampling`): a value of `100` means: one flow every 100 is sampled. `1` means all flows are sampled. The lower it is, the more flows you get, and the more accurate are derived metrics, but the higher amount of resources are consumed. By default, sampling is set to 50 (ie. 1:50) for eBPF and 400 (1:400) for IPFIX. Note that more sampled flows also means more storage needed. We recommend to start with default values and refine empirically, to figure out which setting your cluster can manage.
+
+    - Loki (`spec.loki`): configure here how to reach Loki. The default values match the Loki quick install paths mentioned above, but you may have to configure differently if you used another installation method.
+
+    - Quick filters (`spec.consolePlugin.quickFilters`): configure preset filters to be displayed in the Console plugin. They offer a way to quickly switch from filters to others, such as showing / hiding pods network, or infrastructure network, or application network, etc. They can be tuned to reflect the different workloads running on your cluster. For a list of available filters, [check this page](https://github.com/netobserv/network-observability-operator/blob/1.0.1/docs/QuickFilters.md).
+
+    - Kafka (`spec.deploymentModel: KAFKA` and `spec.kafka`): when enabled, integrates the flow collection pipeline with Kafka, by splitting ingestion from transformation (kube enrichment, derived metrics, ...). Kafka can provide better scalability, resiliency and high availability ([view more details](https://www.redhat.com/en/topics/integration/what-is-apache-kafka)). Assumes Kafka is already deployed and a topic is created.
+
+    - Exporters (`spec.exporters`, _experimental_) an optional list of exporters to which to send enriched flows. Currently only KAFKA is supported. This allows you to define any custom storage or processing that can read from Kafka. This feature is flagged as _experimental_ as it has not been thoroughly or stress tested yet, so use at your own risk.
+
+    ## Further reading
+
+    Please refer to the documentation on GitHub for more information.
+
+    This documentation includes:
+
+    - An [overview](https://github.com/netobserv/network-observability-operator#openshift-console) of the features, with screenshots
+    - A [performance](https://github.com/netobserv/network-observability-operator#performance-fine-tuning) section, for fine-tuning
+    - A [security](https://github.com/netobserv/network-observability-operator#securing-data-and-communications) section
+    - An [F.A.Q.](https://github.com/netobserv/network-observability-operator#faq--troubleshooting) section
+  displayName: NetObserv Operator
+  icon:
+  - base64data: PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI2LjAuMiwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAxMDAgMTAwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6dXJsKCNTVkdJRF8xXyk7fQoJLnN0MXtmaWxsOiNGRkZGRkY7fQoJLnN0MntvcGFjaXR5OjAuNjt9Cgkuc3Qze29wYWNpdHk6MC41O30KCS5zdDR7b3BhY2l0eTowLjQ7fQo8L3N0eWxlPgo8Zz4KCTxnPgoJCTxnPgoJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzFfIiBjeD0iMTQuNzc1OCIgY3k9Ii0yLjk3NzEiIHI9IjkxLjYyNyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgoJCQkJPHN0b3AgIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6IzNDM0ZBNiIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6IzNCMDM0MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNNTAsOTljLTEzLjMsMC0yNS40LTUuMy0zNC4yLTEzLjlDNi43LDc2LjIsMSw2My43LDEsNTBDMSwyMi45LDIyLjksMSw1MCwxYzEzLjcsMCwyNi4yLDUuNywzNS4xLDE0LjgKCQkJCUM5My43LDI0LjYsOTksMzYuNyw5OSw1MEM5OSw3Ny4xLDc3LjEsOTksNTAsOTl6Ii8+CgkJPC9nPgoJCTxnPgoJCQk8Y2lyY2xlIGNsYXNzPSJzdDEiIGN4PSIzNy41IiBjeT0iODEuOSIgcj0iNSIvPgoJCTwvZz4KCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNNDguNiw5MS45bDE4LjgtNDMuM2MtMi41LTAuMS01LTAuNy03LjItMkwzMy4yLDY4LjJsMS40LTEuOGwyMC0yNS4xYy0xLjUtMi40LTIuMy01LjEtMi4zLTcuOUw5LDUyLjIKCQkJbDQ3LjYtMjkuOWwwLDBjMC4xLTAuMSwwLjItMC4yLDAuMi0wLjJjNi4xLTYuMSwxNS45LTYuMSwyMiwwbDAuMSwwLjFjNiw2LjEsNiwxNS45LTAuMSwyMS45Yy0wLjEsMC4xLTAuMiwwLjItMC4yLDAuMmwwLDAKCQkJTDQ4LjYsOTEuOXoiLz4KCQk8ZyBjbGFzcz0ic3QyIj4KCQkJPGNpcmNsZSBjbGFzcz0ic3QxIiBjeD0iNTAuMyIgY3k9IjE0LjciIHI9IjMuMSIvPgoJCTwvZz4KCQk8ZyBjbGFzcz0ic3QzIj4KCQkJPGNpcmNsZSBjbGFzcz0ic3QxIiBjeD0iMjcuNyIgY3k9IjU4IiByPSIxLjciLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9Ijc3LjQiIGN5PSI2OS4zIiByPSIxLjciLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjE2LjMiIGN5PSIzNi42IiByPSIxLjciLz4KCQk8L2c+CgkJPGcgY2xhc3M9InN0NCI+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjYzLjciIGN5PSI4NS45IiByPSIyLjIiLz4KCQk8L2c+CgkJPGc+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9IjI5LjQiIGN5PSIxOS42IiByPSI0LjgiLz4KCQk8L2c+CgkJPGcgY2xhc3M9InN0MyI+CgkJCTxjaXJjbGUgY2xhc3M9InN0MSIgY3g9Ijg4IiBjeT0iNTAiIHI9IjQuOCIvPgoJCTwvZz4KCTwvZz4KPC9nPgo8L3N2Zz4K
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - apiregistration.k8s.io
+          resources:
+          - apiservices
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - console.openshift.io
+          resources:
+          - consoleplugins
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - namespaces
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          - pods
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - flows.netobserv.io
+          resources:
+          - flowcollectors/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - operator.openshift.io
+          resources:
+          - consoles
+          verbs:
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterroles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - security.openshift.io
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - create
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - security.openshift.io
+          resourceNames:
+          - hostnetwork
+          resources:
+          - securitycontextconstraints
+          verbs:
+          - use
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: netobserv-controller-manager
+      deployments:
+      - label:
+          app: netobserv-operator
+          control-plane: controller-manager
+        name: netobserv-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: netobserv-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app: netobserv-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                - --ebpf-agent-image=$(RELATED_IMAGE_EBPF_AGENT)
+                - --flowlogs-pipeline-image=$(RELATED_IMAGE_FLOWLOGS_PIPELINE)
+                - --console-plugin-image=$(RELATED_IMAGE_CONSOLE_PLUGIN)
+                command:
+                - /manager
+                env:
+                - name: RELATED_IMAGE_EBPF_AGENT
+                  value: quay.io/netobserv/netobserv-ebpf-agent:v0.2.4
+                - name: RELATED_IMAGE_FLOWLOGS_PIPELINE
+                  value: quay.io/netobserv/flowlogs-pipeline:v0.1.7
+                - name: RELATED_IMAGE_CONSOLE_PLUGIN
+                  value: quay.io/netobserv/network-observability-console-plugin:v0.1.8
+                image: quay.io/netobserv/network-observability-operator:1.0.1
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    memory: 400Mi
+                  requests:
+                    cpu: 100m
+                    memory: 100Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: netobserv-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: netobserv-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - network observability
+  - ebpf
+  - ipfix
+  - flow tracing
+  - flows
+  - topology
+  - network
+  - observability
+  links:
+  - name: Project page
+    url: https://github.com/netobserv/network-observability-operator
+  - name: Issue tracker
+    url: https://github.com/netobserv/network-observability-operator/issues
+  - name: Discussion board
+    url: https://github.com/netobserv/network-observability-operator/discussions
+  maintainers:
+  - email: jtakvori@redhat.com
+    name: Joel Takvorian
+  - email: jpinsonn@redhat.com
+    name: Julien Pinsonneau
+  - email: mmaciasl@redhat.com
+    name: Mario Macias
+  - email: ocazade@redhat.com
+    name: Olivier Cazade
+  maturity: alpha
+  minKubeVersion: 1.23.0
+  provider:
+    name: Red Hat
+    url: https://www.redhat.com
+  relatedImages:
+  - image: quay.io/netobserv/netobserv-ebpf-agent:v0.2.4
+    name: ebpf-agent
+  - image: quay.io/netobserv/flowlogs-pipeline:v0.1.7
+    name: flowlogs-pipeline
+  - image: quay.io/netobserv/network-observability-console-plugin:v0.1.8
+    name: console-plugin
+  replaces: netobserv-operator.v0.2.2
+  version: 1.0.1

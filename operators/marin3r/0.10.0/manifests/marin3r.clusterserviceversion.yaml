@@ -1,0 +1,1118 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "marin3r.3scale.net/v1alpha1",
+          "kind": "EnvoyConfig",
+          "metadata": {
+            "name": "envoyconfig-example",
+            "namespace": "my-namespace"
+          },
+          "spec": {
+            "envoyAPI": "v3",
+            "envoyResources": {
+              "clusters": [
+                {
+                  "name": "example",
+                  "value": "name: example\nconnect_timeout: 10ms\ntype: STRICT_DNS\ndns_lookup_family: V4_ONLY\nlb_policy: ROUND_ROBIN\nload_assignment:\n  cluster_name: example\n  endpoints:\n    - lb_endpoints:\n        - endpoint:\n            address:\n              socket_address:\n                address: example\n                port_value: 8080\n"
+                }
+              ],
+              "listeners": [
+                {
+                  "name": "https",
+                  "value": "name: https\naddress:\n  socket_address:\n    address: 0.0.0.0\n    port_value: 8443\nfilter_chains:\n  - filters:\n    - name: envoy.filters.network.http_connection_manager\n      typed_config:\n        \"@type\": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager\n        access_log:\n          - name: envoy.access_loggers.file\n            typed_config:\n              \"@type\": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog\n              path: /dev/stdout\n        stat_prefix: https\n        rds: { route_config_name: \"local\", config_source: { ads: {}, resource_api_version: \"V3\" }}\n        http_filters:\n          - name: envoy.filters.http.router\n    transport_socket:\n      name: envoy.transport_sockets.tls\n      typed_config:\n        \"@type\": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext\n        common_tls_context:\n          tls_certificate_sds_secret_configs:\n            - name: example.default.svc\n              sds_config: { ads: {}, resource_api_version: \"V3\" }\n"
+                }
+              ],
+              "routes": [
+                {
+                  "name": "local",
+                  "value": "name: local\nvirtual_hosts:\n  - name: all\n    domains: [\"*\"]\n    routes:\n      - match:\n          prefix: \"/\"\n        route:\n          cluster: example\n"
+                }
+              ],
+              "secrets": [
+                {
+                  "name": "example.default.svc"
+                }
+              ]
+            },
+            "nodeID": "example",
+            "serialization": "yaml"
+          }
+        },
+        {
+          "apiVersion": "operator.marin3r.3scale.net/v1alpha1",
+          "kind": "DiscoveryService",
+          "metadata": {
+            "name": "discoveryservice-example",
+            "namespace": "my-namespace"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "operator.marin3r.3scale.net/v1alpha1",
+          "kind": "EnvoyDeployment",
+          "metadata": {
+            "name": "envoydeployment-sample",
+            "namespace": "my-namespace"
+          },
+          "spec": {
+            "discoveryServiceRef": "discoveryservice-example",
+            "envoyConfigRef": "envoyconfig-example",
+            "ports": [
+              {
+                "name": "https",
+                "port": 8443
+              }
+            ]
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: Networking
+    certified: "false"
+    containerImage: quay.io/3scale/marin3r
+    description: Lighweight, CRD based Envoy control plane for Kubernetes
+    operators.operatorframework.io/builder: operator-sdk-v1.14.0+git
+    operators.operatorframework.io/internal-objects: '["envoyconfigrevisions.marin3r.3scale.net","discoveryservicecertificates.operator.marin3r.3scale.net"]'
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    repository: https://github.com/3scale-ops/marin3r
+    support: Red Hat, Inc.
+  name: marin3r.v0.10.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: DiscoveryServiceCertificate is an internal resource used to create
+        certificates. This resource is used by the DiscoveryService controller to
+        create the required certificates for the different components. Direct use
+        of DiscoveryServiceCertificate objects is discouraged.
+      displayName: DiscoveryServiceCertificate
+      kind: DiscoveryServiceCertificate
+      name: discoveryservicecertificates.operator.marin3r.3scale.net
+      specDescriptors:
+      - description: CertificateRenewalConfig configures the certificate renewal process.
+          If unset default behavior is to renew the certificate but not notify of
+          renewals.
+        displayName: Certificate Renewal Config
+        path: certificateRenewal
+      - description: Enabled is a flag to enable or disable renewal of the certificate
+        displayName: Enabled
+        path: certificateRenewal.enabled
+      - description: CommonName is the CommonName of the certificate
+        displayName: Common Name
+        path: commonName
+      - description: Hosts is the list of hosts the certificate is valid for. Only
+          use when 'IsServerCertificate' is true. If unset, the CommonName field will
+          be used to populate the valid hosts of the certificate.
+        displayName: Hosts
+        path: hosts
+      - description: IsCA is a boolean specifying that the certificate is a CA
+        displayName: Is CA
+        path: isCA
+      - description: SecretRef is a reference to the secret that will hold the certificate
+          and the private key.
+        displayName: Secret Ref
+        path: secretRef
+      - description: IsServerCertificate is a boolean specifying if the certificate
+          should be issued with server auth usage enabled
+        displayName: Is Server Certificate
+        path: server
+      - description: Signer specifies  the signer to use to create this certificate.
+          Supported signers are CertManager and SelfSigned.
+        displayName: Signer
+        path: signer
+      - description: CASigned holds specific configuration for the CASigned signer
+        displayName: CASigned
+        path: signer.caSigned
+      - description: A reference to a Secret containing the CA
+        displayName: Secret Ref
+        path: signer.caSigned.caSecretRef
+      - description: SelfSigned holds specific configuration for the SelfSigned signer
+        displayName: Self Signed
+        path: signer.selfSigned
+      - description: ValidFor specifies the validity of the certificate in seconds
+        displayName: Valid For
+        path: validFor
+      statusDescriptors:
+      - description: CertificateHash stores the current hash of the certificate. It
+          is used for other controllers to validate if a certificate has been re-issued.
+        displayName: Certificate Hash
+        path: certificateHash
+      - description: Conditions represent the latest available observations of an
+          object's state
+        displayName: Conditions
+        path: conditions
+      - description: NotAfter is the time at which the certificate expires
+        displayName: Not After
+        path: notAfter
+      - description: NotBefore is the time at which the certificate starts being valid
+        displayName: Not Before
+        path: notBefore
+      - description: Ready is a boolean that specifies if the certificate is ready
+          to be used
+        displayName: Ready
+        path: ready
+      version: v1alpha1
+    - description: DiscoveryService represents an envoy discovery service server.
+        Only one instance per namespace is currently supported.
+      displayName: DiscoveryService
+      kind: DiscoveryService
+      name: discoveryservices.operator.marin3r.3scale.net
+      specDescriptors:
+      - description: Debug enables debugging log level for the discovery service controllers.
+          It is safe to use since secret data is never shown in the logs.
+        displayName: Debug
+        path: debug
+      - description: Image holds the image to use for the discovery service Deployment
+        displayName: Image
+        path: image
+      - description: MetricsPort is the port where metrics are served. Defaults to
+          8383.
+        displayName: Metrics Port
+        path: metricsPort
+      - description: PKIConfig has configuration for the PKI that marin3r manages
+          for the different certificates it requires
+        displayName: PKIConfig
+        path: pkiConfg
+      - displayName: Root Certificate Authority
+        path: pkiConfg.rootCertificateAuthority
+      - displayName: Duration
+        path: pkiConfg.rootCertificateAuthority.duration
+      - displayName: Secret Name
+        path: pkiConfg.rootCertificateAuthority.secretName
+      - displayName: Server Certificate
+        path: pkiConfg.serverCertificate
+      - displayName: Duration
+        path: pkiConfg.serverCertificate.duration
+      - displayName: Secret Name
+        path: pkiConfg.serverCertificate.secretName
+      - description: Resources holds the Resource Requirements to use for the discovery
+          service Deployment. When not set it defaults to no resource requests nor
+          limits. CPU and Memory resources are supported.
+        displayName: Resources
+        path: resources
+      - description: ServiceConfig configures the way the DiscoveryService endpoints
+          are exposed
+        displayName: Service Config
+        path: serviceConfig
+      - displayName: Name
+        path: serviceConfig.name
+      - displayName: Type
+        path: serviceConfig.type
+      - description: XdsServerPort is the port where the xDS server listens. Defaults
+          to 18000.
+        displayName: Xds Server Port
+        path: xdsServerPort
+      statusDescriptors:
+      - description: Conditions represent the latest available observations of an
+          object's state
+        displayName: Conditions
+        path: conditions
+      version: v1alpha1
+    - description: EnvoyConfigRevision is an internal resource that stores a specific
+        version of an EnvoyConfig resource. EnvoyConfigRevisions are automatically
+        created and deleted by the EnvoyConfig controller and are not intended to
+        be directly used. Use EnvoyConfig objects instead.
+      displayName: EnvoyConfigRevision
+      kind: EnvoyConfigRevision
+      name: envoyconfigrevisions.marin3r.3scale.net
+      specDescriptors:
+      - description: EnvoyAPI is the version of envoy's API to use. Defaults to v3.
+        displayName: Envoy API
+        path: envoyAPI
+      - description: EnvoyResources holds the different types of resources suported
+          by the envoy discovery service
+        displayName: Envoy Resources
+        path: envoyResources
+      - description: 'Clusters is a list of the envoy Cluster resource type. API V3
+          reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/cluster/v3/cluster.proto'
+        displayName: Clusters
+        path: envoyResources.clusters
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.clusters[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.clusters[0].value
+      - description: 'Endpoints is a list of the envoy ClusterLoadAssignment resource
+          type. API V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/endpoint/v3/endpoint.proto'
+        displayName: Endpoints
+        path: envoyResources.endpoints
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.endpoints[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.endpoints[0].value
+      - description: 'Listeners is a list of the envoy Listener resource type. API
+          V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/listener/v3/listener.proto'
+        displayName: Listeners
+        path: envoyResources.listeners
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.listeners[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.listeners[0].value
+      - description: 'Routes is a list of the envoy Route resource type. API V3 reference:
+          https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto'
+        displayName: Routes
+        path: envoyResources.routes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.routes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.routes[0].value
+      - description: 'Runtimes is a list of the envoy Runtime resource type. API V3
+          reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/runtime/v3/rtds.proto'
+        displayName: Runtimes
+        path: envoyResources.runtimes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.runtimes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.runtimes[0].value
+      - description: 'ScopedRoutes is a list of the envoy ScopeRoute resource type.
+          API V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/scoped_route.proto'
+        displayName: Scoped Routes
+        path: envoyResources.scopedRoutes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.scopedRoutes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.scopedRoutes[0].value
+      - description: Secrets is a list of references to Kubernetes Secret objects.
+        displayName: Secrets
+        path: envoyResources.secrets
+      - description: Name of the envoy resource. If ref is not set, a Secret with
+          this same name will be fetched from within the namespace.
+        displayName: Name
+        path: envoyResources.secrets[0].name
+      - description: Ref is a reference to a Kubernetes Secret of type "kubernetes.io/tls".
+          The value of 'ref' cannot point to a different namespace.
+        displayName: Ref
+        path: envoyResources.secrets[0].ref
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:SecretReference
+      - description: NodeID holds the envoy identifier for the discovery service to
+          know which set of resources to send to each of the envoy clients that connect
+          to it.
+        displayName: Node ID
+        path: nodeID
+      - description: Serialization specicifies the serialization format used to describe
+          the resources. "json" and "yaml" are supported. "json" is used if unset.
+        displayName: Serialization
+        path: serialization
+      - description: Version is a hash of the EnvoyResources field
+        displayName: Version
+        path: version
+      statusDescriptors:
+      - description: Conditions represent the latest available observations of an
+          object's state
+        displayName: Conditions
+        path: conditions
+      - description: LastPublishedAt indicates the last time this config review transitioned
+          to published
+        displayName: Last Published At
+        path: lastPublishedAt
+      - description: ProvidesVersions keeps track of the version that this revision
+          publishes in the xDS server for each resource type
+        displayName: Provides Versions
+        path: providesVersions
+      - description: Published signals if the EnvoyConfigRevision is the one currently
+          published in the xds server cache
+        displayName: Published
+        path: published
+      - description: Tainted indicates whether the EnvoyConfigRevision is eligible
+          for publishing or not
+        displayName: Tainted
+        path: tainted
+      version: v1alpha1
+    - description: EnvoyConfig holds the configuration for a given envoy nodeID. The
+        spec of an EnvoyConfig object holds the Envoy resources that conform the desired
+        configuration for the given nodeID and that the discovery service will send
+        to any envoy client that identifies itself with that nodeID.
+      displayName: EnvoyConfig
+      kind: EnvoyConfig
+      name: envoyconfigs.marin3r.3scale.net
+      resources:
+      - kind: EnvoyConfigRevision
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: EnvoyAPI is the version of envoy's API to use. Defaults to v3.
+        displayName: Envoy API
+        path: envoyAPI
+      - description: EnvoyResources holds the different types of resources suported
+          by the envoy discovery service
+        displayName: Envoy Resources
+        path: envoyResources
+      - description: 'Clusters is a list of the envoy Cluster resource type. API V3
+          reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/cluster/v3/cluster.proto'
+        displayName: Clusters
+        path: envoyResources.clusters
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.clusters[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.clusters[0].value
+      - description: 'Endpoints is a list of the envoy ClusterLoadAssignment resource
+          type. API V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/endpoint/v3/endpoint.proto'
+        displayName: Endpoints
+        path: envoyResources.endpoints
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.endpoints[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.endpoints[0].value
+      - description: 'Listeners is a list of the envoy Listener resource type. API
+          V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/listener/v3/listener.proto'
+        displayName: Listeners
+        path: envoyResources.listeners
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.listeners[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.listeners[0].value
+      - description: 'Routes is a list of the envoy Route resource type. API V3 reference:
+          https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto'
+        displayName: Routes
+        path: envoyResources.routes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.routes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.routes[0].value
+      - description: 'Runtimes is a list of the envoy Runtime resource type. API V3
+          reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/runtime/v3/rtds.proto'
+        displayName: Runtimes
+        path: envoyResources.runtimes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.runtimes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.runtimes[0].value
+      - description: 'ScopedRoutes is a list of the envoy ScopeRoute resource type.
+          API V3 reference: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/scoped_route.proto'
+        displayName: Scoped Routes
+        path: envoyResources.scopedRoutes
+      - description: Name of the envoy resource
+        displayName: Name
+        path: envoyResources.scopedRoutes[0].name
+      - description: Value is the serialized representation of the envoy resource
+        displayName: Value
+        path: envoyResources.scopedRoutes[0].value
+      - description: Secrets is a list of references to Kubernetes Secret objects.
+        displayName: Secrets
+        path: envoyResources.secrets
+      - description: Name of the envoy resource. If ref is not set, a Secret with
+          this same name will be fetched from within the namespace.
+        displayName: Name
+        path: envoyResources.secrets[0].name
+      - description: Ref is a reference to a Kubernetes Secret of type "kubernetes.io/tls".
+          The value of 'ref' cannot point to a different namespace.
+        displayName: Ref
+        path: envoyResources.secrets[0].ref
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:SecretReference
+      - description: NodeID holds the envoy identifier for the discovery service to
+          know which set of resources to send to each of the envoy clients that connect
+          to it.
+        displayName: Node ID
+        path: nodeID
+      - description: Serialization specicifies the serialization format used to describe
+          the resources. "json" and "yaml" are supported. "json" is used if unset.
+        displayName: Serialization
+        path: serialization
+      statusDescriptors:
+      - description: CacheState summarizes all the observations about the EnvoyConfig
+          to give the user a concrete idea on the general status of the discovery
+          servie cache. It is intended only for human consumption. Other controllers
+          should relly on conditions to determine the status of the discovery server
+          cache.
+        displayName: Cache State
+        path: cacheState
+      - description: Conditions represent the latest available observations of an
+          object's state
+        displayName: Conditions
+        path: conditions
+      - description: DesiredVersion represents the resources version described in
+          the spec of the EnvoyConfig object
+        displayName: Desired Version
+        path: desiredVersion
+      - description: PublishedVersion is the config version currently served by the
+          envoy discovery service for the give nodeID
+        displayName: Published Version
+        path: publishedVersion
+      - description: ConfigRevisions is an ordered list of references to EnvoyConfigRevision
+          objects
+        displayName: Config Revisions
+        path: revisions
+      - description: Ref is a reference to the EnvoyConfigRevision object that holds
+          the configuration matching the Version field.
+        displayName: Ref
+        path: revisions[0].ref
+      - description: Version is a hash of the EnvoyResources field
+        displayName: Version
+        path: revisions[0].version
+      version: v1alpha1
+    - description: EnvoyDeployment is a resource to deploy and manage a Kubernetes
+        Deployment of Envoy Pods.
+      displayName: EnvoyDeployment
+      kind: EnvoyDeployment
+      name: envoydeployments.operator.marin3r.3scale.net
+      specDescriptors:
+      - description: Configures envoy's admin access log path. Defaults to /dev/null.
+        displayName: Admin Access Log Path
+        path: adminAccessLogPath
+      - description: Configures envoy's admin port. Defaults to 9901.
+        displayName: Admin Port
+        path: adminPort
+      - description: Affinity configuration for the envoy pods
+        displayName: Affinity
+        path: affinity
+      - description: Defines the local service cluster name where Envoy is running.
+          Defaults to the NodeID in the EnvoyConfig if unset
+        displayName: Cluster ID
+        path: clusterID
+      - description: DiscoveryServiceRef points to a DiscoveryService in the same
+          namespace
+        displayName: Discovery Service Ref
+        path: discoveryServiceRef
+      - description: Defines the duration of the client certificate that is used to
+          authenticate with the DiscoveryService
+        displayName: Client Certificate Duration
+        path: duration
+      - description: EnvoyConfigRef points to an EnvoyConfig in the same namespace
+          that holds the envoy resources for this Deployment
+        displayName: Envoy Config Ref
+        path: envoyConfigRef
+      - description: Allows the user to define extra command line arguments for the
+          Envoy process
+        displayName: Extra Args
+        path: extraArgs
+      - description: Image is the envoy image and tag to use
+        displayName: Image
+        path: image
+      - description: InitManager defines configuration for Envoy's init manager, which
+          handles initialization for Envoy pods
+        displayName: Init Manager
+        path: initManager
+      - description: Image is the init manager image and tag to use
+        displayName: Image
+        path: initManager.image
+      - description: Liveness probe for the envoy pods
+        displayName: Liveness Probe
+        path: livenessProbe
+      - description: Minimum consecutive failures for the probe to be considered failed
+          after having succeeded
+        displayName: Failure Threshold
+        path: livenessProbe.failureThreshold
+      - description: Number of seconds after the container has started before liveness
+          probes are initiated
+        displayName: Initial Delay Seconds
+        path: livenessProbe.initialDelaySeconds
+      - description: How often (in seconds) to perform the probe
+        displayName: Period Seconds
+        path: livenessProbe.periodSeconds
+      - description: Minimum consecutive successes for the probe to be considered
+          successful after having failed
+        displayName: Success Threshold
+        path: livenessProbe.successThreshold
+      - description: Number of seconds after which the probe times out
+        displayName: Timeout Seconds
+        path: livenessProbe.timeoutSeconds
+      - description: Configures PodDisruptionBudget for the envoy Pods
+        displayName: Pod Disruption Budget
+        path: podDisruptionBudget
+      - description: An eviction is allowed if at most "maxUnavailable" pods selected
+          by "selector" are unavailable after the eviction, i.e. even in absence of
+          the evicted pod. For example, one can prevent all voluntary evictions by
+          specifying 0. This is a mutually exclusive setting with "minAvailable".
+        displayName: Max Unavailable
+        path: podDisruptionBudget.maxUnavailable
+      - description: An eviction is allowed if at least "minAvailable" pods selected
+          by "selector" will still be available after the eviction, i.e. even in the
+          absence of the evicted pod.  So for example you can prevent all voluntary
+          evictions by specifying "100%".
+        displayName: Min Available
+        path: podDisruptionBudget.minAvailable
+      - description: Ports exposed by the Envoy container
+        displayName: Ports
+        path: ports
+      - description: Port name
+        displayName: Name
+        path: ports[0].name
+      - description: Port value
+        displayName: Port
+        path: ports[0].port
+      - description: Protocol. Defaults to TCP.
+        displayName: Protocol
+        path: ports[0].protocol
+      - description: Readiness probe for the envoy pods
+        displayName: Readiness Probe
+        path: readinessProbe
+      - description: Minimum consecutive failures for the probe to be considered failed
+          after having succeeded
+        displayName: Failure Threshold
+        path: readinessProbe.failureThreshold
+      - description: Number of seconds after the container has started before liveness
+          probes are initiated
+        displayName: Initial Delay Seconds
+        path: readinessProbe.initialDelaySeconds
+      - description: How often (in seconds) to perform the probe
+        displayName: Period Seconds
+        path: readinessProbe.periodSeconds
+      - description: Minimum consecutive successes for the probe to be considered
+          successful after having failed
+        displayName: Success Threshold
+        path: readinessProbe.successThreshold
+      - description: Number of seconds after which the probe times out
+        displayName: Timeout Seconds
+        path: readinessProbe.timeoutSeconds
+      - description: Replicas configures the number of replicas in the Deployment.
+          One of 'static', 'dynamic' can be set. If both are set, static has precedence.
+        displayName: Replicas
+        path: replicas
+      - description: Configure a min and max value for the number of pods to autoscale
+          dynamically.
+        displayName: Dynamic
+        path: replicas.dynamic
+      - description: behavior configures the scaling behavior of the target in both
+          Up and Down directions (scaleUp and scaleDown fields respectively). If not
+          set, the default HPAScalingRules for scale up and scale down are used.
+        displayName: Behavior
+        path: replicas.dynamic.behavior
+      - description: metrics contains the specifications for which to use to calculate
+          the desired replica count (the maximum replica count across all metrics
+          will be used).  The desired replica count is calculated multiplying the
+          ratio between the target value and the current value by the current number
+          of pods.  Ergo, metrics used must decrease as the pod count is increased,
+          and vice-versa.  See the individual metric source types for more information
+          about how each type of metric must respond. If not set, the default metric
+          will be set to 80% average CPU utilization.
+        displayName: Metrics
+        path: replicas.dynamic.metrics
+      - description: minReplicas is the lower limit for the number of replicas to
+          which the autoscaler can scale down.  It defaults to 1 pod.  minReplicas
+          is allowed to be 0 if the alpha feature gate HPAScaleToZero is enabled and
+          at least one Object or External metric is configured.  Scaling is active
+          as long as at least one metric value is available.
+        displayName: Min Replicas
+        path: replicas.dynamic.minReplicas
+      - description: Configure a static number of replicas. Defaults to 1.
+        displayName: Static
+        path: replicas.static
+      - description: Resources holds the resource requirements to use for the Envoy
+          Deployment. Defaults to no resource requests nor limits.
+        displayName: Resources
+        path: resources
+      - description: ShutdownManager defines configuration for Envoy's shutdown manager,
+          which handles graceful termination of Envoy pods
+        displayName: Shutdown Manager
+        path: shutdownManager
+      - description: The drain strategy for the graceful shutdown. It also affects
+          drain when listeners are modified or removed via LDS.
+        displayName: Drain Strategy
+        path: shutdownManager.drainStrategy
+      - description: The time in seconds that Envoy will drain connections during
+          shutdown. It also affects drain behaviour when listeners are modified or
+          removed via LDS.
+        displayName: Drain Time
+        path: shutdownManager.drainTime
+      - description: Image is the shutdown manager image and tag to use
+        displayName: Image
+        path: shutdownManager.image
+      - description: Configures the sutdown manager's server port. Defaults to 8090.
+        displayName: Server Port
+        path: shutdownManager.serverPort
+      version: v1alpha1
+  description: |
+    MARIN3R implements a control plane to deploy, configure and operate a fleet of envoy instances within a Kubernetes cluster.
+    It operates a group of gateways and Pod sidecar containers to provide general purpose functionality required to operate production systems.
+
+    Features:
+
+    * Deploy and manage an Envoy xDS server using the DiscoveryService custom resource.
+    * Inject Envoy sidecar containers based on Pod annotations.
+    * Deploy Envoy as a Kubernetes Deployment using the EnvoyDeployment custom resource.
+    * Dynamic Envoy configuration and re-configuration using the EnvoyConfig custom resource.
+    * Use Kubernetes Secrets as certificate sources.
+    * Syntactic validation of Envoy configurations.
+    * Lifecycle management of Envoy containers (graceful shutdown and connection draining).
+    * Self-healing.
+
+    Check the [docs](https://github.com/3scale-ops/marin3r#readme) for more information.
+
+    ## License
+    MARIN3R is licensed under the [Apache 2.0 license](https://github.com/3scale/prometheus-exporter-operator/blob/master/LICENSE)
+  displayName: MARIN3R
+  icon:
+  - base64data: PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMzc1cHQiIGhlaWdodD0iMzc0Ljk5OTk5MXB0IiB2aWV3Qm94PSIwIDAgMzc1IDM3NC45OTk5OTEiIHZlcnNpb249IjEuMiI+CjxkZWZzPgo8Zz4KPHN5bWJvbCBvdmVyZmxvdz0idmlzaWJsZSIgaWQ9ImdseXBoMC0wIj4KPHBhdGggc3R5bGU9InN0cm9rZTpub25lOyIgZD0iIi8+Cjwvc3ltYm9sPgo8c3ltYm9sIG92ZXJmbG93PSJ2aXNpYmxlIiBpZD0iZ2x5cGgwLTEiPgo8cGF0aCBzdHlsZT0ic3Ryb2tlOm5vbmU7IiBkPSJNIDk1Ljk1MzEyNSAwIEwgODUuODkwNjI1IDAgTCA4NS44OTA2MjUgLTQyLjc5Njg3NSBMIDU0Ljk4NDM3NSAwIEwgNDkuODEyNSAwIEwgMTguOTA2MjUgLTQyLjc5Njg3NSBMIDE4LjkwNjI1IDAgTCA4LjgyODEyNSAwIEwgOC44MjgxMjUgLTYzLjMyODEyNSBMIDE2LjQyMTg3NSAtNjMuMzI4MTI1IEwgNTIuNDIxODc1IC0xMy41OTM3NSBMIDg4LjM1OTM3NSAtNjMuMzI4MTI1IEwgOTUuOTUzMTI1IC02My4zMjgxMjUgWiBNIDk1Ljk1MzEyNSAwICIvPgo8L3N5bWJvbD4KPHN5bWJvbCBvdmVyZmxvdz0idmlzaWJsZSIgaWQ9ImdseXBoMC0yIj4KPHBhdGggc3R5bGU9InN0cm9rZTpub25lOyIgZD0iTSA2MS45NTMxMjUgMCBMIDYuNjI1IDAgTCA2LjYyNSAtMTAuMDYyNSBMIDYxLjk1MzEyNSAtMTAuMDYyNSBDIDYzLjMzNTkzOCAtMTAuMDYyNSA2NC41MTk1MzEgLTEwLjU1NDY4OCA2NS41IC0xMS41NDY4NzUgQyA2Ni40ODgyODEgLTEyLjUzNTE1NiA2Ni45ODQzNzUgLTEzLjcyMjY1NiA2Ni45ODQzNzUgLTE1LjEwOTM3NSBMIDY2Ljk4NDM3NSAtMjEuNTkzNzUgQyA2Ni45ODQzNzUgLTIyLjk3NjU2MiA2Ni41MDc4MTIgLTI0LjE0ODQzOCA2NS41NjI1IC0yNS4xMDkzNzUgQyA2NC42MjUgLTI2LjA2NjQwNiA2My40Njg3NSAtMjYuNTcwMzEyIDYyLjA5Mzc1IC0yNi42MjUgTCAxNi42ODc1IC0yNi42MjUgTCAxNi42ODc1IC0zNi43MDMxMjUgTCA2Mi4wOTM3NSAtMzYuNzAzMTI1IEMgNjMuNDY4NzUgLTM2Ljc1MzkwNiA2NC42MjUgLTM3LjI1NzgxMiA2NS41NjI1IC0zOC4yMTg3NSBDIDY2LjUwNzgxMiAtMzkuMTc1NzgxIDY2Ljk4NDM3NSAtNDAuMzQ3NjU2IDY2Ljk4NDM3NSAtNDEuNzM0Mzc1IEwgNjYuOTg0Mzc1IC00OC4yNjU2MjUgQyA2Ni45ODQzNzUgLTQ5LjY0ODQzOCA2Ni40ODgyODEgLTUwLjgyODEyNSA2NS41IC01MS43OTY4NzUgQyA2NC41MTk1MzEgLTUyLjc2NTYyNSA2My4zMzU5MzggLTUzLjI1IDYxLjk1MzEyNSAtNTMuMjUgTCA2LjYyNSAtNTMuMjUgTCA2LjYyNSAtNjMuMzI4MTI1IEwgNjEuOTUzMTI1IC02My4zMjgxMjUgQyA2Ni4xMDkzNzUgLTYzLjMyODEyNSA2OS42NjQwNjIgLTYxLjg1MTU2MiA3Mi42MjUgLTU4LjkwNjI1IEMgNzUuNTgyMDMxIC01NS45NTcwMzEgNzcuMDYyNSAtNTIuNDEwMTU2IDc3LjA2MjUgLTQ4LjI2NTYyNSBMIDc3LjA2MjUgLTQxLjczNDM3NSBDIDc3LjA2MjUgLTM3Ljg3ODkwNiA3NS43ODEyNSAtMzQuNTE5NTMxIDczLjIxODc1IC0zMS42NTYyNSBDIDc1Ljc4MTI1IC0yOC44MzIwMzEgNzcuMDYyNSAtMjUuNDc2NTYyIDc3LjA2MjUgLTIxLjU5Mzc1IEwgNzcuMDYyNSAtMTUuMTA5Mzc1IEMgNzcuMDYyNSAtMTAuOTIxODc1IDc1LjU4MjAzMSAtNy4zNTE1NjIgNzIuNjI1IC00LjQwNjI1IEMgNjkuNjY0MDYyIC0xLjQ2ODc1IDY2LjEwOTM3NSAwIDYxLjk1MzEyNSAwIFogTSA2MS45NTMxMjUgMCAiLz4KPC9zeW1ib2w+CjxzeW1ib2wgb3ZlcmZsb3c9InZpc2libGUiIGlkPSJnbHlwaDAtMyI+CjxwYXRoIHN0eWxlPSJzdHJva2U6bm9uZTsiIGQ9Ik0gODQuMjk2ODc1IDAgTCA3NC4yMzQzNzUgMCBMIDc0LjIzNDM3NSAtMTcuODQzNzUgQyA3NC4yMzQzNzUgLTE5LjIyNjU2MiA3My43MzgyODEgLTIwLjQxMDE1NiA3Mi43NSAtMjEuMzkwNjI1IEMgNzEuNzU3ODEyIC0yMi4zNzg5MDYgNzAuNTc4MTI1IC0yMi44NzUgNjkuMjAzMTI1IC0yMi44NzUgTCAxOC45MDYyNSAtMjIuODc1IEwgMTguOTA2MjUgMCBMIDguODI4MTI1IDAgTCA4LjgyODEyNSAtNjMuMzI4MTI1IEwgNjkuMjAzMTI1IC02My4zMjgxMjUgQyA3My4zNDc2NTYgLTYzLjMyODEyNSA3Ni44OTg0MzggLTYxLjg1MTU2MiA3OS44NTkzNzUgLTU4LjkwNjI1IEMgODIuODE2NDA2IC01NS45NTcwMzEgODQuMjk2ODc1IC01Mi40MTAxNTYgODQuMjk2ODc1IC00OC4yNjU2MjUgTCA4NC4yOTY4NzUgLTM3Ljk4NDM3NSBDIDg0LjI5Njg3NSAtMzQuMDg1OTM4IDgzIC0zMC43MjY1NjIgODAuNDA2MjUgLTI3LjkwNjI1IEMgODMgLTI1LjA1MDc4MSA4NC4yOTY4NzUgLTIxLjY5NTMxMiA4NC4yOTY4NzUgLTE3Ljg0Mzc1IFogTSA2OS4yMDMxMjUgLTMyLjkzNzUgQyA3MC41NzgxMjUgLTMyLjkzNzUgNzEuNzU3ODEyIC0zMy40Mjk2ODggNzIuNzUgLTM0LjQyMTg3NSBDIDczLjczODI4MSAtMzUuNDEwMTU2IDc0LjIzNDM3NSAtMzYuNTk3NjU2IDc0LjIzNDM3NSAtMzcuOTg0Mzc1IEwgNzQuMjM0Mzc1IC00OC4yNjU2MjUgQyA3NC4yMzQzNzUgLTQ5LjY0ODQzOCA3My43MzgyODEgLTUwLjgzMjAzMSA3Mi43NSAtNTEuODEyNSBDIDcxLjc1NzgxMiAtNTIuODAwNzgxIDcwLjU3ODEyNSAtNTMuMjk2ODc1IDY5LjIwMzEyNSAtNTMuMjk2ODc1IEwgMTguOTA2MjUgLTUzLjI5Njg3NSBMIDE4LjkwNjI1IC0zMi45Mzc1IFogTSA2OS4yMDMxMjUgLTMyLjkzNzUgIi8+Cjwvc3ltYm9sPgo8L2c+CjwvZGVmcz4KPGcgaWQ9InN1cmZhY2UxIj4KPHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjM3NSIgaGVpZ2h0PSIzNzQuOTk5OTkxIiBzdHlsZT0iZmlsbDpyZ2IoMTAwJSwxMDAlLDEwMCUpO2ZpbGwtb3BhY2l0eToxO3N0cm9rZTpub25lOyIvPgo8cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMzc1IiBoZWlnaHQ9IjM3NC45OTk5OTEiIHN0eWxlPSJmaWxsOnJnYigxMDAlLDEwMCUsMTAwJSk7ZmlsbC1vcGFjaXR5OjE7c3Ryb2tlOm5vbmU7Ii8+CjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIzNzUiIGhlaWdodD0iMzc0Ljk5OTk5MSIgc3R5bGU9ImZpbGw6cmdiKDEwMCUsMTAwJSwxMDAlKTtmaWxsLW9wYWNpdHk6MTtzdHJva2U6bm9uZTsiLz4KPHBhdGggc3R5bGU9IiBzdHJva2U6bm9uZTtmaWxsLXJ1bGU6bm9uemVybztmaWxsOnJnYigwJSwwJSwwJSk7ZmlsbC1vcGFjaXR5OjE7IiBkPSJNIDE4Ny41IDE5LjMyODEyNSBDIDE4NC43NDYwOTQgMTkuMzI4MTI1IDE4MS45OTYwOTQgMTkuMzk4NDM4IDE3OS4yNSAxOS41MzEyNSBDIDE3Ni41IDE5LjY2Nzk2OSAxNzMuNzUzOTA2IDE5Ljg3MTA5NCAxNzEuMDE1NjI1IDIwLjE0MDYyNSBDIDE2OC4yNzczNDQgMjAuNDEwMTU2IDE2NS41NDY4NzUgMjAuNzQ2MDk0IDE2Mi44MjQyMTkgMjEuMTQ4NDM4IEMgMTYwLjEwMTU2MiAyMS41NTQ2ODggMTU3LjM5MDYyNSAyMi4wMjM0MzggMTU0LjY5MTQwNiAyMi41NjI1IEMgMTUxLjk5MjE4OCAyMy4wOTc2NTYgMTQ5LjMwODU5NCAyMy42OTkyMTkgMTQ2LjYzNjcxOSAyNC4zNzEwOTQgQyAxNDMuOTY4NzUgMjUuMDM5MDYyIDE0MS4zMTY0MDYgMjUuNzczNDM4IDEzOC42ODM1OTQgMjYuNTcwMzEyIEMgMTM2LjA1MDc4MSAyNy4zNzEwOTQgMTMzLjQzNzUgMjguMjM0Mzc1IDEzMC44NDM3NSAyOS4xNjAxNTYgQyAxMjguMjUzOTA2IDMwLjA4NTkzOCAxMjUuNjg3NSAzMS4wNzgxMjUgMTIzLjE0NDUzMSAzMi4xMzI4MTIgQyAxMjAuNjAxNTYyIDMzLjE4MzU5NCAxMTguMDg1OTM4IDM0LjMwMDc4MSAxMTUuNTk3NjU2IDM1LjQ3NjU2MiBDIDExMy4xMDkzNzUgMzYuNjUyMzQ0IDExMC42NTIzNDQgMzcuODkwNjI1IDEwOC4yMjY1NjIgMzkuMTg3NSBDIDEwNS43OTY4NzUgNDAuNDg0Mzc1IDEwMy40MDIzNDQgNDEuODM5ODQ0IDEwMS4wNDI5NjkgNDMuMjUzOTA2IEMgOTguNjgzNTk0IDQ0LjY3MTg3NSA5Ni4zNTkzNzUgNDYuMTQ0NTMxIDk0LjA3MDMxMiA0Ny42NzE4NzUgQyA5MS43ODEyNSA0OS4xOTkyMTkgODkuNTMxMjUgNTAuNzg1MTU2IDg3LjMyMDMxMiA1Mi40MjU3ODEgQyA4NS4xMDkzNzUgNTQuMDYyNSA4Mi45NDE0MDYgNTUuNzU3ODEyIDgwLjgxMjUgNTcuNTAzOTA2IEMgNzguNjg3NSA1OS4yNSA3Ni42MDE1NjIgNjEuMDQ2ODc1IDc0LjU2MjUgNjIuODk0NTMxIEMgNzIuNTIzNDM4IDY0Ljc0MjE4OCA3MC41MzEyNSA2Ni42NDA2MjUgNjguNTg1OTM4IDY4LjU4NTkzOCBDIDY2LjY0MDYyNSA3MC41MzEyNSA2NC43NDIxODggNzIuNTIzNDM4IDYyLjg5NDUzMSA3NC41NjI1IEMgNjEuMDQ2ODc1IDc2LjYwMTU2MiA1OS4yNSA3OC42ODc1IDU3LjUwMzkwNiA4MC44MTI1IEMgNTUuNzU3ODEyIDgyLjk0MTQwNiA1NC4wNjI1IDg1LjEwOTM3NSA1Mi40MjU3ODEgODcuMzIwMzEyIEMgNTAuNzg1MTU2IDg5LjUzMTI1IDQ5LjE5OTIxOSA5MS43ODEyNSA0Ny42NzE4NzUgOTQuMDcwMzEyIEMgNDYuMTQ0NTMxIDk2LjM1OTM3NSA0NC42NzE4NzUgOTguNjgzNTk0IDQzLjI1MzkwNiAxMDEuMDQyOTY5IEMgNDEuODM5ODQ0IDEwMy40MDIzNDQgNDAuNDg0Mzc1IDEwNS43OTY4NzUgMzkuMTg3NSAxMDguMjI2NTYyIEMgMzcuODkwNjI1IDExMC42NTIzNDQgMzYuNjUyMzQ0IDExMy4xMDkzNzUgMzUuNDc2NTYyIDExNS41OTc2NTYgQyAzNC4zMDA3ODEgMTE4LjA4NTkzOCAzMy4xODM1OTQgMTIwLjYwMTU2MiAzMi4xMzI4MTIgMTIzLjE0NDUzMSBDIDMxLjA3ODEyNSAxMjUuNjg3NSAzMC4wODU5MzggMTI4LjI1MzkwNiAyOS4xNjAxNTYgMTMwLjg0Mzc1IEMgMjguMjM0Mzc1IDEzMy40Mzc1IDI3LjM3MTA5NCAxMzYuMDUwNzgxIDI2LjU3MDMxMiAxMzguNjgzNTk0IEMgMjUuNzczNDM4IDE0MS4zMTY0MDYgMjUuMDM5MDYyIDE0My45Njg3NSAyNC4zNzEwOTQgMTQ2LjYzNjcxOSBDIDIzLjY5OTIxOSAxNDkuMzA4NTk0IDIzLjA5NzY1NiAxNTEuOTkyMTg4IDIyLjU2MjUgMTU0LjY5MTQwNiBDIDIyLjAyMzQzOCAxNTcuMzkwNjI1IDIxLjU1NDY4OCAxNjAuMTAxNTYyIDIxLjE0ODQzOCAxNjIuODI0MjE5IEMgMjAuNzQ2MDk0IDE2NS41NDY4NzUgMjAuNDEwMTU2IDE2OC4yNzczNDQgMjAuMTQwNjI1IDE3MS4wMTU2MjUgQyAxOS44NzEwOTQgMTczLjc1MzkwNiAxOS42Njc5NjkgMTc2LjUgMTkuNTMxMjUgMTc5LjI1IEMgMTkuMzk4NDM4IDE4MS45OTYwOTQgMTkuMzI4MTI1IDE4NC43NDYwOTQgMTkuMzI4MTI1IDE4Ny41IEMgMTkuMzI4MTI1IDE5MC4yNTM5MDYgMTkuMzk4NDM4IDE5My4wMDM5MDYgMTkuNTMxMjUgMTk1Ljc1IEMgMTkuNjY3OTY5IDE5OC41IDE5Ljg3MTA5NCAyMDEuMjQ2MDk0IDIwLjE0MDYyNSAyMDMuOTg0Mzc1IEMgMjAuNDEwMTU2IDIwNi43MjI2NTYgMjAuNzQ2MDk0IDIwOS40NTMxMjUgMjEuMTQ4NDM4IDIxMi4xNzU3ODEgQyAyMS41NTQ2ODggMjE0Ljg5ODQzOCAyMi4wMjM0MzggMjE3LjYwOTM3NSAyMi41NjI1IDIyMC4zMDg1OTQgQyAyMy4wOTc2NTYgMjIzLjAwNzgxMiAyMy42OTkyMTkgMjI1LjY5MTQwNiAyNC4zNzEwOTQgMjI4LjM2MzI4MSBDIDI1LjAzOTA2MiAyMzEuMDMxMjUgMjUuNzczNDM4IDIzMy42ODM1OTQgMjYuNTcwMzEyIDIzNi4zMTY0MDYgQyAyNy4zNzEwOTQgMjM4Ljk0OTIxOSAyOC4yMzQzNzUgMjQxLjU2MjUgMjkuMTYwMTU2IDI0NC4xNTYyNSBDIDMwLjA4NTkzOCAyNDYuNzQ2MDk0IDMxLjA3ODEyNSAyNDkuMzEyNSAzMi4xMzI4MTIgMjUxLjg1NTQ2OSBDIDMzLjE4MzU5NCAyNTQuMzk4NDM4IDM0LjMwMDc4MSAyNTYuOTE0MDYyIDM1LjQ3NjU2MiAyNTkuNDAyMzQ0IEMgMzYuNjUyMzQ0IDI2MS44OTA2MjUgMzcuODkwNjI1IDI2NC4zNDc2NTYgMzkuMTg3NSAyNjYuNzczNDM4IEMgNDAuNDg0Mzc1IDI2OS4yMDMxMjUgNDEuODM5ODQ0IDI3MS41OTc2NTYgNDMuMjUzOTA2IDI3My45NTcwMzEgQyA0NC42NzE4NzUgMjc2LjMxNjQwNiA0Ni4xNDQ1MzEgMjc4LjY0MDYyNSA0Ny42NzE4NzUgMjgwLjkyOTY4OCBDIDQ5LjE5OTIxOSAyODMuMjE4NzUgNTAuNzg1MTU2IDI4NS40Njg3NSA1Mi40MjU3ODEgMjg3LjY3OTY4OCBDIDU0LjA2MjUgMjg5Ljg5MDYyNSA1NS43NTc4MTIgMjkyLjA1ODU5NCA1Ny41MDM5MDYgMjk0LjE4NzUgQyA1OS4yNSAyOTYuMzEyNSA2MS4wNDY4NzUgMjk4LjM5ODQzOCA2Mi44OTQ1MzEgMzAwLjQzNzUgQyA2NC43NDIxODggMzAyLjQ3NjU2MiA2Ni42NDA2MjUgMzA0LjQ2ODc1IDY4LjU4NTkzOCAzMDYuNDE0MDYyIEMgNzAuNTMxMjUgMzA4LjM1OTM3NSA3Mi41MjM0MzggMzEwLjI1NzgxMiA3NC41NjI1IDMxMi4xMDU0NjkgQyA3Ni42MDE1NjIgMzEzLjk1MzEyNSA3OC42ODc1IDMxNS43NSA4MC44MTI1IDMxNy40OTYwOTQgQyA4Mi45NDE0MDYgMzE5LjI0MjE4OCA4NS4xMDkzNzUgMzIwLjkzNzUgODcuMzIwMzEyIDMyMi41NzQyMTkgQyA4OS41MzEyNSAzMjQuMjE0ODQ0IDkxLjc4MTI1IDMyNS44MDA3ODEgOTQuMDcwMzEyIDMyNy4zMjgxMjUgQyA5Ni4zNTkzNzUgMzI4Ljg1NTQ2OSA5OC42ODM1OTQgMzMwLjMyODEyNSAxMDEuMDQyOTY5IDMzMS43NDYwOTQgQyAxMDMuNDAyMzQ0IDMzMy4xNjAxNTYgMTA1Ljc5Njg3NSAzMzQuNTE1NjI1IDEwOC4yMjY1NjIgMzM1LjgxMjUgQyAxMTAuNjUyMzQ0IDMzNy4xMDkzNzUgMTEzLjEwOTM3NSAzMzguMzQ3NjU2IDExNS41OTc2NTYgMzM5LjUyMzQzOCBDIDExOC4wODU5MzggMzQwLjY5OTIxOSAxMjAuNjAxNTYyIDM0MS44MTY0MDYgMTIzLjE0NDUzMSAzNDIuODY3MTg4IEMgMTI1LjY4NzUgMzQzLjkyMTg3NSAxMjguMjUzOTA2IDM0NC45MTQwNjIgMTMwLjg0Mzc1IDM0NS44Mzk4NDQgQyAxMzMuNDM3NSAzNDYuNzY1NjI1IDEzNi4wNTA3ODEgMzQ3LjYyODkwNiAxMzguNjgzNTk0IDM0OC40Mjk2ODggQyAxNDEuMzE2NDA2IDM0OS4yMjY1NjIgMTQzLjk2ODc1IDM0OS45NjA5MzggMTQ2LjYzNjcxOSAzNTAuNjI4OTA2IEMgMTQ5LjMwODU5NCAzNTEuMzAwNzgxIDE1MS45OTIxODggMzUxLjkwMjM0NCAxNTQuNjkxNDA2IDM1Mi40Mzc1IEMgMTU3LjM5MDYyNSAzNTIuOTc2NTYyIDE2MC4xMDE1NjIgMzUzLjQ0NTMxMiAxNjIuODI0MjE5IDM1My44NTE1NjIgQyAxNjUuNTQ2ODc1IDM1NC4yNTM5MDYgMTY4LjI3NzM0NCAzNTQuNTg5ODQ0IDE3MS4wMTU2MjUgMzU0Ljg1OTM3NSBDIDE3My43NTM5MDYgMzU1LjEyODkwNiAxNzYuNSAzNTUuMzMyMDMxIDE3OS4yNSAzNTUuNDY4NzUgQyAxODEuOTk2MDk0IDM1NS42MDE1NjIgMTg0Ljc0NjA5NCAzNTUuNjcxODc1IDE4Ny41IDM1NS42NzE4NzUgQyAxOTAuMjUzOTA2IDM1NS42NzE4NzUgMTkzLjAwMzkwNiAzNTUuNjAxNTYyIDE5NS43NSAzNTUuNDY4NzUgQyAxOTguNSAzNTUuMzMyMDMxIDIwMS4yNDYwOTQgMzU1LjEyODkwNiAyMDMuOTg0Mzc1IDM1NC44NTkzNzUgQyAyMDYuNzIyNjU2IDM1NC41ODk4NDQgMjA5LjQ1MzEyNSAzNTQuMjUzOTA2IDIxMi4xNzU3ODEgMzUzLjg1MTU2MiBDIDIxNC44OTg0MzggMzUzLjQ0NTMxMiAyMTcuNjA5Mzc1IDM1Mi45NzY1NjIgMjIwLjMwODU5NCAzNTIuNDM3NSBDIDIyMy4wMDc4MTIgMzUxLjkwMjM0NCAyMjUuNjkxNDA2IDM1MS4zMDA3ODEgMjI4LjM2MzI4MSAzNTAuNjI4OTA2IEMgMjMxLjAzMTI1IDM0OS45NjA5MzggMjMzLjY4MzU5NCAzNDkuMjI2NTYyIDIzNi4zMTY0MDYgMzQ4LjQyOTY4OCBDIDIzOC45NDkyMTkgMzQ3LjYyODkwNiAyNDEuNTYyNSAzNDYuNzY1NjI1IDI0NC4xNTYyNSAzNDUuODM5ODQ0IEMgMjQ2Ljc0NjA5NCAzNDQuOTE0MDYyIDI0OS4zMTI1IDM0My45MjE4NzUgMjUxLjg1NTQ2OSAzNDIuODY3MTg4IEMgMjU0LjM5ODQzOCAzNDEuODE2NDA2IDI1Ni45MTQwNjIgMzQwLjY5OTIxOSAyNTkuNDAyMzQ0IDMzOS41MjM0MzggQyAyNjEuODkwNjI1IDMzOC4zNDc2NTYgMjY0LjM0NzY1NiAzMzcuMTA5Mzc1IDI2Ni43NzM0MzggMzM1LjgxMjUgQyAyNjkuMjAzMTI1IDMzNC41MTU2MjUgMjcxLjU5NzY1NiAzMzMuMTYwMTU2IDI3My45NTcwMzEgMzMxLjc0NjA5NCBDIDI3Ni4zMTY0MDYgMzMwLjMyODEyNSAyNzguNjQwNjI1IDMyOC44NTU0NjkgMjgwLjkyOTY4OCAzMjcuMzI4MTI1IEMgMjgzLjIxODc1IDMyNS44MDA3ODEgMjg1LjQ2ODc1IDMyNC4yMTQ4NDQgMjg3LjY3OTY4OCAzMjIuNTc0MjE5IEMgMjg5Ljg5MDYyNSAzMjAuOTM3NSAyOTIuMDU4NTk0IDMxOS4yNDIxODggMjk0LjE4NzUgMzE3LjQ5NjA5NCBDIDI5Ni4zMTI1IDMxNS43NSAyOTguMzk4NDM4IDMxMy45NTMxMjUgMzAwLjQzNzUgMzEyLjEwNTQ2OSBDIDMwMi40NzY1NjIgMzEwLjI1NzgxMiAzMDQuNDY4NzUgMzA4LjM1OTM3NSAzMDYuNDE0MDYyIDMwNi40MTQwNjIgQyAzMDguMzU5Mzc1IDMwNC40Njg3NSAzMTAuMjU3ODEyIDMwMi40NzY1NjIgMzEyLjEwNTQ2OSAzMDAuNDM3NSBDIDMxMy45NTMxMjUgMjk4LjM5ODQzOCAzMTUuNzUgMjk2LjMxMjUgMzE3LjQ5NjA5NCAyOTQuMTg3NSBDIDMxOS4yNDIxODggMjkyLjA1ODU5NCAzMjAuOTM3NSAyODkuODkwNjI1IDMyMi41NzQyMTkgMjg3LjY3OTY4OCBDIDMyNC4yMTQ4NDQgMjg1LjQ2ODc1IDMyNS44MDA3ODEgMjgzLjIxODc1IDMyNy4zMjgxMjUgMjgwLjkyOTY4OCBDIDMyOC44NTU0NjkgMjc4LjY0MDYyNSAzMzAuMzI4MTI1IDI3Ni4zMTY0MDYgMzMxLjc0NjA5NCAyNzMuOTU3MDMxIEMgMzMzLjE2MDE1NiAyNzEuNTk3NjU2IDMzNC41MTU2MjUgMjY5LjIwMzEyNSAzMzUuODEyNSAyNjYuNzczNDM4IEMgMzM3LjEwOTM3NSAyNjQuMzQ3NjU2IDMzOC4zNDc2NTYgMjYxLjg5MDYyNSAzMzkuNTIzNDM4IDI1OS40MDIzNDQgQyAzNDAuNjk5MjE5IDI1Ni45MTQwNjIgMzQxLjgxNjQwNiAyNTQuMzk4NDM4IDM0Mi44NjcxODggMjUxLjg1NTQ2OSBDIDM0My45MjE4NzUgMjQ5LjMxMjUgMzQ0LjkxNDA2MiAyNDYuNzQ2MDk0IDM0NS44Mzk4NDQgMjQ0LjE1NjI1IEMgMzQ2Ljc2NTYyNSAyNDEuNTYyNSAzNDcuNjI4OTA2IDIzOC45NDkyMTkgMzQ4LjQyOTY4OCAyMzYuMzE2NDA2IEMgMzQ5LjIyNjU2MiAyMzMuNjgzNTk0IDM0OS45NjA5MzggMjMxLjAzMTI1IDM1MC42Mjg5MDYgMjI4LjM2MzI4MSBDIDM1MS4zMDA3ODEgMjI1LjY5MTQwNiAzNTEuOTAyMzQ0IDIyMy4wMDc4MTIgMzUyLjQzNzUgMjIwLjMwODU5NCBDIDM1Mi45NzY1NjIgMjE3LjYwOTM3NSAzNTMuNDQ1MzEyIDIxNC44OTg0MzggMzUzLjg1MTU2MiAyMTIuMTc1NzgxIEMgMzU0LjI1MzkwNiAyMDkuNDUzMTI1IDM1NC41ODk4NDQgMjA2LjcyMjY1NiAzNTQuODU5Mzc1IDIwMy45ODQzNzUgQyAzNTUuMTI4OTA2IDIwMS4yNDYwOTQgMzU1LjMzMjAzMSAxOTguNSAzNTUuNDY4NzUgMTk1Ljc1IEMgMzU1LjYwMTU2MiAxOTMuMDAzOTA2IDM1NS42NzE4NzUgMTkwLjI1MzkwNiAzNTUuNjcxODc1IDE4Ny41IEMgMzU1LjY3MTg3NSAxODQuNzQ2MDk0IDM1NS42MDE1NjIgMTgxLjk5NjA5NCAzNTUuNDY4NzUgMTc5LjI1IEMgMzU1LjMzMjAzMSAxNzYuNSAzNTUuMTI4OTA2IDE3My43NTM5MDYgMzU0Ljg1OTM3NSAxNzEuMDE1NjI1IEMgMzU0LjU4OTg0NCAxNjguMjc3MzQ0IDM1NC4yNTM5MDYgMTY1LjU0Njg3NSAzNTMuODUxNTYyIDE2Mi44MjQyMTkgQyAzNTMuNDQ1MzEyIDE2MC4xMDE1NjIgMzUyLjk3NjU2MiAxNTcuMzkwNjI1IDM1Mi40Mzc1IDE1NC42OTE0MDYgQyAzNTEuOTAyMzQ0IDE1MS45OTIxODggMzUxLjMwMDc4MSAxNDkuMzA4NTk0IDM1MC42Mjg5MDYgMTQ2LjYzNjcxOSBDIDM0OS45NjA5MzggMTQzLjk2ODc1IDM0OS4yMjY1NjIgMTQxLjMxNjQwNiAzNDguNDI5Njg4IDEzOC42ODM1OTQgQyAzNDcuNjI4OTA2IDEzNi4wNTA3ODEgMzQ2Ljc2NTYyNSAxMzMuNDM3NSAzNDUuODM5ODQ0IDEzMC44NDM3NSBDIDM0NC45MTQwNjIgMTI4LjI1MzkwNiAzNDMuOTIxODc1IDEyNS42ODc1IDM0Mi44NjcxODggMTIzLjE0NDUzMSBDIDM0MS44MTY0MDYgMTIwLjYwMTU2MiAzNDAuNjk5MjE5IDExOC4wODU5MzggMzM5LjUyMzQzOCAxMTUuNTk3NjU2IEMgMzM4LjM0NzY1NiAxMTMuMTA5Mzc1IDMzNy4xMDkzNzUgMTEwLjY1MjM0NCAzMzUuODEyNSAxMDguMjI2NTYyIEMgMzM0LjUxNTYyNSAxMDUuNzk2ODc1IDMzMy4xNjAxNTYgMTAzLjQwMjM0NCAzMzEuNzQ2MDk0IDEwMS4wNDI5NjkgQyAzMzAuMzI4MTI1IDk4LjY4MzU5NCAzMjguODU1NDY5IDk2LjM1OTM3NSAzMjcuMzI4MTI1IDk0LjA3MDMxMiBDIDMyNS44MDA3ODEgOTEuNzgxMjUgMzI0LjIxNDg0NCA4OS41MzEyNSAzMjIuNTc0MjE5IDg3LjMyMDMxMiBDIDMyMC45Mzc1IDg1LjEwOTM3NSAzMTkuMjQyMTg4IDgyLjk0MTQwNiAzMTcuNDk2MDk0IDgwLjgxMjUgQyAzMTUuNzUgNzguNjg3NSAzMTMuOTUzMTI1IDc2LjYwMTU2MiAzMTIuMTA1NDY5IDc0LjU2MjUgQyAzMTAuMjU3ODEyIDcyLjUyMzQzOCAzMDguMzU5Mzc1IDcwLjUzMTI1IDMwNi40MTQwNjIgNjguNTg1OTM4IEMgMzA0LjQ2ODc1IDY2LjY0MDYyNSAzMDIuNDc2NTYyIDY0Ljc0MjE4OCAzMDAuNDM3NSA2Mi44OTQ1MzEgQyAyOTguMzk4NDM4IDYxLjA0Njg3NSAyOTYuMzEyNSA1OS4yNSAyOTQuMTg3NSA1Ny41MDM5MDYgQyAyOTIuMDU4NTk0IDU1Ljc1NzgxMiAyODkuODkwNjI1IDU0LjA2MjUgMjg3LjY3OTY4OCA1Mi40MjU3ODEgQyAyODUuNDY4NzUgNTAuNzg1MTU2IDI4My4yMTg3NSA0OS4xOTkyMTkgMjgwLjkyOTY4OCA0Ny42NzE4NzUgQyAyNzguNjQwNjI1IDQ2LjE0NDUzMSAyNzYuMzE2NDA2IDQ0LjY3MTg3NSAyNzMuOTU3MDMxIDQzLjI1MzkwNiBDIDI3MS41OTc2NTYgNDEuODM5ODQ0IDI2OS4yMDMxMjUgNDAuNDg0Mzc1IDI2Ni43NzM0MzggMzkuMTg3NSBDIDI2NC4zNDc2NTYgMzcuODkwNjI1IDI2MS44OTA2MjUgMzYuNjUyMzQ0IDI1OS40MDIzNDQgMzUuNDc2NTYyIEMgMjU2LjkxNDA2MiAzNC4zMDA3ODEgMjU0LjM5ODQzOCAzMy4xODM1OTQgMjUxLjg1NTQ2OSAzMi4xMzI4MTIgQyAyNDkuMzEyNSAzMS4wNzgxMjUgMjQ2Ljc0NjA5NCAzMC4wODU5MzggMjQ0LjE1NjI1IDI5LjE2MDE1NiBDIDI0MS41NjI1IDI4LjIzNDM3NSAyMzguOTQ5MjE5IDI3LjM3MTA5NCAyMzYuMzE2NDA2IDI2LjU3MDMxMiBDIDIzMy42ODM1OTQgMjUuNzczNDM4IDIzMS4wMzEyNSAyNS4wMzkwNjIgMjI4LjM2MzI4MSAyNC4zNzEwOTQgQyAyMjUuNjkxNDA2IDIzLjY5OTIxOSAyMjMuMDA3ODEyIDIzLjA5NzY1NiAyMjAuMzA4NTk0IDIyLjU2MjUgQyAyMTcuNjA5Mzc1IDIyLjAyMzQzOCAyMTQuODk4NDM4IDIxLjU1NDY4OCAyMTIuMTc1NzgxIDIxLjE0ODQzOCBDIDIwOS40NTMxMjUgMjAuNzQ2MDk0IDIwNi43MjI2NTYgMjAuNDEwMTU2IDIwMy45ODQzNzUgMjAuMTQwNjI1IEMgMjAxLjI0NjA5NCAxOS44NzEwOTQgMTk4LjUgMTkuNjY3OTY5IDE5NS43NSAxOS41MzEyNSBDIDE5My4wMDM5MDYgMTkuMzk4NDM4IDE5MC4yNTM5MDYgMTkuMzI4MTI1IDE4Ny41IDE5LjMyODEyNSBaIE0gMTg3LjUgMTkuMzI4MTI1ICIvPgo8ZyBzdHlsZT0iZmlsbDpyZ2IoMTAwJSwxMDAlLDEwMCUpO2ZpbGwtb3BhY2l0eToxOyI+CiAgPHVzZSB4bGluazpocmVmPSIjZ2x5cGgwLTEiIHg9IjQ3Ljg0NjE1NCIgeT0iMjE1LjQ3MTcyOCIvPgo8L2c+CjxnIHN0eWxlPSJmaWxsOnJnYigxMDAlLDU2Ljg1ODgyNiUsMzAuMTk4NjY5JSk7ZmlsbC1vcGFjaXR5OjE7Ij4KICA8dXNlIHhsaW5rOmhyZWY9IiNnbHlwaDAtMiIgeD0iMTUyLjYwMzYwNyIgeT0iMjE1LjQ3MTcyOCIvPgo8L2c+CjxnIHN0eWxlPSJmaWxsOnJnYigxMDAlLDEwMCUsMTAwJSk7ZmlsbC1vcGFjaXR5OjE7Ij4KICA8dXNlIHhsaW5rOmhyZWY9IiNnbHlwaDAtMyIgeD0iMjM2LjI0NTY3MyIgeT0iMjE1LjQ3MTcyOCIvPgo8L2c+CjwvZz4KPC9zdmc+Cg==
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: marin3r-controller-manager
+      deployments:
+      - name: marin3r-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - operator
+                - --leader-elect
+                command:
+                - /manager
+                env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                image: quay.io/3scale/marin3r:v0.10.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 300m
+                    memory: 300Mi
+                  requests:
+                    cpu: 50m
+                    memory: 100Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: marin3r-controller-manager
+              terminationGracePeriodSeconds: 10
+      - name: marin3r-controller-webhook
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              control-plane: controller-webhook
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                control-plane: controller-webhook
+            spec:
+              containers:
+              - args:
+                - webhook
+                - --tls-dir=/apiserver.local.config/certificates
+                - --tls-cert-name=apiserver.crt
+                - --tls-key-name=apiserver.key
+                command:
+                - /manager
+                env:
+                - name: WATCH_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['olm.targetNamespaces']
+                image: quay.io/3scale/marin3r:v0.10.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: webhook
+                ports:
+                - containerPort: 9443
+                  name: webhook-server
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 100Mi
+                  requests:
+                    cpu: 50m
+                    memory: 30Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              serviceAccountName: marin3r-controller-manager
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - marin3r.3scale.net
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - marin3r.3scale.net
+          resources:
+          - envoyconfigrevisions
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - marin3r.3scale.net
+          resources:
+          - envoyconfigrevisions/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - marin3r.3scale.net
+          resources:
+          - envoyconfigs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - marin3r.3scale.net
+          resources:
+          - envoyconfigs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - discoveryservicecertificates
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - discoveryservicecertificates/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - discoveryservices
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - envoydeployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - envoydeployments/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - operator.marin3r.3scale.net
+          resources:
+          - envoydeployments/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: marin3r-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - envoy
+  - discovery
+  - controlplane
+  - proxy
+  - sidecar
+  - xds
+  - network
+  - gateway
+  links:
+  - name: GitHub
+    url: https://github.com/3scale-ops/marin3r
+  maintainers:
+  - email: 3scale-operations+marin3r@redhat.com
+    name: 3scale Operations Team
+  maturity: alpha
+  provider:
+    name: Red Hat
+  version: 0.10.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: marin3r-controller-webhook
+    failurePolicy: Fail
+    generateName: envoyconfig.marin3r.3scale.net
+    rules:
+    - apiGroups:
+      - marin3r.3scale.net
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - envoyconfigs
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-marin3r-3scale-net-v1alpha1-envoyconfig
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: marin3r-controller-webhook
+    failurePolicy: Fail
+    generateName: envoydeployment.operator.marin3r.3scale.net
+    rules:
+    - apiGroups:
+      - operator.marin3r.3scale.net
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - envoydeployments
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-operator-marin3r-3scale-net-v1alpha1-envoydeployment
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: marin3r-controller-webhook
+    failurePolicy: Fail
+    generateName: sidecar-injector.marin3r.3scale.net
+    matchPolicy: Equivalent
+    objectSelector:
+      matchLabels:
+        marin3r.3scale.net/status: enabled
+    reinvocationPolicy: Never
+    rules:
+    - apiGroups:
+      - ""
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      resources:
+      - pods
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /pod-v1-mutate

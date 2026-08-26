@@ -1,0 +1,757 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "KairosAgent",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kairos-operator"
+            },
+            "name": "agent-dev-environments",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "aiModel": {
+              "apiKeySecret": {
+                "key": "token",
+                "name": "kairos-ai-credentials"
+              },
+              "apiURL": "https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1/chat/completions",
+              "model": "granite-31-8b",
+              "timeoutSeconds": 30
+            },
+            "correctionPolicy": {
+              "dryRun": false,
+              "maxActionsPerHour": 50,
+              "rollbackOnFailure": true
+            },
+            "mode": "autopilot",
+            "paused": false,
+            "reporting": {
+              "interval": "60s"
+            },
+            "watch": {
+              "namespaceSuffix": "-dev",
+              "namespaces": [],
+              "resourceTypes": [
+                "Deployment"
+              ]
+            }
+          }
+        },
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "KairosAgent",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kairos-operator"
+            },
+            "name": "agent-production",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "aiModel": {
+              "apiKeySecret": {
+                "key": "token",
+                "name": "kairos-ai-credentials"
+              },
+              "apiURL": "https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1/chat/completions",
+              "model": "granite-31-8b",
+              "temperature": "0.3",
+              "timeoutSeconds": 60
+            },
+            "correctionPolicy": {
+              "dryRun": false,
+              "maxActionsPerHour": 10,
+              "requireApprovalAbove": "50%",
+              "rollbackOnFailure": true
+            },
+            "mode": "supervised",
+            "paused": false,
+            "reporting": {
+              "interval": "30s",
+              "otelExport": true
+            },
+            "watch": {
+              "labelSelector": "kairos.io/managed=true",
+              "namespaceSuffix": "-prod",
+              "namespaces": [
+                "industrial-edge-tst",
+                "factory-kafka"
+              ],
+              "resourceTypes": [
+                "Deployment",
+                "StatefulSet"
+              ]
+            }
+          }
+        },
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "KairosAgent",
+          "metadata": {
+            "name": "agent-qa-environments",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "aiModel": {
+              "apiKeySecret": {
+                "key": "token",
+                "name": "kairos-ai-credentials"
+              },
+              "apiURL": "https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1/chat/completions",
+              "model": "granite-31-8b"
+            },
+            "correctionPolicy": {
+              "maxActionsPerHour": 20,
+              "requireApprovalAbove": "30%",
+              "rollbackOnFailure": true
+            },
+            "mode": "supervised",
+            "reporting": {
+              "interval": "45s"
+            },
+            "watch": {
+              "namespaceSuffix": "-qa",
+              "namespaces": [],
+              "resourceTypes": [
+                "Deployment",
+                "StatefulSet"
+              ]
+            }
+          }
+        },
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "KairosConsole",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kairos-operator"
+            },
+            "name": "kairos",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "auth": {
+              "type": "none"
+            },
+            "clusters": [
+              {
+                "apiURL": "https://api.hub-cluster:6443",
+                "name": "hub",
+                "region": "central"
+              }
+            ],
+            "image": "quay.io/maximilianopizarro/kairos-console:v1.0.0",
+            "replicas": 1,
+            "route": {
+              "enabled": true,
+              "host": "kairos-console.apps.your-cluster.example.com",
+              "tlsEnabled": true
+            }
+          }
+        },
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "KairosEvent",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kairos-operator"
+            },
+            "name": "example-event",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "action": "scale_up",
+            "agentName": "my-agent",
+            "cluster": "hub",
+            "dryRun": false,
+            "namespace": "default",
+            "reason": "CPU utilization exceeded 80% threshold",
+            "resource": "my-app"
+          }
+        },
+        {
+          "apiVersion": "kairos.maximilianopizarro.github.io/v1alpha1",
+          "kind": "SmartScalingPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kairos-operator"
+            },
+            "name": "industrial-edge-policy",
+            "namespace": "kairos-system"
+          },
+          "spec": {
+            "ai": {
+              "enabled": false
+            },
+            "otelEndpoint": "otel-collector.observability.svc.cluster.local:4317",
+            "paused": false,
+            "prometheusEndpoint": "prometheus-k8s.openshift-monitoring.svc.cluster.local:9090",
+            "rules": [
+              {
+                "action": {
+                  "cooldown": "5m",
+                  "increaseCPUPercent": 25,
+                  "increaseMemoryPercent": 20,
+                  "maxCPU": "2",
+                  "maxMemory": "2Gi",
+                  "type": "IncreaseResources"
+                },
+                "name": "high-cpu-vertical",
+                "when": {
+                  "for": "3m",
+                  "metric": "container_cpu_usage_seconds_total",
+                  "operator": "GreaterThan",
+                  "threshold": "80"
+                }
+              },
+              {
+                "action": {
+                  "cooldown": "5m",
+                  "increaseMemoryPercent": 30,
+                  "maxMemory": "4Gi",
+                  "type": "IncreaseResources"
+                },
+                "name": "memory-pressure-vertical",
+                "when": {
+                  "for": "2m",
+                  "metric": "container_memory_working_set_bytes",
+                  "operator": "GreaterThan",
+                  "threshold": "85"
+                }
+              },
+              {
+                "action": {
+                  "cooldown": "10m",
+                  "maxReplicas": 6,
+                  "replicas": 1,
+                  "type": "AddReplicas"
+                },
+                "name": "request-rate-horizontal",
+                "when": {
+                  "for": "1m",
+                  "metric": "http_server_requests_per_second",
+                  "operator": "GreaterThan",
+                  "threshold": "1000"
+                }
+              },
+              {
+                "action": {
+                  "cooldown": "30m",
+                  "increaseCPUPercent": 20,
+                  "minCPU": "100m",
+                  "type": "DecreaseResources"
+                },
+                "name": "low-utilization-downscale",
+                "when": {
+                  "for": "15m",
+                  "metric": "container_cpu_usage_seconds_total",
+                  "operator": "LessThan",
+                  "threshold": "20"
+                }
+              }
+            ],
+            "schedule": [
+              {
+                "action": {
+                  "minReplicas": 3,
+                  "type": "SetMinReplicas"
+                },
+                "cron": "0 8 * * 1-5",
+                "name": "business-hours-preemptive"
+              },
+              {
+                "action": {
+                  "minReplicas": 1,
+                  "type": "SetMinReplicas"
+                },
+                "cron": "0 20 * * 1-5",
+                "name": "off-hours-scale-down"
+              }
+            ],
+            "target": {
+              "apiVersion": "apps/v1",
+              "kind": "Deployment",
+              "name": "line-dashboard",
+              "namespace": "industrial-edge-tst"
+            }
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: AI/Machine Learning, Monitoring
+    containerImage: quay.io/maximilianopizarro/kairos-operator:v2.1.0
+    createdAt: "2026-06-22T18:20:29Z"
+    description: AI-powered Kubernetes resource optimizer with SSA, ArgoCD-safe, multi-cluster
+      governance
+    operatorframework.io/suggested-namespace: kairos-system
+    operators.operatorframework.io/builder: operator-sdk-v1.40.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/maximilianoPizarro/kairos
+    support: maximilianopizarro
+  name: kairos-operator.v2.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: AI-powered resource management agent that monitors and optimizes
+        workloads
+      displayName: Kairos Agent
+      kind: KairosAgent
+      name: kairosagents.kairos.maximilianopizarro.github.io
+      specDescriptors:
+      - description: Operating mode (autopilot, supervised, or gitops)
+        displayName: Mode
+        path: mode
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:autopilot
+        - urn:alm:descriptor:com.tectonic.ui:select:supervised
+        - urn:alm:descriptor:com.tectonic.ui:select:gitops
+      - description: OpenAI-compatible API endpoint URL
+        displayName: AI API URL
+        path: aiModel.apiURL
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Enable dry-run mode (no actual changes applied)
+        displayName: Dry Run
+        path: correctionPolicy.dryRun
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      - description: Pause the agent
+        displayName: Paused
+        path: paused
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      statusDescriptors:
+      - description: Current phase of the agent
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      version: v1alpha1
+    - description: Multi-cluster governance dashboard with approval workflows and
+        historical charts
+      displayName: Kairos Console
+      kind: KairosConsole
+      name: kairosconsoles.kairos.maximilianopizarro.github.io
+      specDescriptors:
+      - description: Number of console replicas
+        displayName: Replicas
+        path: replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Create an OpenShift Route automatically
+        displayName: Route Enabled
+        path: route.enabled
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      statusDescriptors:
+      - description: Console URL
+        displayName: URL
+        path: url
+        x-descriptors:
+        - urn:alm:descriptor:org.w3:link
+      version: v1alpha1
+    - description: Audit trail for scaling decisions
+      displayName: Kairos Event
+      kind: KairosEvent
+      name: kairosevents.kairos.maximilianopizarro.github.io
+      version: v1alpha1
+    - description: Metric-based scaling policy with AI integration, policy inheritance,
+        and predictive scaling
+      displayName: Smart Scaling Policy
+      kind: SmartScalingPolicy
+      name: smartscalingpolicies.kairos.maximilianopizarro.github.io
+      specDescriptors:
+      - description: Target workload kind
+        displayName: Target Kind
+        path: target.kind
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:Deployment
+        - urn:alm:descriptor:com.tectonic.ui:select:StatefulSet
+        - urn:alm:descriptor:com.tectonic.ui:select:DaemonSet
+      - description: Pause all scaling actions
+        displayName: Paused
+        path: paused
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      statusDescriptors:
+      - description: Current conditions
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+  description: |
+    ## Kairos Operator — Intelligent Resource Management
+
+    Kairos is a Kubernetes operator that uses AI models to continuously analyze workload
+    metrics and automatically right-size container resources using **Server-Side Apply (SSA)**,
+    ensuring **zero conflicts with ArgoCD** and other GitOps controllers.
+
+    ### Why Kairos?
+
+    | Feature | Kairos | VPA | HPA |
+    |---------|--------|-----|-----|
+    | ArgoCD-safe (SSA) | Yes | No | N/A |
+    | AI-powered decisions | Yes | No | No |
+    | Multi-cluster governance | Yes | No | No |
+    | Dry-run mode | Yes | Yes | No |
+    | Approval workflows | Yes | No | No |
+    | GitOps PR generation | Yes | No | No |
+
+    ### Key Features
+
+    * **AI-Powered Recommendations** — Connects to any OpenAI-compatible API (OpenAI, Ollama, vLLM, etc.)
+    * **Server-Side Apply** — Zero-conflict resource management, fully compatible with ArgoCD
+    * **Multi-Cluster Hub-Spoke** — Central console for governance across all clusters
+    * **4 Operating Modes** — Autopilot, Supervised, GitOps, or Dry-Run
+    * **HPA/KEDA/VPA Coexistence** — Automatic detection and deferral to avoid conflicts
+    * **PinnedResources** — SRE can lock workload resources for a set duration
+    * **KairosEvent Audit Trail** — Full history of every scaling decision
+    * **Approval Workflows** — Supervised mode with approve/reject in console UI
+    * **Policy Inheritance** — Global > Cluster > Namespace scope with priority-based resolution
+    * **Cost Estimation** — Integrate with AWS/GCP/Azure pricing APIs
+    * **Notification Webhooks** — Slack, Teams, or generic webhook alerts on corrections
+    * **Predictive Scaling** — Time-series forecasting for proactive resource adjustment
+    * **GitOps Native** — Generate PRs to your infrastructure repo instead of direct patches
+    * **Grafana Dashboard** — Pre-built dashboard for operator observability
+    * **ValidatingWebhook** — Pre-apply validation prevents misconfigurations
+
+    ### Architecture
+
+    ```
+    ┌─────────────────────────────────────────────────────────┐
+    │                     Hub Cluster                          │
+    │  ┌──────────────┐  ┌─────────────┐  ┌──────────────┐   │
+    │  │   Kairos     │  │   Kairos    │  │  SmartScaling │   │
+    │  │  Operator    │──│   Console   │  │   Policies    │   │
+    │  └──────────────┘  └─────────────┘  └──────────────┘   │
+    └───────────┬─────────────────────────────────────────────┘
+                │  Agent Reports (mTLS)
+    ┌───────────┼──────────────────────────────────────────┐
+    │    ┌──────▼──────┐         ┌──────────────┐          │
+    │    │ KairosAgent │ ──────► │  Workloads   │          │
+    │    │  (east)     │  SSA    │  (annotated) │          │
+    │    └─────────────┘         └──────────────┘          │
+    │                    Spoke Cluster                       │
+    └──────────────────────────────────────────────────────┘
+    ```
+
+    ### Prerequisites
+
+    * OpenShift 4.12+ or Kubernetes 1.25+
+    * (Optional) AI model endpoint — OpenAI, Ollama, vLLM, or any compatible API
+    * (Optional) Prometheus/Thanos for metrics collection
+
+    ### Quick Start
+
+    1. Install the operator from OperatorHub
+    2. A default `KairosConsole` is created automatically with a Route
+    3. Create a `KairosAgent` to start monitoring workloads
+    4. Annotate target workloads with `kairos.io/managed: "true"`
+    5. View recommendations in the Kairos Console
+  displayName: Kairos Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnMSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwYmNkNCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzFhMjM3ZSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxjaXJjbGUgY3g9IjI0IiBjeT0iMjQiIHI9IjIzIiBmaWxsPSIjMGQxMTE3Ii8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwZTVmZiIgc3Ryb2tlLXdpZHRoPSIwLjgiIG9wYWNpdHk9IjAuNiIvPjxwYXRoIGQ9Ik0xNyAxMCBMMzEgMTAgTDI1LjUgMjIuNSBMMjQgMjQgTDIyLjUgMjIuNSBMMTcgMTAgWiIgZmlsbD0idXJsKCNnMSkiIG9wYWNpdHk9IjAuOSIvPjxwYXRoIGQ9Ik0xNyAzOCBMMzEgMzggTDI1LjUgMjUuNSBMMjQgMjQgTDIyLjUgMjUuNSBMMTcgMzggWiIgZmlsbD0idXJsKCNnMSkiIG9wYWNpdHk9IjAuOSIvPjxwYXRoIGQ9Ik0xNiA5IEwzMiA5IiBzdHJva2U9IiMwMGU1ZmYiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMTYgMzkgTDMyIDM5IiBzdHJva2U9IiMwMGU1ZmYiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMTIgMjAgQzkgMTggNSAxNyAzIDE4IEM1IDIwIDggMjIgMTIgMjMiIGZpbGw9IiMwMGJjZDQiIG9wYWNpdHk9IjAuNyIvPjxwYXRoIGQ9Ik0zNiAyMCBDMzkgMTggNDMgMTcgNDUgMTggQzQzIDIwIDQwIDIyIDM2IDIzIiBmaWxsPSIjMDBiY2Q0IiBvcGFjaXR5PSIwLjciLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyLjUiIGZpbGw9IiMwMGU1ZmYiLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIxLjIiIGZpbGw9IiMwZDExMTciLz48Y2lyY2xlIGN4PSIyNCIgY3k9IjE1IiByPSIwLjYiIGZpbGw9IiNmZmFiNDAiIG9wYWNpdHk9IjAuOCIvPjxjaXJjbGUgY3g9IjI0IiBjeT0iMzIiIHI9IjAuNSIgZmlsbD0iI2ZmYWI0MCIgb3BhY2l0eT0iMC42Ii8+PC9zdmc+
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          verbs:
+          - get
+          - list
+          - patch
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - cronjobs
+          verbs:
+          - get
+          - list
+          - patch
+          - watch
+        - apiGroups:
+          - kairos.maximilianopizarro.github.io
+          resources:
+          - kairosagents
+          - kairosconsoles
+          - kairosevents
+          - smartscalingpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kairos.maximilianopizarro.github.io
+          resources:
+          - kairosagents/finalizers
+          - kairosconsoles/finalizers
+          - smartscalingpolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kairos.maximilianopizarro.github.io
+          resources:
+          - kairosagents/status
+          - kairosconsoles/status
+          - smartscalingpolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - route.openshift.io
+          resources:
+          - routes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: kairos-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: kairos
+          control-plane: controller-manager
+        name: kairos-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: kairos
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: kairos
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: quay.io/maximilianopizarro/kairos-operator:v2.1.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: kairos-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: kairos-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - kubernetes
+  - autoscaling
+  - ai
+  - resource-management
+  - openshift
+  - machine-learning
+  - cost-optimization
+  - gitops
+  - ssa
+  - argocd
+  links:
+  - name: GitHub
+    url: https://github.com/maximilianoPizarro/kairos
+  - name: Documentation
+    url: https://maximilianopizarro.github.io/kairos/
+  maintainers:
+  - email: maximilianopizarro5@gmail.com
+    name: Maximiliano Pizarro
+  maturity: beta
+  minKubeVersion: 1.25.0
+  nativeAPIs:
+  - group: apps
+    kind: Deployment
+    version: v1
+  - group: apps
+    kind: StatefulSet
+    version: v1
+  - group: apps
+    kind: DaemonSet
+    version: v1
+  - group: batch
+    kind: CronJob
+    version: v1
+  provider:
+    name: maximilianopizarro
+    url: https://github.com/maximilianoPizarro
+  version: 2.1.0

@@ -1,0 +1,364 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: litellmguardrails.litellm.palena.ai
+spec:
+  group: litellm.palena.ai
+  names:
+    kind: LiteLLMGuardrail
+    listKind: LiteLLMGuardrailList
+    plural: litellmguardrails
+    shortNames:
+    - lg
+    singular: litellmguardrail
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.guardrailName
+      name: Guardrail
+      type: string
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .spec.instanceRef.name
+      name: Instance
+      type: string
+    - jsonPath: .status.configured
+      name: Configured
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          LiteLLMGuardrail is the Schema for the litellmguardrails API.
+
+          Guardrails are config-level resources: the actual `guardrails` entries are
+          materialized by the LiteLLMInstance controller when it rebuilds the
+          ConfigMap + Deployment. Per-key and per-team guardrail assignment (via
+          LiteLLMVirtualKey.spec.guardrails / LiteLLMTeam.spec.guardrails) requires
+          a LiteLLM Enterprise license.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              LiteLLMGuardrailSpec defines the desired state of LiteLLMGuardrail.
+
+              A LiteLLMGuardrail defines a content moderation / safety integration that
+              the proxy should run against requests and/or responses. Guardrails are a
+              config-level feature: the operator renders them into the proxy's
+              `guardrails` section in proxy_server_config.yaml and injects any required
+              API key env vars into the Deployment. The instance controller observes
+              LiteLLMGuardrail CRs via a Watch and rewrites the ConfigMap + Deployment
+              whenever they change.
+            properties:
+              apiBase:
+                description: API base URL for the guardrail provider (e.g. https://api.aporia.com).
+                type: string
+              apiKeySecretRef:
+                description: |-
+                  API key for the guardrail provider. The operator injects this as an
+                  env var named `GUARDRAIL_{NAME}_API_KEY` (sanitized) and writes
+                  `os.environ/GUARDRAIL_{NAME}_API_KEY` into the proxy config.
+                properties:
+                  key:
+                    description: Key within the Secret.
+                    type: string
+                  name:
+                    description: Name of the Secret.
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              defaultOn:
+                description: |-
+                  Whether this guardrail runs on every request by default even when a
+                  key/team does not explicitly opt in. Writes `default_on: true` into
+                  the guardrail's litellm_params section.
+                type: boolean
+              envVars:
+                description: |-
+                  Extra environment variables needed by this guardrail beyond the API
+                  key (e.g. additional credentials for bedrock, custom endpoints).
+                items:
+                  description: EnvVar represents an environment variable present in
+                    a Container.
+                  properties:
+                    name:
+                      description: Name of the environment variable. Must be a C_IDENTIFIER.
+                      type: string
+                    value:
+                      description: |-
+                        Variable references $(VAR_NAME) are expanded
+                        using the previously defined environment variables in the container and
+                        any service environment variables. If a variable cannot be resolved,
+                        the reference in the input string will be unchanged. Double $$ are reduced
+                        to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                        "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                        Escaped references will never be expanded, regardless of whether the variable
+                        exists or not.
+                        Defaults to "".
+                      type: string
+                    valueFrom:
+                      description: Source for the environment variable's value. Cannot
+                        be used if value is not empty.
+                      properties:
+                        configMapKeyRef:
+                          description: Selects a key of a ConfigMap.
+                          properties:
+                            key:
+                              description: The key to select.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            optional:
+                              description: Specify whether the ConfigMap or its key
+                                must be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        fieldRef:
+                          description: |-
+                            Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                            spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                          properties:
+                            apiVersion:
+                              description: Version of the schema the FieldPath is
+                                written in terms of, defaults to "v1".
+                              type: string
+                            fieldPath:
+                              description: Path of the field to select in the specified
+                                API version.
+                              type: string
+                          required:
+                          - fieldPath
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        resourceFieldRef:
+                          description: |-
+                            Selects a resource of the container: only resources limits and requests
+                            (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                          properties:
+                            containerName:
+                              description: 'Container name: required for volumes,
+                                optional for env vars'
+                              type: string
+                            divisor:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Specifies the output format of the exposed
+                                resources, defaults to "1"
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            resource:
+                              description: 'Required: resource to select'
+                              type: string
+                          required:
+                          - resource
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        secretKeyRef:
+                          description: Selects a key of a secret in the pod's namespace
+                          properties:
+                            key:
+                              description: The key of the secret to select from.  Must
+                                be a valid secret key.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            optional:
+                              description: Specify whether the Secret or its key must
+                                be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              guardrailName:
+                description: |-
+                  Unique name for this guardrail. Used both as the `guardrail_name` in
+                  the proxy config and as the identifier referenced from
+                  LiteLLMVirtualKey.spec.guardrails / LiteLLMTeam.spec.guardrails.
+                minLength: 1
+                type: string
+              instanceRef:
+                description: Reference to the LiteLLMInstance this guardrail belongs
+                  to.
+                properties:
+                  name:
+                    description: Name of the LiteLLMInstance CR.
+                    type: string
+                required:
+                - name
+                type: object
+              mode:
+                description: |-
+                  Execution mode for the guardrail.
+                    pre_call      — runs before the LLM request is dispatched
+                    post_call     — runs after the LLM response is received
+                    during_call   — runs in parallel with the LLM request
+                    logging_only  — evaluated but never blocks the request
+                enum:
+                - pre_call
+                - post_call
+                - during_call
+                - logging_only
+                type: string
+              params:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Provider-specific parameters that are merged verbatim into the
+                  guardrail's `litellm_params` section. For example, Bedrock guardrails
+                  use `guardrailIdentifier` and `guardrailVersion`; Presidio uses
+                  `presidio_analyzer_api_base`; Lakera uses `category_thresholds`.
+                type: object
+              provider:
+                description: Guardrail provider. Must be a LiteLLM-supported integration.
+                enum:
+                - aporia
+                - lakera
+                - bedrock
+                - presidio
+                - guardrails_ai
+                - azure
+                - llm_guard
+                - llamaguard
+                - google_text_moderation
+                - custom_guardrail
+                type: string
+            required:
+            - guardrailName
+            - instanceRef
+            - mode
+            - provider
+            type: object
+          status:
+            description: LiteLLMGuardrailStatus defines the observed state of LiteLLMGuardrail.
+            properties:
+              conditions:
+                description: Standard conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              configured:
+                description: |-
+                  Whether the guardrail has been rendered into the instance's proxy
+                  config. Set to true once the instance controller has observed the
+                  spec and included it in the latest ConfigMap reconciliation.
+                type: boolean
+              lastSyncTime:
+                description: Last time this guardrail's spec was validated and reconciled.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

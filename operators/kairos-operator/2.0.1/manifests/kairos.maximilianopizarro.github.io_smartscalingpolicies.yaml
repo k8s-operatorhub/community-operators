@@ -1,0 +1,830 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  creationTimestamp: null
+  name: smartscalingpolicies.kairos.maximilianopizarro.github.io
+spec:
+  group: kairos.maximilianopizarro.github.io
+  names:
+    kind: SmartScalingPolicy
+    listKind: SmartScalingPolicyList
+    plural: smartscalingpolicies
+    singular: smartscalingpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.target.name
+      name: Target
+      type: string
+    - jsonPath: .spec.rules
+      name: Rules
+      type: integer
+    - jsonPath: .spec.paused
+      name: Paused
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SmartScalingPolicy is the Schema for the smartscalingpolicies
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SmartScalingPolicySpec defines the desired state of SmartScalingPolicy.
+            properties:
+              ai:
+                description: AI-assisted decisions configuration
+                properties:
+                  agentRef:
+                    type: string
+                  enabled:
+                    type: boolean
+                required:
+                - enabled
+                type: object
+              costEstimation:
+                description: Cost estimation integration (cloud provider pricing APIs)
+                properties:
+                  credentialsSecretRef:
+                    description: Secret with cloud credentials for pricing API
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  endpoint:
+                    description: Pricing API endpoint (for custom provider)
+                    type: string
+                  monthlyBudgetUSD:
+                    description: Monthly budget limit (USD) — alerts when approaching
+                    format: int64
+                    type: integer
+                  provider:
+                    description: Cloud provider (aws, gcp, azure, custom)
+                    enum:
+                    - aws
+                    - gcp
+                    - azure
+                    - custom
+                    type: string
+                  region:
+                    description: Region for pricing lookups
+                    type: string
+                required:
+                - provider
+                - region
+                type: object
+              metricsAdapters:
+                description: Custom metrics adapters (Datadog, New Relic, Splunk)
+                items:
+                  description: MetricsAdapter configures an external metrics provider.
+                  properties:
+                    credentialsSecretRef:
+                      description: Secret with API key/credentials
+                      properties:
+                        key:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - key
+                      - name
+                      type: object
+                    endpoint:
+                      description: API endpoint for the metrics provider
+                      type: string
+                    metricMappings:
+                      additionalProperties:
+                        type: string
+                      description: Metric name mapping (provider-specific metric name
+                        -> standard name)
+                      type: object
+                    type:
+                      description: 'Adapter type: datadog, newrelic, splunk, custom'
+                      enum:
+                      - datadog
+                      - newrelic
+                      - splunk
+                      - custom
+                      type: string
+                  required:
+                  - endpoint
+                  - type
+                  type: object
+                type: array
+              metricsTLS:
+                description: TLS settings for metrics endpoints (Prometheus/Thanos/OTel)
+                properties:
+                  caSecretRef:
+                    description: Custom CA certificate secret reference
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  certSecretRef:
+                    description: Client certificate secret reference (mTLS)
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  insecureSkipVerify:
+                    description: Skip TLS certificate verification (for disconnected/air-gapped
+                      environments)
+                    type: boolean
+                type: object
+              ocmSync:
+                description: 'Open Cluster Management sync: replicate policy across
+                  managed clusters'
+                properties:
+                  clusterSelector:
+                    additionalProperties:
+                      type: string
+                    description: Cluster selector labels
+                    type: object
+                  enabled:
+                    description: Enable OCM policy sync
+                    type: boolean
+                  placementRef:
+                    description: Placement rule name for target clusters
+                    type: string
+                required:
+                - enabled
+                type: object
+              otelEndpoint:
+                description: OTel collector endpoint (gRPC)
+                type: string
+              paused:
+                description: Pause all scaling actions
+                type: boolean
+              predictiveScaling:
+                description: Predictive scaling configuration (time-series forecasting)
+                properties:
+                  algorithm:
+                    description: 'Algorithm to use: linear, arima, prophet'
+                    enum:
+                    - linear
+                    - arima
+                    - prophet
+                    type: string
+                  confidenceThreshold:
+                    description: Confidence threshold (0.0-1.0) for applying predictions
+                    type: string
+                  enabled:
+                    description: Enable predictive scaling
+                    type: boolean
+                  forecastWindow:
+                    description: Forecast horizon (e.g. "1h", "6h", "24h")
+                    type: string
+                  lookbackPeriod:
+                    description: Historical data lookback period (e.g. "7d", "30d")
+                    type: string
+                required:
+                - enabled
+                - forecastWindow
+                type: object
+              priority:
+                description: Priority for conflict resolution (higher wins)
+                format: int32
+                type: integer
+              prometheusEndpoint:
+                description: Prometheus endpoint (fallback)
+                type: string
+              rules:
+                description: Metric-based scaling rules
+                items:
+                  description: ScalingRule defines a single metric-based rule.
+                  properties:
+                    action:
+                      description: ScalingAction defines what to do when a rule triggers.
+                      properties:
+                        cooldown:
+                          description: Cooldown period between consecutive actions
+                          type: string
+                        increaseCPUPercent:
+                          format: int32
+                          type: integer
+                        increaseMemoryPercent:
+                          format: int32
+                          type: integer
+                        maxCPU:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        maxMemory:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        maxReplicas:
+                          format: int32
+                          type: integer
+                        minCPU:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        minMemory:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        minReplicas:
+                          format: int32
+                          type: integer
+                        replicas:
+                          format: int32
+                          type: integer
+                        resources:
+                          description: ResourceRequirements describes the compute
+                            resource requirements.
+                          properties:
+                            claims:
+                              description: |-
+                                Claims lists the names of resources, defined in spec.resourceClaims,
+                                that are used by this container.
+
+                                This is an alpha field and requires enabling the
+                                DynamicResourceAllocation feature gate.
+
+                                This field is immutable. It can only be set for containers.
+                              items:
+                                description: ResourceClaim references one entry in
+                                  PodSpec.ResourceClaims.
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name must match the name of one entry in pod.spec.resourceClaims of
+                                      the Pod where this field is used. It makes that resource available
+                                      inside a container.
+                                    type: string
+                                  request:
+                                    description: |-
+                                      Request is the name chosen for a request in the referenced claim.
+                                      If empty, everything from the claim is made available, otherwise
+                                      only the result of this request.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Limits describes the maximum amount of compute resources allowed.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Requests describes the minimum amount of compute resources required.
+                                If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                          type: object
+                        type:
+                          description: ActionType defines what scaling action to take.
+                          enum:
+                          - IncreaseResources
+                          - DecreaseResources
+                          - AddReplicas
+                          - RemoveReplicas
+                          - SetMinReplicas
+                          - SetResources
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    enabled:
+                      type: boolean
+                    name:
+                      type: string
+                    when:
+                      description: MetricCondition defines when a rule triggers.
+                      properties:
+                        for:
+                          description: Duration the condition must hold before triggering
+                          type: string
+                        metric:
+                          description: OTel or Prometheus metric name
+                          type: string
+                        operator:
+                          description: Comparison operator
+                          enum:
+                          - GreaterThan
+                          - LessThan
+                          - Equal
+                          type: string
+                        threshold:
+                          description: Threshold value (e.g. "200ms", "500", "80%")
+                          type: string
+                      required:
+                      - metric
+                      - operator
+                      - threshold
+                      type: object
+                  required:
+                  - action
+                  - name
+                  - when
+                  type: object
+                type: array
+              scalingSchedule:
+                description: Scheduled scaling windows (cron-based resource profiles)
+                items:
+                  description: ScalingSchedule defines a cron-based resource profile
+                    window.
+                  properties:
+                    cron:
+                      type: string
+                    duration:
+                      type: string
+                    name:
+                      type: string
+                    resources:
+                      description: ResourceRequirements describes the compute resource
+                        requirements.
+                      properties:
+                        claims:
+                          description: |-
+                            Claims lists the names of resources, defined in spec.resourceClaims,
+                            that are used by this container.
+
+                            This is an alpha field and requires enabling the
+                            DynamicResourceAllocation feature gate.
+
+                            This field is immutable. It can only be set for containers.
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                              request:
+                                description: |-
+                                  Request is the name chosen for a request in the referenced claim.
+                                  If empty, everything from the claim is made available, otherwise
+                                  only the result of this request.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Limits describes the maximum amount of compute resources allowed.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Requests describes the minimum amount of compute resources required.
+                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                      type: object
+                  required:
+                  - cron
+                  - duration
+                  - name
+                  - resources
+                  type: object
+                type: array
+              schedule:
+                description: Time-based scheduling rules
+                items:
+                  description: ScheduleAction defines a time-based scaling action.
+                  properties:
+                    action:
+                      description: ScalingAction defines what to do when a rule triggers.
+                      properties:
+                        cooldown:
+                          description: Cooldown period between consecutive actions
+                          type: string
+                        increaseCPUPercent:
+                          format: int32
+                          type: integer
+                        increaseMemoryPercent:
+                          format: int32
+                          type: integer
+                        maxCPU:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        maxMemory:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        maxReplicas:
+                          format: int32
+                          type: integer
+                        minCPU:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        minMemory:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        minReplicas:
+                          format: int32
+                          type: integer
+                        replicas:
+                          format: int32
+                          type: integer
+                        resources:
+                          description: ResourceRequirements describes the compute
+                            resource requirements.
+                          properties:
+                            claims:
+                              description: |-
+                                Claims lists the names of resources, defined in spec.resourceClaims,
+                                that are used by this container.
+
+                                This is an alpha field and requires enabling the
+                                DynamicResourceAllocation feature gate.
+
+                                This field is immutable. It can only be set for containers.
+                              items:
+                                description: ResourceClaim references one entry in
+                                  PodSpec.ResourceClaims.
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name must match the name of one entry in pod.spec.resourceClaims of
+                                      the Pod where this field is used. It makes that resource available
+                                      inside a container.
+                                    type: string
+                                  request:
+                                    description: |-
+                                      Request is the name chosen for a request in the referenced claim.
+                                      If empty, everything from the claim is made available, otherwise
+                                      only the result of this request.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Limits describes the maximum amount of compute resources allowed.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Requests describes the minimum amount of compute resources required.
+                                If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                          type: object
+                        type:
+                          description: ActionType defines what scaling action to take.
+                          enum:
+                          - IncreaseResources
+                          - DecreaseResources
+                          - AddReplicas
+                          - RemoveReplicas
+                          - SetMinReplicas
+                          - SetResources
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    cron:
+                      type: string
+                    enabled:
+                      type: boolean
+                    name:
+                      type: string
+                  required:
+                  - action
+                  - cron
+                  - name
+                  type: object
+                type: array
+              scope:
+                description: Policy scope for inheritance (global > cluster > namespace)
+                enum:
+                - global
+                - cluster
+                - namespace
+                type: string
+              target:
+                description: Target workload to scale
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - apiVersion
+                - kind
+                - name
+                type: object
+            required:
+            - target
+            type: object
+          status:
+            description: SmartScalingPolicyStatus defines the observed state of SmartScalingPolicy.
+            properties:
+              activeRules:
+                description: Active rules currently triggering
+                items:
+                  type: string
+                type: array
+              conditions:
+                description: Current conditions
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentReplicas:
+                description: Current replica count
+                format: int32
+                type: integer
+              currentResources:
+                description: Current resource allocation
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This is an alpha field and requires enabling the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              lastEvaluationTime:
+                description: Last time the policy was evaluated
+                format: date-time
+                type: string
+              lastScalingEvent:
+                description: Last scaling event
+                properties:
+                  action:
+                    description: ActionType defines what scaling action to take.
+                    enum:
+                    - IncreaseResources
+                    - DecreaseResources
+                    - AddReplicas
+                    - RemoveReplicas
+                    - SetMinReplicas
+                    - SetResources
+                    type: string
+                  detail:
+                    type: string
+                  rule:
+                    type: string
+                  success:
+                    type: boolean
+                  timestamp:
+                    format: date-time
+                    type: string
+                required:
+                - action
+                - detail
+                - rule
+                - success
+                - timestamp
+                type: object
+              recentEvents:
+                description: Recent scaling events (last 10)
+                items:
+                  description: ScalingEvent records a scaling action that was taken.
+                  properties:
+                    action:
+                      description: ActionType defines what scaling action to take.
+                      enum:
+                      - IncreaseResources
+                      - DecreaseResources
+                      - AddReplicas
+                      - RemoveReplicas
+                      - SetMinReplicas
+                      - SetResources
+                      type: string
+                    detail:
+                      type: string
+                    rule:
+                      type: string
+                    success:
+                      type: boolean
+                    timestamp:
+                      format: date-time
+                      type: string
+                  required:
+                  - action
+                  - detail
+                  - rule
+                  - success
+                  - timestamp
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

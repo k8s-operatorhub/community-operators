@@ -1,0 +1,160 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+    categories: Application Runtime, Monitoring, Security
+    certified: "false"
+    containerImage: quay.io/deployment-validation-operator/dv-operator:0.2.2
+    createdAt: 12/14/2021
+    description: The deployment validation operator
+    repository: https://github.com/app-sre/deployment-validation-operator
+    support: Best Effort
+  name: deployment-validation-operator.v0.2.2
+  annotations:
+    ignore-check.kube-linter.io/minimum-three-replicas: "This deployment uses 1 pod as currently replicating does not replicate metric data causing installation issues"
+spec:
+  description: "The Deployment Validator Operator(DVO) checks deployments and other\
+    \ resources against a curated collection of best practices.\nThese best practices\
+    \ focus mainly on ensuring that the applications are fault-tolerant.\n\n### Configuration\n\
+    \ To configure the checks Operator runs or to run your own custom checks, you can use a \
+    \ ConfigMap created in the **same namespace** as operator itself. ConfigMap should be named as \
+    \ *deployment-validation-operator-config* and contain *deployment-validation-operator-config.yaml* as data.\
+    \ [Example](https://github.com/app-sre/deployment-validation-operator/blob/master/deploy/openshift/configmap.yaml)\n\
+    \ \n### Metrics\nDVO will report failed validations via Prometheus metrics. All the metrics\
+    \ are gauges that will report `1` if the best-practice has failed.\nThere is \
+    \ [Instruction](https://github.com/app-sre/deployment-validation-operator#install-dashboard)\
+    \ to install a simple grafana dashboard."
+  displayName: Deployment Validation Operator
+  replaces: deployment-validation-operator.v0.2.1
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - '*'
+          resources:
+          - '*'
+          verbs:
+          - get
+          - list
+          - watch
+        serviceAccountName: deployment-validation-operator
+      deployments:
+      - name: deployment-validation-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: deployment-validation-operator
+          strategy:
+            rollingUpdate:
+              maxSurge: 1
+              maxUnavailable: 0
+            type: RollingUpdate
+          template:
+            metadata:
+              labels:
+                app: deployment-validation-operator
+                name: deployment-validation-operator
+            spec:
+              affinity:
+                podAntiAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - podAffinityTerm:
+                      labelSelector:
+                        matchExpressions:
+                        - key: app
+                          operator: In
+                          values:
+                          - deployment-validation-operator
+                      topologyKey: kubernetes.io/hostname
+                    weight: 100
+              containers:
+              - env:
+                - name: WATCH_NAMESPACE
+                  value: ""
+                - name: OPERATOR_NAME
+                  value: deployment-validation-operator
+                - name: NAMESPACE_IGNORE_PATTERN
+                  value: "openshift.+|kube-.+"
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                image: quay.io/deployment-validation-operator/dv-operator:0.2.2
+                imagePullPolicy: Always
+                name: deployment-validation-operator
+                args:
+                - --config /config/deployment-validation-operator-config.yaml
+                resources:
+                  requests:
+                    memory: "256Mi"
+                    cpu: "100n"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1"
+                volumeMounts:
+                - name: dvo-config
+                  mountPath: /config
+                securityContext:
+                  readOnlyRootFilesystem: true
+              restartPolicy: Always
+              serviceAccountName: deployment-validation-operator
+              terminationGracePeriodSeconds: 30
+              volumes:
+                - name: dvo-config
+                  configMap:
+                    optional: true
+                    name: deployment-validation-operator-config
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - services
+          verbs:
+          - get
+          - create
+          - list
+          - delete
+          - update
+          - watch
+          - patch
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - '*'
+        serviceAccountName: deployment-validation-operator
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: AllNamespaces
+  - supported: false
+    type: MultiNamespace
+  keywords:
+  - dvo
+  labels:
+    alm-owner-dvo: deployment-validation-operator
+    operated-by: deployment-validation-operator
+  links:
+  - name: repository
+    url: https://github.com/app-sre/deployment-validation-operator
+  - name: containerImage
+    url: https://quay.io/deployment-validation-operator/dv-operator:0.2.2
+  maturity: alpha
+  provider:
+    name: Red Hat
+  selector:
+    matchLabels:
+      alm-owner-dvo: deployment-validation-operator
+      operated-by: deployment-validation-operator
+  version: 0.2.2

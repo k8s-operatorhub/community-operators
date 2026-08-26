@@ -1,0 +1,263 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: satelliteephemeris.ntn.operators.dev
+spec:
+  group: ntn.operators.dev
+  names:
+    kind: SatelliteEphemeris
+    listKind: SatelliteEphemerisList
+    plural: satelliteephemeris
+    shortNames:
+    - sateph
+    singular: satelliteephemeris
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.satelliteCount
+      name: Satellites
+      type: integer
+    - jsonPath: .status.lastUpdated
+      name: Last Updated
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SatelliteEphemeris manages GP data fetching (OMM JSON from CelesTrak/SpaceTrack),
+          orbital propagation (SGP4 via akhenakh/sgp4), and pass prediction for a set of
+          satellites against ground stations.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SatelliteEphemerisSpec defines the desired state of SatelliteEphemeris.
+            properties:
+              passPrediction:
+                description: passPrediction configures automatic pass window computation.
+                properties:
+                  groundStations:
+                    description: |-
+                      groundStations is a list of GroundStationLifecycle resource names
+                      to compute pass windows against.
+                    items:
+                      type: string
+                    minItems: 1
+                    type: array
+                  horizon:
+                    default: 24h
+                    description: horizon is how far into the future to predict passes.
+                    type: string
+                  minElevation:
+                    default: "10"
+                    description: minElevation is the minimum elevation angle in degrees
+                      (string, e.g., "10").
+                    pattern: ^-?[0-9]+\.?[0-9]*$
+                    type: string
+                required:
+                - groundStations
+                type: object
+              satellites:
+                description: satellites filters which satellites to track from the
+                  source.
+                properties:
+                  constellation:
+                    description: constellation filters by constellation name (e.g.,
+                      "oneweb", "starlink").
+                    type: string
+                  noradIDs:
+                    description: noradIDs is an explicit list of NORAD catalog IDs
+                      to track.
+                    items:
+                      type: integer
+                    type: array
+                type: object
+              source:
+                description: source defines where to fetch GP (General Perturbations)
+                  data.
+                properties:
+                  credentials:
+                    description: |-
+                      credentials is a reference to a Secret containing auth credentials
+                      (required for SpaceTrack, optional for CelesTrak).
+                    properties:
+                      key:
+                        default: password
+                        description: key within the Secret data.
+                        type: string
+                      name:
+                        description: name of the Secret.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  refreshInterval:
+                    default: 4h
+                    description: |-
+                      refreshInterval is how often to re-fetch GP data.
+                      CelesTrak updates every 2 hours; setting this below 2h wastes bandwidth.
+                    format: duration
+                    type: string
+                  type:
+                    description: 'type is the source type. Supported: "CelesTrak",
+                      "SpaceTrack".'
+                    enum:
+                    - CelesTrak
+                    - SpaceTrack
+                    type: string
+                  url:
+                    description: |-
+                      url is the endpoint to fetch GP data from.
+                      For CelesTrak: https://celestrak.org/NORAD/elements/gp.php?GROUP=oneweb&FORMAT=JSON
+                      For SpaceTrack: https://www.space-track.org/basicspacedata/query/class/gp/...
+                    minLength: 1
+                    pattern: ^https?://
+                    type: string
+                required:
+                - refreshInterval
+                - type
+                - url
+                type: object
+                x-kubernetes-validations:
+                - message: SpaceTrack source type requires credentials (spec.source.credentials)
+                  rule: self.type != 'SpaceTrack' || has(self.credentials)
+            required:
+            - source
+            type: object
+          status:
+            description: SatelliteEphemerisStatus defines the observed state of SatelliteEphemeris.
+            properties:
+              conditions:
+                description: conditions represent the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastUpdated:
+                description: lastUpdated is when the GP data was last successfully
+                  fetched.
+                format: date-time
+                type: string
+              nextPassWindows:
+                description: nextPassWindows contains upcoming contact opportunities.
+                items:
+                  description: PassWindow represents a predicted contact opportunity
+                    between a satellite and ground station.
+                  properties:
+                    aos:
+                      description: aos is the Acquisition of Signal time (satellite
+                        rises above minElevation).
+                      format: date-time
+                      type: string
+                    groundStation:
+                      description: groundStation is the name of the GroundStationLifecycle
+                        resource.
+                      type: string
+                    los:
+                      description: los is the Loss of Signal time (satellite drops
+                        below minElevation).
+                      format: date-time
+                      type: string
+                    maxElevation:
+                      description: maxElevation is the peak elevation angle during
+                        the pass in degrees (string, e.g., "72.5").
+                      pattern: ^-?[0-9]+\.?[0-9]*$
+                      type: string
+                    satellite:
+                      description: satellite is the name or NORAD ID of the satellite.
+                      type: string
+                  required:
+                  - aos
+                  - groundStation
+                  - los
+                  - maxElevation
+                  - satellite
+                  type: object
+                type: array
+              satelliteCount:
+                description: satelliteCount is the number of satellites currently
+                  tracked.
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,715 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.0
+  name: attunedefaults.attune.io
+spec:
+  group: attune.io
+  names:
+    categories:
+    - attune
+    kind: AttuneDefaults
+    listKind: AttuneDefaultsList
+    plural: attunedefaults
+    shortNames:
+    - rsd
+    singular: attunedefaults
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.metricsSource.prometheus.address
+      name: Prometheus
+      type: string
+    - jsonPath: .spec.updateStrategy.type
+      name: Type
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AttuneDefaults is the Schema for the attunedefaults API.
+          It defines cluster-scoped default values for AttunePolicy resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AttuneDefaultsSpec defines cluster-scoped default values
+              for AttunePolicy resources.
+            properties:
+              costPricing:
+                description: |-
+                  CostPricing configures the per-unit pricing used to compute
+                  EstimatedMonthlySavings. If omitted, defaults to standard
+                  on-demand Linux pricing ($0.031/vCPU-hour, $0.004/GiB-hour).
+                properties:
+                  cpuPerCoreHour:
+                    description: |-
+                      CPUPerCoreHour is the cost per vCPU-hour (e.g. "0.031").
+                      Defaults to 0.031 if not specified.
+                    type: string
+                  memoryPerGiBHour:
+                    description: |-
+                      MemoryPerGiBHour is the cost per GiB-hour (e.g. "0.004").
+                      Defaults to 0.004 if not specified.
+                    type: string
+                type: object
+              cpu:
+                description: CPU configures default CPU resource recommendation parameters.
+                properties:
+                  allowDecrease:
+                    description: |-
+                      AllowDecrease controls whether the resource value can be decreased.
+                      For CPU: nil defaults to true (decreases allowed, throttle detected by safety monitor).
+                      For memory: nil defaults to false (decreases blocked to prevent OOMKill).
+                    type: boolean
+                  burstSensitivity:
+                    description: |-
+                      BurstSensitivity controls how much burst detection inflates the
+                      recommendation. Expressed as a decimal string multiplied by
+                      log2(burstMagnitude). Default "0.1" gives ~20% boost for magnitude 4,
+                      ~30% for 8, ~40% for 16. Set "0" to disable burst boost entirely
+                      (e.g. for batch jobs). Must be >= 0, max 1.0.
+                    type: string
+                  controlledValues:
+                    description: |-
+                      ControlledValues specifies which resource values to manage.
+                      "RequestsOnly" (default) adjusts only requests, leaving limits unchanged.
+                      "RequestsAndLimits" adjusts both requests and limits in lockstep.
+                      For Guaranteed-QoS pods (where requests equal limits), use
+                      "RequestsAndLimits" or resizes will be skipped to preserve QoS class.
+                    enum:
+                    - RequestsOnly
+                    - RequestsAndLimits
+                    type: string
+                  maxAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MaxAllowed is the maximum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxChangePercent:
+                    description: |-
+                      MaxChangePercent is the maximum allowed change percentage per
+                      reconcile cycle for this resource (both directions). Limits how
+                      aggressively the recommendation can deviate from the current value
+                      in a single step, forcing gradual convergence. Overridden by
+                      MaxIncreasePercent/MaxDecreasePercent if those are set.
+                      Defaults to 50 for CPU, 30 for memory.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxDecreasePercent:
+                    description: |-
+                      MaxDecreasePercent is the maximum allowed decrease percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for downward
+                      changes. Memory decreases are riskier (OOM), so a lower cap is
+                      recommended. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxIncreasePercent:
+                    description: |-
+                      MaxIncreasePercent is the maximum allowed increase percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for upward
+                      changes. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  memoryFromCpuRatio:
+                    description: |-
+                      MemoryFromCPURatio derives memory recommendations from CPU recommendations
+                      using a fixed ratio, instead of using Prometheus memory metrics. Useful for
+                      JVM, Go, and .NET workloads where heap scales linearly with CPU allocation
+                      and Prometheus memory metrics are unreliable (JVM reserves heap upfront,
+                      Go GC targets a fixed percentage of available memory).
+                      Example: "2.0" means memory = 2x the CPU recommendation in bytes
+                      (e.g., 500m CPU -> 1Gi memory). The derived value still passes through
+                      minAllowed, maxAllowed, and maxChangePercent bounds.
+                      Only valid on the memory ResourceConfig; ignored on CPU.
+                    type: string
+                  minAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MinAllowed is the minimum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  overhead:
+                    description: |-
+                      Overhead is the percentage of additional resources added on top of the
+                      percentile recommendation. Expressed as a string (e.g. "20" means 20%
+                      extra headroom above the target percentile). Must be >= 0, max 900.
+                    pattern: ^([0-9]+(\.[0-9]+)?)?$
+                    type: string
+                  percentile:
+                    description: |-
+                      Percentile is the usage percentile to target for recommendations.
+                      Supported values: 50, 90, 95, 99. Omit or set to 0 to use the default.
+                    enum:
+                    - 0
+                    - 50
+                    - 90
+                    - 95
+                    - 99
+                    format: int32
+                    type: integer
+                  startupBoost:
+                    description: |-
+                      StartupBoost temporarily increases CPU requests for newly created or
+                      restarted pods to accelerate JVM/.NET class loading, JIT compilation,
+                      and cache warming. After the duration expires (or the container reaches
+                      Ready), the CPU is reduced to the steady-state recommendation.
+                      Only applies to CPU resources.
+                    properties:
+                      duration:
+                        description: |-
+                          Duration is the maximum time the boost remains active after pod
+                          creation or container restart. The boost is removed when the
+                          container reaches Ready or this duration expires, whichever comes first.
+                          Must be >= 10s and <= 1h.
+                        type: string
+                      multiplier:
+                        description: |-
+                          Multiplier scales the recommended CPU request during startup.
+                          For example, "3.0" means 3x the steady-state recommendation.
+                          Must be > 1.0 and <= 10.0.
+                        type: string
+                    required:
+                    - duration
+                    - multiplier
+                    type: object
+                type: object
+              memory:
+                description: Memory configures default memory resource recommendation
+                  parameters.
+                properties:
+                  allowDecrease:
+                    description: |-
+                      AllowDecrease controls whether the resource value can be decreased.
+                      For CPU: nil defaults to true (decreases allowed, throttle detected by safety monitor).
+                      For memory: nil defaults to false (decreases blocked to prevent OOMKill).
+                    type: boolean
+                  burstSensitivity:
+                    description: |-
+                      BurstSensitivity controls how much burst detection inflates the
+                      recommendation. Expressed as a decimal string multiplied by
+                      log2(burstMagnitude). Default "0.1" gives ~20% boost for magnitude 4,
+                      ~30% for 8, ~40% for 16. Set "0" to disable burst boost entirely
+                      (e.g. for batch jobs). Must be >= 0, max 1.0.
+                    type: string
+                  controlledValues:
+                    description: |-
+                      ControlledValues specifies which resource values to manage.
+                      "RequestsOnly" (default) adjusts only requests, leaving limits unchanged.
+                      "RequestsAndLimits" adjusts both requests and limits in lockstep.
+                      For Guaranteed-QoS pods (where requests equal limits), use
+                      "RequestsAndLimits" or resizes will be skipped to preserve QoS class.
+                    enum:
+                    - RequestsOnly
+                    - RequestsAndLimits
+                    type: string
+                  maxAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MaxAllowed is the maximum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxChangePercent:
+                    description: |-
+                      MaxChangePercent is the maximum allowed change percentage per
+                      reconcile cycle for this resource (both directions). Limits how
+                      aggressively the recommendation can deviate from the current value
+                      in a single step, forcing gradual convergence. Overridden by
+                      MaxIncreasePercent/MaxDecreasePercent if those are set.
+                      Defaults to 50 for CPU, 30 for memory.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxDecreasePercent:
+                    description: |-
+                      MaxDecreasePercent is the maximum allowed decrease percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for downward
+                      changes. Memory decreases are riskier (OOM), so a lower cap is
+                      recommended. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  maxIncreasePercent:
+                    description: |-
+                      MaxIncreasePercent is the maximum allowed increase percentage per
+                      reconcile cycle. Takes precedence over MaxChangePercent for upward
+                      changes. Defaults to MaxChangePercent if not set.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  memoryFromCpuRatio:
+                    description: |-
+                      MemoryFromCPURatio derives memory recommendations from CPU recommendations
+                      using a fixed ratio, instead of using Prometheus memory metrics. Useful for
+                      JVM, Go, and .NET workloads where heap scales linearly with CPU allocation
+                      and Prometheus memory metrics are unreliable (JVM reserves heap upfront,
+                      Go GC targets a fixed percentage of available memory).
+                      Example: "2.0" means memory = 2x the CPU recommendation in bytes
+                      (e.g., 500m CPU -> 1Gi memory). The derived value still passes through
+                      minAllowed, maxAllowed, and maxChangePercent bounds.
+                      Only valid on the memory ResourceConfig; ignored on CPU.
+                    type: string
+                  minAllowed:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: MinAllowed is the minimum allowed resource value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  overhead:
+                    description: |-
+                      Overhead is the percentage of additional resources added on top of the
+                      percentile recommendation. Expressed as a string (e.g. "20" means 20%
+                      extra headroom above the target percentile). Must be >= 0, max 900.
+                    pattern: ^([0-9]+(\.[0-9]+)?)?$
+                    type: string
+                  percentile:
+                    description: |-
+                      Percentile is the usage percentile to target for recommendations.
+                      Supported values: 50, 90, 95, 99. Omit or set to 0 to use the default.
+                    enum:
+                    - 0
+                    - 50
+                    - 90
+                    - 95
+                    - 99
+                    format: int32
+                    type: integer
+                  startupBoost:
+                    description: |-
+                      StartupBoost temporarily increases CPU requests for newly created or
+                      restarted pods to accelerate JVM/.NET class loading, JIT compilation,
+                      and cache warming. After the duration expires (or the container reaches
+                      Ready), the CPU is reduced to the steady-state recommendation.
+                      Only applies to CPU resources.
+                    properties:
+                      duration:
+                        description: |-
+                          Duration is the maximum time the boost remains active after pod
+                          creation or container restart. The boost is removed when the
+                          container reaches Ready or this duration expires, whichever comes first.
+                          Must be >= 10s and <= 1h.
+                        type: string
+                      multiplier:
+                        description: |-
+                          Multiplier scales the recommended CPU request during startup.
+                          For example, "3.0" means 3x the steady-state recommendation.
+                          Must be > 1.0 and <= 10.0.
+                        type: string
+                    required:
+                    - duration
+                    - multiplier
+                    type: object
+                type: object
+              metricsSource:
+                description: MetricsSource configures default metrics source settings.
+                properties:
+                  cloudwatch:
+                    description: CloudWatch configures an Amazon CloudWatch Container
+                      Insights metrics source.
+                    properties:
+                      clusterName:
+                        description: |-
+                          ClusterName is the EKS cluster name for Container Insights metrics.
+                          Required for metric filtering.
+                        type: string
+                      region:
+                        description: Region is the AWS region (e.g. "us-east-1").
+                          Required.
+                        type: string
+                      roleArn:
+                        description: |-
+                          RoleARN is an optional IAM role ARN to assume for cross-account access.
+                          If not set, uses the pod's service account IAM role (IRSA/Pod Identity).
+                        type: string
+                    required:
+                    - clusterName
+                    - region
+                    type: object
+                  datadog:
+                    description: Datadog configures a Datadog metrics source.
+                    properties:
+                      apiKeySecretRef:
+                        description: |-
+                          APIKeySecretRef references a Secret containing the Datadog API key.
+                          The Secret must contain an "api-key" key and optionally an "app-key" key.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      site:
+                        default: datadoghq.com
+                        description: |-
+                          Site is the Datadog site (e.g. "datadoghq.com", "datadoghq.eu", "us5.datadoghq.com").
+                          Defaults to "datadoghq.com".
+                        type: string
+                    required:
+                    - apiKeySecretRef
+                    type: object
+                  historyWindow:
+                    description: |-
+                      HistoryWindow is the time window for historical metrics data.
+                      Defaults to 7d (168h) if not specified.
+                    type: string
+                  minimumDataPoints:
+                    description: |-
+                      MinimumDataPoints is the minimum number of data points required
+                      before generating recommendations. Minimum 1, default 48 samples.
+                      With the default queryStep of 5m, 48 samples is about 4 hours of data.
+                      Defaults to 48 if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  prometheus:
+                    description: Prometheus configures a Prometheus metrics source.
+                    properties:
+                      address:
+                        description: Address is the URL of the Prometheus-compatible
+                          query endpoint.
+                        type: string
+                      bearerTokenSecret:
+                        description: |-
+                          BearerTokenSecret references a Kubernetes Secret containing a bearer
+                          token for authenticating with managed Prometheus services.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      headers:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Headers are custom HTTP headers added to every query request.
+                          Use for non-secret tenant or routing headers (e.g. "X-Scope-OrgID"
+                          for Mimir). Do not put credentials here; use BearerTokenSecret for
+                          authentication tokens.
+                        type: object
+                      queryParameters:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          QueryParameters are appended to every query request URL.
+                          Use for backend-specific settings such as Thanos deduplication
+                          (e.g. {"dedup": "true", "partial_response": "true"}). Reserved
+                          query keys controlled by the operator (`query`, `start`, `end`, `step`,
+                          `time`, `timeout`) are rejected.
+                        type: object
+                      tls:
+                        description: TLS configures TLS settings for the connection.
+                        properties:
+                          insecureSkipVerify:
+                            description: |-
+                              InsecureSkipVerify disables TLS certificate verification.
+                              Use only for self-signed certificates in development.
+                            type: boolean
+                        type: object
+                    required:
+                    - address
+                    type: object
+                  queryStep:
+                    description: |-
+                      QueryStep is the step interval for Prometheus range queries and ETA
+                      calculations. Should match your Prometheus scrape interval for
+                      accurate time estimates. Minimum 10s, maximum 1h. Default 5m.
+                    type: string
+                  rateWindow:
+                    description: |-
+                      RateWindow is the window used in the PromQL rate() function for CPU
+                      queries. Defaults to queryStep if not set. Must be >= 30s and <= historyWindow.
+                      Advanced users may set this independently to control CPU rate smoothing
+                      (e.g. a short rateWindow for responsive tracking with a longer queryStep).
+                    type: string
+                  vpa:
+                    description: VPA configures consumption of existing VerticalPodAutoscaler
+                      recommendations.
+                    properties:
+                      name:
+                        description: Name is the name of the VerticalPodAutoscaler
+                          object.
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the VPA. Defaults
+                          to the policy's namespace.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              updateStrategy:
+                description: UpdateStrategy configures default update strategy settings.
+                properties:
+                  autoRevert:
+                    description: |-
+                      AutoRevert automatically reverts changes if degradation is detected.
+                      Defaults to true if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    type: boolean
+                  canary:
+                    description: Canary configures canary rollout behavior when Type
+                      is Canary.
+                    properties:
+                      autoPromote:
+                        description: |-
+                          AutoPromote controls whether the operator automatically promotes the
+                          resize to all pods after the observation period passes without safety
+                          violations. When false (default), the user must manually switch the
+                          mode to Auto to resize the remaining pods.
+                        type: boolean
+                      observationPeriod:
+                        description: ObservationPeriod is how long to observe canary
+                          pods before proceeding.
+                        type: string
+                      percentage:
+                        description: Percentage is the percentage of pods to resize
+                          first.
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    required:
+                    - observationPeriod
+                    - percentage
+                    type: object
+                  cooldown:
+                    description: |-
+                      Cooldown is the minimum time between successive resize operations.
+                      Defaults to 1h if not specified.
+                    type: string
+                  export:
+                    description: |-
+                      Export configures how recommendations are exported for external
+                      consumption (e.g. GitOps workflows with ArgoCD or Flux).
+                    properties:
+                      configMap:
+                        description: |-
+                          ConfigMap enables exporting recommendations to ConfigMaps.
+                          One ConfigMap per workload is created, named
+                          "<policy>-<workload>-recommendations", with an owner reference
+                          to the policy for automatic cleanup.
+                        type: boolean
+                    type: object
+                  initialSizing:
+                    description: |-
+                      InitialSizing enables a mutating admission webhook that sets resource
+                      requests/limits on new pods at creation time, based on existing
+                      recommendations. This eliminates the "deploy with bad defaults, wait
+                      for first reconcile" gap. Requires the namespace label
+                      attune.io/initial-sizing=enabled. Defaults to false.
+                    type: boolean
+                  maxConcurrentResizes:
+                    default: 1
+                    description: |-
+                      MaxConcurrentResizes is the maximum number of pods to resize
+                      concurrently within a single reconcile cycle. Default: 1 (serial).
+                    format: int32
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                  maxTotalCpuIncrease:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxTotalCPUIncrease is the maximum aggregate CPU increase allowed
+                      across all pods in a single reconcile cycle (e.g. "2000m", "4").
+                      Once exhausted, remaining pods are deferred to the next cycle.
+                      Decreases do not consume budget. Default: unlimited.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxTotalMemoryIncrease:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxTotalMemoryIncrease is the maximum aggregate memory increase
+                      allowed across all pods in a single reconcile cycle (e.g. "4Gi").
+                      Once exhausted, remaining pods are deferred to the next cycle.
+                      Decreases do not consume budget. Default: unlimited.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  resizeMethod:
+                    description: |-
+                      ResizeMethod controls what happens when an in-place resize fails.
+                        InPlaceOnly (default): skip the pod and retry next cycle.
+                        InPlaceOrRecreate: fall back to pod eviction if in-place resize
+                        fails or is marked Infeasible by kubelet. The owning controller
+                        recreates the pod with updated resources. Evictions respect
+                        PodDisruptionBudgets and never evict the last replica.
+                      Defaults to InPlaceOnly if not set (applied by the controller so that
+                      AttuneDefaults cluster configuration can override it).
+                    enum:
+                    - InPlaceOnly
+                    - InPlaceOrRecreate
+                    type: string
+                  safetyObservationPeriod:
+                    description: |-
+                      SafetyObservationPeriod is how long to observe a pod after resize before
+                      concluding the resize is safe. Applies to all modes (Auto, OneShot, Canary).
+                      Takes precedence over canary.observationPeriod when set. Must be >= 1m.
+                      Defaults to 5m if neither this nor canary.observationPeriod is set.
+                    type: string
+                  schedule:
+                    description: |-
+                      Schedule restricts when resize operations can occur. Recommendations
+                      are always computed; only resize execution is gated. If omitted,
+                      resizes can occur at any time (current behavior).
+                    properties:
+                      daysOfWeek:
+                        description: |-
+                          DaysOfWeek restricts resizes to specific days. Values: Monday through Sunday.
+                          If omitted, all days are allowed.
+                        items:
+                          enum:
+                          - Monday
+                          - Tuesday
+                          - Wednesday
+                          - Thursday
+                          - Friday
+                          - Saturday
+                          - Sunday
+                          type: string
+                        type: array
+                      timezone:
+                        default: UTC
+                        description: |-
+                          Timezone for interpreting window start/end times. Must be a valid
+                          IANA timezone name (e.g. "America/New_York"). Default: "UTC".
+                        type: string
+                      windows:
+                        description: |-
+                          Windows defines time-of-day ranges when resizes are allowed.
+                          If multiple windows are specified, resizes are allowed during any of them.
+                        items:
+                          description: TimeWindow defines a daily time range.
+                          properties:
+                            end:
+                              description: |-
+                                End time in HH:MM format (24-hour). If end < start, the window
+                                wraps past midnight (e.g. start=22:00, end=06:00).
+                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              type: string
+                            start:
+                              description: Start time in HH:MM format (24-hour).
+                              pattern: ^([01]\d|2[0-3]):[0-5]\d$
+                              type: string
+                          required:
+                          - end
+                          - start
+                          type: object
+                        type: array
+                    type: object
+                  sloGuardrails:
+                    description: |-
+                      SLOGuardrails defines application-level SLO metrics to check after
+                      a resize. If any metric breaches its threshold during the safety
+                      observation period, the resize is automatically reverted.
+                      Requires a Prometheus-compatible metrics source.
+                    items:
+                      description: |-
+                        SLOGuardrail defines an application-level metric that is checked after
+                        a resize to detect degradation. If the metric breaches the threshold,
+                        the safety monitor triggers an automatic revert.
+                      properties:
+                        comparison:
+                          default: above
+                          description: Comparison is "above" or "below". "above" reverts
+                            when value > threshold.
+                          enum:
+                          - above
+                          - below
+                          type: string
+                        evaluationWindow:
+                          description: EvaluationWindow is how long after resize to
+                            check. Defaults to 5m.
+                          type: string
+                        name:
+                          description: Name identifies this guardrail for logging
+                            and status reporting.
+                          type: string
+                        query:
+                          description: |-
+                            Query is a PromQL query that returns a scalar value.
+                            Template variables: {{ .Namespace }}, {{ .WorkloadName }}, {{ .PodName }}
+                          type: string
+                        threshold:
+                          description: Threshold is the value that triggers a revert.
+                          type: string
+                      required:
+                      - name
+                      - query
+                      - threshold
+                      type: object
+                    maxItems: 10
+                    type: array
+                  type:
+                    description: |-
+                      Mode determines the update behavior, graduated from safe to automated:
+                        Recommend: collects metrics and writes recommendations to status, no pod changes.
+                        OneShot: resizes one pod per reconcile cycle.
+                        Canary: resizes a percentage of pods first, then the rest after observation.
+                        Auto: resizes all eligible pods each cycle.
+                        Observe: collects metrics and tracks data points but does not surface recommendations or savings.
+                      Start with Recommend in production and promote after reviewing status.
+                      Defaults to Recommend if not set (applied by the controller, not the webhook,
+                      so that AttuneDefaults cluster configuration can override it).
+                    enum:
+                    - Observe
+                    - Recommend
+                    - OneShot
+                    - Canary
+                    - Auto
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

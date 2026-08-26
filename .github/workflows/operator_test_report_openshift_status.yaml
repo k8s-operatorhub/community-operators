@@ -1,0 +1,114 @@
+
+name: Report Openshift status
+
+on:
+  repository_dispatch:
+    types:
+      - manual-openshift-report
+      - openshift-test-status
+
+env:
+  OPP_PRODUCTION_TYPE: "k8s"
+
+
+jobs:
+  remove-add-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Info"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            console.log(context.payload.client_payload.source_pr)
+            console.log(context.payload.client_payload.remove_labels)
+            console.log(context.payload.client_payload.add_labels)
+        continue-on-error: true
+      - name: "Remove labels"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            if (context.payload.client_payload.remove_labels != undefined) {
+              for (const label of context.payload.client_payload.remove_labels) {
+                github.rest.issues.removeLabel({
+                  issue_number: context.payload.client_payload.source_pr,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label
+                })
+              }
+            }
+        continue-on-error: true
+
+      - name: "Add labels"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            if (context.payload.client_payload.add_labels != undefined) {
+              github.rest.issues.addLabels({
+                issue_number: context.payload.client_payload.source_pr,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: context.payload.client_payload.add_labels
+              })
+            }
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: labels
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              issue_number: context.payload.client_payload.source_pr,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            })
+            console.log(labels.data)
+            return labels.data
+
+      - name: Add installation final label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+
+          (!contains(fromJSON(steps.labels.outputs.result).*.name, 'installation-failed-atest')) &&
+
+          (contains(fromJSON(steps.labels.outputs.result).*.name, 'installation-validated-atest'))
+
+        continue-on-error: true
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.payload.client_payload.source_pr,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: [ 'installation-validated' ]
+            })
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: labels2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              issue_number: context.payload.client_payload.source_pr,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            })
+            console.log(labels.data)
+            return labels.data
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          (contains(fromJSON(steps.labels2.outputs.result).*.name, 'installation-validated'))
+        with:
+          github-token: ${{ secrets.FRAMEWORK_MERGE }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.payload.client_payload.source_pr,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '/merge possible'
+            })

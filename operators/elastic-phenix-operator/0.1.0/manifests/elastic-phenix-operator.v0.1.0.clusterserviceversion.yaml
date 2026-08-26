@@ -1,0 +1,483 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: elastic-phenix-operator.v0.1.0
+  namespace: placeholder
+  annotations:
+    # Setting operatorhub.io/ui-metadata-max-k8s-version annotation automatically
+    # The following is an informative annotation to let its users know that this distribution
+    # uses removed APIs in 1.22 and will not work on K8S clusters 1.22+.
+    # Following the findings for this distribution:
+    # this bundle is using APIs which were deprecated and removed in v1.22. More info: https://kubernetes.io/docs/reference/using-api/deprecation-guide/#v1-22. Migrate the API(s) for CRD: (["elasticindices.elastic.carrefour.com" "elastictemplates.elastic.carrefour.com"])
+    operatorhub.io/ui-metadata-max-k8s-version: "1.21"
+    alm-examples: >-
+      [{"apiVersion":"elastic.carrefour.com/v1alpha1","kind":"ElasticIndex","metadata":{"name":"product-index","namespace":"elastic-phenix-operator-system"},"spec":{"indexName":"product","elasticURI":{"secretKeyRef":{"name":"elasticsearch-cluster-secret","key":"uri"}},"numberOfShards":6,"numberOfReplicas":1,"model":"{\n  \"settings\": {\n      \"index.codec\": \"best_compression\"\n  },\n  \"mappings\": {\n    \"_source\": {\n      \"enabled\": true\n    },\n    \"dynamic\": false,\n    \"properties\": {\n      \"barcode\": {\n        \"type\": \"keyword\",\n        \"index\": true\n      },\n      \"description\": {\n        \"type\": \"text\",\n        \"index\": true\n      }\n    }\n  }\n}"}},{"apiVersion":"elastic.carrefour.com/v1alpha1","kind":"ElasticTemplate","metadata":{"name":"invoice-template","namespace":"elastic-phenix-operator-system"},"spec":{"templateName":"invoice","elasticURI":{"secretKeyRef":{"name":"elasticsearch-cluster-secret","key":"uri"}},"numberOfShards":5,"numberOfReplicas":1,"order":1,"model":"{\n  \"index_patterns\": [\"invoice*\"],\n  \"settings\": {\n      \"index.codec\": \"best_compression\"\n  },\n  \"mappings\": {\n    \"_source\": {\n      \"enabled\": true\n    },\n    \"properties\": {\n      \"key\": {\n        \"type\": \"keyword\",\n        \"index\": true\n      },\n      \"content\": {\n        \"type\": \"text\",\n        \"index\": true\n      }\n    }\n  }\n}"}}]
+    categories: 'Developer Tools'
+    certified: 'false'
+    createdAt: 2021-03-18 10:45:00
+    description: 'Manage elasticsearch indices, templates lifecycle (creation, update and delete)'
+    containerImage: 'carrefourphx/elastic-phenix-operator:0.1.0'
+    support: Carrefour
+    capabilities: Basic Install
+    repository: 'https://github.com/Carrefour-Group/elastic-phenix-operator'
+spec:
+  displayName: Elasticsearch Phenix Operator
+  description: |
+    The Elasticsearch Phenix Operator (EPO) is a Kubernetes operator to manage elasticsearch Indices and Templates lifecycle.
+
+    See the [Quickstart](https://github.com/Carrefour-Group/elastic-phenix-operator#quick-start) to get started with Elasticsearch Phenix Operator.
+
+    ## Features
+    *  Manage Elasticsearch indices and templates lifecycle: create, update and delete
+    *  Create new indices/templates, or manage existing indices/templates
+    *  One instance of the operator can manage indices and templates on different elasticsearch servers
+    *  Elasticsearch server URI is provided from a secret when you create ElasticIndex and ElasticTemplate objects
+    *  Manage indices and templates uniqueness inside kubernetes
+    *  A ValidatingWebhook is implemented to validate ElasticIndex and ElasticTemplate objects
+
+    ## Supported Elasticsearch versions
+    *  Elasticsearch 6+
+    *  Elasticsearch 7+
+
+    ## Prerequisites
+
+    #### Cert-manager
+
+    Cert-manager is needed to handle TLS certificate for admission webhook . You need cert-manager version v0.15.2 or above. For more information [cert-manager](https://github.com/jetstack/cert-manager/)
+
+    ```
+    # install cert-manager
+    kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.1/cert-manager.yaml
+
+    # wait until the cert-manager becomes in running state
+    kubectl wait --for=condition=Ready --timeout=-1s --all pods -n cert-manager
+    ```
+
+    #### Secret for connection URL
+
+    Before creating an ElasticIndex or an ElasticTemplate, you should create a secret containing elasticsearch URI that respects this pattern: `<scheme>://<user>:<password>@<hostname>:<port>` e.g. `http://localhost:9200, https://elastic:pass@myshost:9200`
+
+    ```
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: elasticsearch-cluster-secret
+      namespace: elastic-phenix-operator-system
+    type: Opaque
+    stringData:
+      uri: http://elasticsearch-host:9200
+    ```
+  maturity: alpha
+  version: 0.1.0
+  replaces: ''
+  skips: []
+  minKubeVersion: 1.11.0
+  keywords:
+    - Elasticsearch
+    - Elastic
+    - Index
+    - Template
+    - ElasticIndex
+    - ElasticTemplate
+    - Kubernetes
+    - Operator
+  maintainers:
+    - name: Walid Mellouli
+      email: walid_mellouli@carrefour.com
+    - name: Phenix Team
+      email: phenix_epo@carrefour.com
+  provider:
+    name: Carrefour
+  labels: {}
+  selector:
+    matchLabels: {}
+  links:
+    - name: Documentation
+      url: >-
+        https://github.com/Carrefour-Group/elastic-phenix-operator/blob/master/README.md
+  icon:
+    - base64data: >-
+        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IU6rRoqJDO0nPfzDjl8kl0yuChg5FlCDCsnxg//B727N4tSkmxRKAj0vtv0xCvTuAq2GbX8f23brBAg8A1dax19rAolP0hsdLXYEDG4DF9cdTd4DLneA6JMuGZIjBWj6i0Xg/Yy+KQ8M3QL9a25v7X2cPgBZ6ip9AxwcAmMlyl73eHdfd2//nmn39wOBsXKtBp29AwAADRppVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+Cjx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IlhNUCBDb3JlIDQuNC4wLUV4aXYyIj4KIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIKICAgIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIgogICAgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIKICAgIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIKICAgIHhtbG5zOkdJTVA9Imh0dHA6Ly93d3cuZ2ltcC5vcmcveG1wLyIKICAgIHhtbG5zOnRpZmY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vdGlmZi8xLjAvIgogICAgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIgogICB4bXBNTTpEb2N1bWVudElEPSJnaW1wOmRvY2lkOmdpbXA6NmFhOWZlZjAtMTAxNi00MzAyLWI0MzQtMjMzZmY0MmU1ZTg2IgogICB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjkxMjRhODU5LTkzODUtNDJiYy05ZjYyLTM0MDkxMDViZGEwZiIKICAgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOmE4ZWQ5YTg2LTIzY2ItNDY1NS1iMzBhLWFlOTA1MjJiMmYzZSIKICAgZGM6Rm9ybWF0PSJpbWFnZS9wbmciCiAgIEdJTVA6QVBJPSIyLjAiCiAgIEdJTVA6UGxhdGZvcm09IkxpbnV4IgogICBHSU1QOlRpbWVTdGFtcD0iMTYxODQyNTE5MzAzOTAzMyIKICAgR0lNUDpWZXJzaW9uPSIyLjEwLjI0IgogICB0aWZmOk9yaWVudGF0aW9uPSIxIgogICB4bXA6Q3JlYXRvclRvb2w9IkdJTVAgMi4xMCI+CiAgIDx4bXBNTTpIaXN0b3J5PgogICAgPHJkZjpTZXE+CiAgICAgPHJkZjpsaQogICAgICBzdEV2dDphY3Rpb249InNhdmVkIgogICAgICBzdEV2dDpjaGFuZ2VkPSIvIgogICAgICBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOmVkNTBhYmYwLWUyOWEtNDNjMy04NDQyLTRmMDkxOTMwZDQxZCIKICAgICAgc3RFdnQ6c29mdHdhcmVBZ2VudD0iR2ltcCAyLjEwIChMaW51eCkiCiAgICAgIHN0RXZ0OndoZW49IjIwMjEtMDQtMTRUMjA6MzM6MTMrMDI6MDAiLz4KICAgIDwvcmRmOlNlcT4KICAgPC94bXBNTTpIaXN0b3J5PgogIDwvcmRmOkRlc2NyaXB0aW9uPgogPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgIAo8P3hwYWNrZXQgZW5kPSJ3Ij8+Ut1KpgAAAAZiS0dEAJYArADQ8bQfHwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB+UEDhIhDXKO7yIAABoTSURBVHja7Z15lFx1lcc/r6rrZe9KuhIQ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
+      mediatype: image/png
+  customresourcedefinitions:
+    owned:
+      - name: elasticindices.elastic.carrefour.com
+        displayName: ElasticIndex
+        kind: ElasticIndex
+        version: v1alpha1
+        description: Elastic Index
+        resources:
+          - version: v1
+            kind: Deployment
+          - version: v1
+            kind: Service
+          - version: v1
+            kind: ReplicaSet
+          - version: v1
+            kind: Pod
+          - version: v1
+            kind: Secret
+          - version: v1
+            kind: ConfigMap
+        specDescriptors:
+          - path: elasticURI
+            description: Elastic URI
+            displayName: Elastic URI
+            x-descriptors: []
+          - path: indexName
+            description: Index Name
+            displayName: Index Name
+            x-descriptors: []
+          - path: model
+            description: Model
+            displayName: Model
+            x-descriptors: []
+          - path: numberOfReplicas
+            description: Number Of Replicas
+            displayName: Number Of Replicas
+            x-descriptors: []
+          - path: numberOfShards
+            description: Number Of Shards
+            displayName: Number Of Shards
+            x-descriptors: []
+        statusDescriptors:
+          - path: httpCodeStatus
+            description: Http Code Status
+            displayName: Http Code Status
+            x-descriptors: []
+          - path: message
+            description: Message
+            displayName: Message
+            x-descriptors: []
+          - path: status
+            description: Status
+            displayName: Status
+            x-descriptors: []
+      - name: elastictemplates.elastic.carrefour.com
+        displayName: ElasticTemplate
+        kind: ElasticTemplate
+        version: v1alpha1
+        description: Elastic Template
+        resources:
+          - version: v1
+            kind: Deployment
+          - version: v1
+            kind: Service
+          - version: v1
+            kind: ReplicaSet
+          - version: v1
+            kind: Pod
+          - version: v1
+            kind: Secret
+          - version: v1
+            kind: ConfigMap
+        specDescriptors:
+          - path: elasticURI
+            description: Elastic URI
+            displayName: Elastic URI
+            x-descriptors: []
+          - path: model
+            description: Model
+            displayName: Model
+            x-descriptors: []
+          - path: numberOfReplicas
+            description: Number Of Replicas
+            displayName: Number Of Replicas
+            x-descriptors: []
+          - path: numberOfShards
+            description: Number Of Shards
+            displayName: Number Of Shards
+            x-descriptors: []
+          - path: order
+            description: Order
+            displayName: Order
+            x-descriptors: []
+          - path: templateName
+            description: Template Name
+            displayName: Template Name
+            x-descriptors: []
+        statusDescriptors:
+          - path: httpCodeStatus
+            description: Http Code Status
+            displayName: Http Code Status
+            x-descriptors: []
+          - path: message
+            description: Message
+            displayName: Message
+            x-descriptors: []
+          - path: status
+            description: Status
+            displayName: Status
+            x-descriptors: []
+    required: []
+  install:
+    strategy: deployment
+    spec:
+      permissions:
+        - rules:
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps/status
+            verbs:
+              - get
+              - update
+              - patch
+          - apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+          serviceAccountName: default
+      clusterPermissions:
+        - rules:
+          - apiGroups:
+              - ""
+            resources:
+              - configmaps
+            verbs:
+              - get
+              - list
+              - watch
+          - apiGroups:
+              - ""
+            resources:
+              - secrets
+            verbs:
+              - get
+              - list
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices/finalizers
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elasticindices/status
+            verbs:
+              - get
+              - patch
+              - update
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates/finalizers
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+          - apiGroups:
+              - elastic.carrefour.com
+            resources:
+              - elastictemplates/status
+            verbs:
+              - get
+              - patch
+              - update
+          - apiGroups:
+              - authentication.k8s.io
+            resources:
+              - tokenreviews
+            verbs:
+              - create
+          - apiGroups:
+              - authorization.k8s.io
+            resources:
+              - subjectaccessreviews
+            verbs:
+              - create
+          serviceAccountName: default
+      deployments:
+        - name: elastic-phenix-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            template:
+              metadata:
+                labels:
+                  control-plane: controller-manager
+              spec:
+                containers:
+                  - args:
+                      - '--secure-listen-address=0.0.0.0:8443'
+                      - '--upstream=http://127.0.0.1:8080/'
+                      - '--logtostderr=true'
+                      - '--v=10'
+                    image: 'gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0'
+                    name: kube-rbac-proxy
+                    ports:
+                      - containerPort: 8443
+                        name: https
+                  - args:
+                      - '--metrics-addr=127.0.0.1:8080'
+                      - '--enable-leader-election'
+                    command:
+                      - /manager
+                    image: 'carrefourphx/elastic-phenix-operator:0.1.0'
+                    name: manager
+                    ports:
+                      - containerPort: 9443
+                        name: webhook-server
+                        protocol: TCP
+                    resources:
+                      limits:
+                        cpu: 100m
+                        memory: 30Mi
+                      requests:
+                        cpu: 100m
+                        memory: 20Mi
+                    volumeMounts:
+                      - mountPath: /tmp/k8s-webhook-server/serving-certs
+                        name: cert
+                        readOnly: true
+                terminationGracePeriodSeconds: 10
+                serviceAccountName: default
+                volumes:
+                  - name: cert
+                    secret:
+                      defaultMode: 420
+                      secretName: webhook-server-cert
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: true
+    - type: AllNamespaces
+      supported: true
+  webhookdefinitions:
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: melasticindex.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - elasticindices
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-elastic-carrefour-com-v1alpha1-elasticindex
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: melastictemplate.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - elastictemplates
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-elastic-carrefour-com-v1alpha1-elastictemplate
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: velasticindex.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          resources:
+            - elasticindices
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-elastic-carrefour-com-v1alpha1-elasticindex
+    - admissionReviewVersions:
+        - v1beta1
+      containerPort: 443
+      deploymentName: elastic-phenix-operator-controller-manager
+      failurePolicy: Fail
+      generateName: velastictemplate.kb.io
+      rules:
+        - apiGroups:
+            - elastic.carrefour.com
+          apiVersions:
+            - v1alpha1
+          operations:
+            - CREATE
+            - UPDATE
+            - DELETE
+          resources:
+            - elastictemplates
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-elastic-carrefour-com-v1alpha1-elastictemplate

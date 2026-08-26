@@ -1,0 +1,316 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  creationTimestamp: null
+  name: virtgitsyncs.virt.mathianasj.github.com
+spec:
+  group: virt.mathianasj.github.com
+  names:
+    kind: VirtGitSync
+    listKind: VirtGitSyncList
+    plural: virtgitsyncs
+    shortNames:
+    - vgs
+    singular: virtgitsync
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.vmEventCount
+      name: Events
+      type: integer
+    - jsonPath: .status.lastVMEvent.eventType
+      name: Last Event
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: VirtGitSync is the Schema for the virtgitsyncs API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VirtGitSyncSpec defines the desired state of VirtGitSync
+            properties:
+              argocd:
+                description: ArgoCD defines the ArgoCD Application configuration
+                properties:
+                  applicationName:
+                    description: |-
+                      ApplicationName is the name of the ArgoCD Application to create
+                      Defaults to VirtGitSync name if not specified
+                    type: string
+                  destinationNamespace:
+                    description: |-
+                      DestinationNamespace is the target namespace for ArgoCD sync
+                      Defaults to VirtGitSync namespace if not specified
+                    type: string
+                  enabled:
+                    description: |-
+                      Enabled controls whether to create ArgoCD Application
+                      Defaults to true if ArgoCD spec is provided
+                    type: boolean
+                  namespace:
+                    description: |-
+                      Namespace is the ArgoCD namespace
+                      Defaults to "argocd" if not specified
+                    type: string
+                  project:
+                    description: |-
+                      Project is the ArgoCD project name
+                      Defaults to "default" if not specified
+                    type: string
+                type: object
+              gitRepository:
+                description: GitRepository defines the git repository configuration
+                  (REQUIRED)
+                properties:
+                  branch:
+                    description: |-
+                      Branch is the git branch to use
+                      Defaults to "main" if not specified
+                    type: string
+                  secretRef:
+                    description: |-
+                      SecretRef references a Secret containing git credentials
+                      Expected keys:
+                        - ssh-private-key: SSH private key (for git@ URLs)
+                        - username + password: Basic auth (for https:// URLs)
+                        - known_hosts: SSH known_hosts file (optional, for git@)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  url:
+                    description: URL is the git repository URL (https:// or git@)
+                    minLength: 1
+                    pattern: ^(https://|git@).*
+                    type: string
+                required:
+                - url
+                type: object
+              syncPath:
+                description: |-
+                  SyncPath is the path within the git repository where VM YAMLs are written
+                  Defaults to "vms" if not specified
+                type: string
+              vmSelector:
+                description: VMSelector selects which VirtualMachines to watch (optional,
+                  watches all VMs in namespace if empty)
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - gitRepository
+            type: object
+          status:
+            description: VirtGitSyncStatus defines the observed state of VirtGitSync
+            properties:
+              argocdStatus:
+                description: ArgoCDStatus tracks ArgoCD Application state
+                properties:
+                  applicationCreated:
+                    description: ApplicationCreated indicates if Application was created
+                    type: boolean
+                  applicationName:
+                    description: ApplicationName is the name of the managed Application
+                    type: string
+                  lastError:
+                    description: LastError is the last ArgoCD error encountered
+                    type: string
+                  lastUpdated:
+                    description: LastUpdated is when the Application was last updated
+                    format: date-time
+                    type: string
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the VirtGitSync's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gitStatus:
+                description: GitStatus tracks git repository state
+                properties:
+                  lastCommit:
+                    description: LastCommit is the SHA of the last successful commit
+                    type: string
+                  lastError:
+                    description: LastError is the last git error encountered
+                    type: string
+                  lastPush:
+                    description: LastPush is the timestamp of the last successful
+                      push
+                    format: date-time
+                    type: string
+                type: object
+              lastVMEvent:
+                description: LastVMEvent is the most recent VirtualMachine event detected
+                properties:
+                  changes:
+                    description: Changes is a summary of what changed (for update
+                      events)
+                    type: string
+                  eventType:
+                    description: EventType is the type of event (created, updated,
+                      deleted)
+                    type: string
+                  timestamp:
+                    description: Timestamp is when the event occurred
+                    format: date-time
+                    type: string
+                  vmName:
+                    description: VMName is the name of the VirtualMachine
+                    type: string
+                required:
+                - eventType
+                - timestamp
+                - vmName
+                type: object
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed VirtGitSync
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current operational phase
+                type: string
+              vmEventCount:
+                description: VMEventCount is the total number of VM events detected
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

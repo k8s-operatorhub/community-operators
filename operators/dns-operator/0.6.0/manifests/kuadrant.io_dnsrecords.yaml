@@ -1,0 +1,511 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  creationTimestamp: null
+  name: dnsrecords.kuadrant.io
+spec:
+  group: kuadrant.io
+  names:
+    kind: DNSRecord
+    listKind: DNSRecordList
+    plural: dnsrecords
+    singular: dnsrecord
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: DNSRecord ready.
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DNSRecord is the Schema for the dnsrecords API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DNSRecordSpec defines the desired state of DNSRecord
+            properties:
+              endpoints:
+                description: endpoints is a list of endpoints that will be published
+                  into the dns provider.
+                items:
+                  description: Endpoint is a high-level way of a connection between
+                    a service and an IP
+                  properties:
+                    dnsName:
+                      description: The hostname of the DNS record
+                      type: string
+                    labels:
+                      additionalProperties:
+                        type: string
+                      description: Labels stores labels defined for the Endpoint
+                      type: object
+                    providerSpecific:
+                      description: ProviderSpecific stores provider specific config
+                      items:
+                        description: ProviderSpecificProperty holds the name and value
+                          of a configuration which is specific to individual DNS providers
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        type: object
+                      type: array
+                    recordTTL:
+                      description: TTL for the record
+                      format: int64
+                      type: integer
+                    recordType:
+                      description: RecordType type of record, e.g. CNAME, A, AAAA,
+                        SRV, TXT etc
+                      type: string
+                    setIdentifier:
+                      description: Identifier to distinguish multiple records with
+                        the same name and type (e.g. Route53 records with routing
+                        policies other than 'simple')
+                      type: string
+                    targets:
+                      description: The targets the DNS record points to
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                minItems: 1
+                type: array
+              healthCheck:
+                description: |-
+                  HealthCheckSpec configures health checks in the DNS provider.
+                  By default this health check will be applied to each unique DNS A Record for
+                  the listeners assigned to the target gateway
+                properties:
+                  endpoint:
+                    description: |-
+                      Endpoint is the path to append to the host to reach the expected health check.
+                      Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common
+                    pattern: ^(?:\?|\/)[\w\-.~:\/?#\[\]@!$&'()*+,;=]+(?:[a-zA-Z0-9]|\/){1}$
+                    type: string
+                  failureThreshold:
+                    description: FailureThreshold is a limit of consecutive failures
+                      that must occur for a host to be considered unhealthy
+                    type: integer
+                    x-kubernetes-validations:
+                    - message: Failure threshold must be greater than 0
+                      rule: self > 0
+                  port:
+                    description: Port to connect to the host on. Must be either 80,
+                      443 or 1024-49151
+                    type: integer
+                    x-kubernetes-validations:
+                    - message: Only ports 80, 443, 1024-49151 are allowed
+                      rule: self in [80, 443] || (self >= 1024 && self <= 49151)
+                  protocol:
+                    description: Protocol to use when connecting to the host, valid
+                      values are "HTTP" or "HTTPS"
+                    type: string
+                    x-kubernetes-validations:
+                    - message: Only HTTP or HTTPS protocols are allowed
+                      rule: self in ['HTTP','HTTPS']
+                type: object
+              ownerID:
+                description: |-
+                  ownerID is a unique string used to identify the owner of this record.
+                  If unset or set to an empty string the record UID will be used.
+                maxLength: 36
+                minLength: 6
+                type: string
+                x-kubernetes-validations:
+                - message: OwnerID is immutable
+                  rule: self == oldSelf
+              providerRef:
+                description: providerRef is a reference to a provider secret.
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              rootHost:
+                description: |-
+                  rootHost is the single root for all endpoints in a DNSRecord.
+                  it is expected all defined endpoints are children of or equal to this rootHost
+                  Must contain at least two groups of valid URL characters separated by a "."
+                maxLength: 255
+                minLength: 1
+                pattern: ^(?:[\w\-.~:\/?#[\]@!$&'()*+,;=]+)\.(?:[\w\-.~:\/?#[\]@!$&'()*+,;=]+)$
+                type: string
+                x-kubernetes-validations:
+                - message: RootHost is immutable
+                  rule: self == oldSelf
+            required:
+            - providerRef
+            - rootHost
+            type: object
+            x-kubernetes-validations:
+            - message: OwnerID can't be unset if it was previously set
+              rule: '!has(oldSelf.ownerID) || has(self.ownerID)'
+            - message: OwnerID can't be set if it was previously unset
+              rule: has(oldSelf.ownerID) || !has(self.ownerID)
+          status:
+            description: DNSRecordStatus defines the observed state of DNSRecord
+            properties:
+              conditions:
+                description: |-
+                  conditions are any conditions associated with the record in the dns provider.
+
+
+                  If publishing the record fails, the "Failed" condition will be set with a
+                  reason and message describing the cause of the failure.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              domainOwners:
+                description: DomainOwners is a list of all the owners working against
+                  the root domain of this record
+                items:
+                  type: string
+                type: array
+              endpoints:
+                description: endpoints are the last endpoints that were successfully
+                  published to the provider zone
+                items:
+                  description: Endpoint is a high-level way of a connection between
+                    a service and an IP
+                  properties:
+                    dnsName:
+                      description: The hostname of the DNS record
+                      type: string
+                    labels:
+                      additionalProperties:
+                        type: string
+                      description: Labels stores labels defined for the Endpoint
+                      type: object
+                    providerSpecific:
+                      description: ProviderSpecific stores provider specific config
+                      items:
+                        description: ProviderSpecificProperty holds the name and value
+                          of a configuration which is specific to individual DNS providers
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                        type: object
+                      type: array
+                    recordTTL:
+                      description: TTL for the record
+                      format: int64
+                      type: integer
+                    recordType:
+                      description: RecordType type of record, e.g. CNAME, A, AAAA,
+                        SRV, TXT etc
+                      type: string
+                    setIdentifier:
+                      description: Identifier to distinguish multiple records with
+                        the same name and type (e.g. Route53 records with routing
+                        policies other than 'simple')
+                      type: string
+                    targets:
+                      description: The targets the DNS record points to
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
+              healthCheck:
+                properties:
+                  conditions:
+                    items:
+                      description: "Condition contains details for one aspect of the
+                        current state of this API Resource.\n---\nThis struct is intended
+                        for direct use as an array at the field path .status.conditions.
+                        \ For example,\n\n\n\ttype FooStatus struct{\n\t    // Represents
+                        the observations of a foo's current state.\n\t    // Known
+                        .status.conditions.type are: \"Available\", \"Progressing\",
+                        and \"Degraded\"\n\t    // +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t
+                        \   // +listType=map\n\t    // +listMapKey=type\n\t    Conditions
+                        []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\"
+                        patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                        \   // other fields\n\t}"
+                      properties:
+                        lastTransitionTime:
+                          description: |-
+                            lastTransitionTime is the last time the condition transitioned from one status to another.
+                            This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                          format: date-time
+                          type: string
+                        message:
+                          description: |-
+                            message is a human readable message indicating details about the transition.
+                            This may be an empty string.
+                          maxLength: 32768
+                          type: string
+                        observedGeneration:
+                          description: |-
+                            observedGeneration represents the .metadata.generation that the condition was set based upon.
+                            For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                            with respect to the current state of the instance.
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        reason:
+                          description: |-
+                            reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                            Producers of specific condition types may define expected values and meanings for this field,
+                            and whether the values are considered a guaranteed API.
+                            The value should be a CamelCase string.
+                            This field may not be empty.
+                          maxLength: 1024
+                          minLength: 1
+                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                          type: string
+                        status:
+                          description: status of the condition, one of True, False,
+                            Unknown.
+                          enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                          type: string
+                        type:
+                          description: |-
+                            type of condition in CamelCase or in foo.example.com/CamelCase.
+                            ---
+                            Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                            useful (see .node.status.conditions), the ability to deconflict is important.
+                            The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                          maxLength: 316
+                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                          type: string
+                      required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                      type: object
+                    type: array
+                  probes:
+                    items:
+                      properties:
+                        conditions:
+                          items:
+                            description: "Condition contains details for one aspect
+                              of the current state of this API Resource.\n---\nThis
+                              struct is intended for direct use as an array at the
+                              field path .status.conditions.  For example,\n\n\n\ttype
+                              FooStatus struct{\n\t    // Represents the observations
+                              of a foo's current state.\n\t    // Known .status.conditions.type
+                              are: \"Available\", \"Progressing\", and \"Degraded\"\n\t
+                              \   // +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t
+                              \   // +listType=map\n\t    // +listMapKey=type\n\t
+                              \   Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                              patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                              \   // other fields\n\t}"
+                            properties:
+                              lastTransitionTime:
+                                description: |-
+                                  lastTransitionTime is the last time the condition transitioned from one status to another.
+                                  This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                                format: date-time
+                                type: string
+                              message:
+                                description: |-
+                                  message is a human readable message indicating details about the transition.
+                                  This may be an empty string.
+                                maxLength: 32768
+                                type: string
+                              observedGeneration:
+                                description: |-
+                                  observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                  For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                  with respect to the current state of the instance.
+                                format: int64
+                                minimum: 0
+                                type: integer
+                              reason:
+                                description: |-
+                                  reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                  Producers of specific condition types may define expected values and meanings for this field,
+                                  and whether the values are considered a guaranteed API.
+                                  The value should be a CamelCase string.
+                                  This field may not be empty.
+                                maxLength: 1024
+                                minLength: 1
+                                pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                                type: string
+                              status:
+                                description: status of the condition, one of True,
+                                  False, Unknown.
+                                enum:
+                                - "True"
+                                - "False"
+                                - Unknown
+                                type: string
+                              type:
+                                description: |-
+                                  type of condition in CamelCase or in foo.example.com/CamelCase.
+                                  ---
+                                  Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                                  useful (see .node.status.conditions), the ability to deconflict is important.
+                                  The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                                maxLength: 316
+                                pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                                type: string
+                            required:
+                            - lastTransitionTime
+                            - message
+                            - reason
+                            - status
+                            - type
+                            type: object
+                          type: array
+                        host:
+                          type: string
+                        id:
+                          type: string
+                        ipAddress:
+                          type: string
+                        synced:
+                          type: boolean
+                      required:
+                      - host
+                      - id
+                      - ipAddress
+                      type: object
+                    type: array
+                type: object
+              observedGeneration:
+                description: observedGeneration is the most recently observed generation
+                  of the DNSRecord.
+                format: int64
+                type: integer
+              ownerID:
+                description: ownerID is a unique string used to identify the owner
+                  of this record.
+                type: string
+              queuedAt:
+                description: QueuedAt is a time when DNS record was received for the
+                  reconciliation
+                format: date-time
+                type: string
+              queuedFor:
+                description: QueuedFor is a time when we expect a DNS record to be
+                  reconciled again
+                format: date-time
+                type: string
+              validFor:
+                description: ValidFor indicates duration since the last reconciliation
+                  we consider data in the record to be valid
+                type: string
+              writeCounter:
+                description: |-
+                  WriteCounter represent a number of consecutive write attempts on the same generation of the record.
+                  It is being reset to 0 when the generation changes or there are no changes to write.
+                format: int64
+                type: integer
+              zoneDomainName:
+                description: zoneDomainName is the domain name of the zone that the
+                  dns record is publishing endpoints
+                type: string
+              zoneID:
+                description: zoneID is the provider specific id to which this dns
+                  record is publishing endpoints
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

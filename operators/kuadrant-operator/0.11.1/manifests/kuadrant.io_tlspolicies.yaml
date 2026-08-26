@@ -1,0 +1,371 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  creationTimestamp: null
+  labels:
+    app: kuadrant
+    gateway.networking.k8s.io/policy: direct
+  name: tlspolicies.kuadrant.io
+spec:
+  group: kuadrant.io
+  names:
+    kind: TLSPolicy
+    listKind: TLSPolicyList
+    plural: tlspolicies
+    singular: tlspolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: TLSPolicy Accepted
+      jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      priority: 2
+      type: string
+    - description: TLSPolicy Enforced
+      jsonPath: .status.conditions[?(@.type=="Enforced")].status
+      name: Enforced
+      priority: 2
+      type: string
+    - description: Type of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.kind
+      name: TargetRefKind
+      priority: 2
+      type: string
+    - description: Name of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.name
+      name: TargetRefName
+      priority: 2
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TLSPolicy is the Schema for the tlspolicies API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TLSPolicySpec defines the desired state of TLSPolicy
+            properties:
+              commonName:
+                description: |-
+                  CommonName is a common name to be used on the Certificate.
+                  The CommonName should have a length of 64 characters or fewer to avoid
+                  generating invalid CSRs.
+                  This value is ignored by TLS clients when any subject alt name is set.
+                  This is x509 behaviour: https://tools.ietf.org/html/rfc6125#section-6.4.4
+                type: string
+              duration:
+                description: |-
+                  The requested 'duration' (i.e. lifetime) of the Certificate. This option
+                  may be ignored/overridden by some issuer types. If unset this defaults to
+                  90 days. Certificate will be renewed either 2/3 through its duration or
+                  `renewBefore` period before its expiry, whichever is later. Minimum
+                  accepted duration is 1 hour. Value must be in units accepted by Go
+                  time.ParseDuration https://golang.org/pkg/time/#ParseDuration
+                type: string
+              issuerRef:
+                description: |-
+                  IssuerRef is a reference to the issuer for this certificate.
+                  If the `kind` field is not set, or set to `Issuer`, an Issuer resource
+                  with the given name in the same namespace as the Certificate will be used.
+                  If the `kind` field is set to `ClusterIssuer`, a ClusterIssuer with the
+                  provided name will be used.
+                  The `name` field in this stanza is required at all times.
+                properties:
+                  group:
+                    description: Group of the resource being referred to.
+                    type: string
+                  kind:
+                    description: Kind of the resource being referred to.
+                    type: string
+                  name:
+                    description: Name of the resource being referred to.
+                    type: string
+                required:
+                - name
+                type: object
+              privateKey:
+                description: Options to control private keys used for the Certificate.
+                properties:
+                  algorithm:
+                    description: |-
+                      Algorithm is the private key algorithm of the corresponding private key
+                      for this certificate. If provided, allowed values are either `RSA`,`Ed25519` or `ECDSA`
+                      If `algorithm` is specified and `size` is not provided,
+                      key size of 256 will be used for `ECDSA` key algorithm and
+                      key size of 2048 will be used for `RSA` key algorithm.
+                      key size is ignored when using the `Ed25519` key algorithm.
+                    enum:
+                    - RSA
+                    - ECDSA
+                    - Ed25519
+                    type: string
+                  encoding:
+                    description: |-
+                      The private key cryptography standards (PKCS) encoding for this
+                      certificate's private key to be encoded in.
+                      If provided, allowed values are `PKCS1` and `PKCS8` standing for PKCS#1
+                      and PKCS#8, respectively.
+                      Defaults to `PKCS1` if not specified.
+                    enum:
+                    - PKCS1
+                    - PKCS8
+                    type: string
+                  rotationPolicy:
+                    description: |-
+                      RotationPolicy controls how private keys should be regenerated when a
+                      re-issuance is being processed.
+                      If set to Never, a private key will only be generated if one does not
+                      already exist in the target `spec.secretName`. If one does exists but it
+                      does not have the correct algorithm or size, a warning will be raised
+                      to await user intervention.
+                      If set to Always, a private key matching the specified requirements
+                      will be generated whenever a re-issuance occurs.
+                      Default is 'Never' for backward compatibility.
+                    enum:
+                    - Never
+                    - Always
+                    type: string
+                  size:
+                    description: |-
+                      Size is the key bit size of the corresponding private key for this certificate.
+                      If `algorithm` is set to `RSA`, valid values are `2048`, `4096` or `8192`,
+                      and will default to `2048` if not specified.
+                      If `algorithm` is set to `ECDSA`, valid values are `256`, `384` or `521`,
+                      and will default to `256` if not specified.
+                      If `algorithm` is set to `Ed25519`, Size is ignored.
+                      No other values are allowed.
+                    type: integer
+                type: object
+              renewBefore:
+                description: |-
+                  How long before the currently issued certificate's expiry
+                  cert-manager should renew the certificate. The default is 2/3 of the
+                  issued certificate's duration. Minimum accepted value is 5 minutes.
+                  Value must be in units accepted by Go time.ParseDuration
+                  https://golang.org/pkg/time/#ParseDuration
+                type: string
+              revisionHistoryLimit:
+                description: |-
+                  RevisionHistoryLimit is the maximum number of CertificateRequest revisions
+                  that are maintained in the Certificate's history. Each revision represents
+                  a single `CertificateRequest` created by this Certificate, either when it
+                  was created, renewed, or Spec was changed. Revisions will be removed by
+                  oldest first if the number of revisions exceeds this number. If set,
+                  revisionHistoryLimit must be a value of `1` or greater. If unset (`nil`),
+                  revisions will not be garbage collected. Default value is `nil`.
+                format: int32
+                type: integer
+              targetRef:
+                description: TargetRef identifies an API object to apply policy to.
+                properties:
+                  group:
+                    description: Group is the group of the target resource.
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  kind:
+                    description: Kind is kind of the target resource.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                    type: string
+                  name:
+                    description: Name is the name of the target resource.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - group
+                - kind
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'Gateway'
+                  rule: self.kind == 'Gateway'
+              usages:
+                description: |-
+                  Usages is the set of x509 usages that are requested for the certificate.
+                  Defaults to `digital signature` and `key encipherment` if not specified.
+                items:
+                  description: |-
+                    KeyUsage specifies valid usage contexts for keys.
+                    See:
+                    https://tools.ietf.org/html/rfc5280#section-4.2.1.3
+                    https://tools.ietf.org/html/rfc5280#section-4.2.1.12
+
+
+                    Valid KeyUsage values are as follows:
+                    "signing",
+                    "digital signature",
+                    "content commitment",
+                    "key encipherment",
+                    "key agreement",
+                    "data encipherment",
+                    "cert sign",
+                    "crl sign",
+                    "encipher only",
+                    "decipher only",
+                    "any",
+                    "server auth",
+                    "client auth",
+                    "code signing",
+                    "email protection",
+                    "s/mime",
+                    "ipsec end system",
+                    "ipsec tunnel",
+                    "ipsec user",
+                    "timestamping",
+                    "ocsp signing",
+                    "microsoft sgc",
+                    "netscape sgc"
+                  enum:
+                  - signing
+                  - digital signature
+                  - content commitment
+                  - key encipherment
+                  - key agreement
+                  - data encipherment
+                  - cert sign
+                  - crl sign
+                  - encipher only
+                  - decipher only
+                  - any
+                  - server auth
+                  - client auth
+                  - code signing
+                  - email protection
+                  - s/mime
+                  - ipsec end system
+                  - ipsec tunnel
+                  - ipsec user
+                  - timestamping
+                  - ocsp signing
+                  - microsoft sgc
+                  - netscape sgc
+                  type: string
+                type: array
+            required:
+            - issuerRef
+            - targetRef
+            type: object
+          status:
+            description: TLSPolicyStatus defines the observed state of TLSPolicy
+            properties:
+              conditions:
+                description: |-
+                  conditions are any conditions associated with the policy
+
+
+                  If configuring the policy fails, the "Failed" condition will be set with a
+                  reason and message describing the cause of the failure.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: |-
+                  observedGeneration is the most recently observed generation of the
+                  TLSPolicy.  When the TLSPolicy is updated, the controller updates the
+                  corresponding configuration. If an update fails, that failure is
+                  recorded in the status condition
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

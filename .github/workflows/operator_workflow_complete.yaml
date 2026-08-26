@@ -1,0 +1,229 @@
+
+name: Operator Workflow Complete
+
+on:
+  workflow_run:
+    workflows: ["Operator test"]
+    types: [completed]
+
+env:
+  OPP_PRODUCTION_TYPE: "k8s"
+
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: 'Download artifact'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "pr"
+            })[0];
+            var download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
+      - run: unzip -o pr.zip -d pr_data
+      - name: 'Read PR number'
+        id: pr-number
+        run: |
+          PR=$(tr -dc [0-9] <./pr_data/NR)
+          [ -z "$PR" ] && echo "Invalid PR number" && exit 1
+          echo "pr=${PR}" >> $GITHUB_OUTPUT
+          [ -f ./pr_data/CI_YAML_ONLY ] && echo "ci_yaml_only=$(cat ./pr_data/CI_YAML_ONLY)" >> $GITHUB_OUTPUT || echo "ci_yaml_only=0" >> $GITHUB_OUTPUT
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: pr-labels
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: | 
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              issue_number: ${{ steps.pr-number.outputs.pr }},
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            })
+            return labels.data
+    outputs:
+      pr: "${{ steps.pr-number.outputs.pr }}"
+      ci_yaml_only: "${{ steps.pr-number.outputs.ci_yaml_only }}"
+
+  post-comments:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [pr]
+    steps:
+      - name: 'Download and post PR comments from artifacts'
+        if: needs.pr.outputs.pr != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner, repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }},
+            });
+
+            for (const name of ['pr_comments', 'pr_comments_test']) {
+              const match = artifacts.data.artifacts.find(a => a.name === name);
+              if (!match) continue;
+              const dl = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner, repo: context.repo.repo,
+                artifact_id: match.id, archive_format: 'zip',
+              });
+              fs.writeFileSync(`${name}.zip`, Buffer.from(dl.data));
+              execSync(`unzip -o ${name}.zip -d comments`);
+            }
+
+            const dir = './comments';
+            if (fs.existsSync(dir)) {
+              for (const file of fs.readdirSync(dir).sort()) {
+                if (!file.endsWith('.md')) continue;
+                const body = fs.readFileSync(path.join(dir, file), 'utf8').trim();
+                if (!body) continue;
+                await github.rest.issues.createComment({
+                  issue_number: parseInt(process.env.PR),
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body,
+                });
+              }
+            }
+
+  on-success:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    needs: [pr]
+    steps:
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: pr-labels
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: | 
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            })
+            return labels.data
+
+      - name: "Setting package-validated label"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['package-validated']
+            })
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/work-in-progress')) &&
+          (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/hold'))
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{ secrets.FRAMEWORK_MERGE }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '/merge possible'
+            })
+
+      - name: "Set installation-validated"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['installation-validated']
+            })
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: |
+          (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/work-in-progress')) &&
+          (!contains(fromJson(steps.pr-labels.outputs.result).*.name, 'do-not-merge/hold'))
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{ secrets.FRAMEWORK_MERGE }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '/merge possible'
+            })
+
+  on-failure:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure'
+    needs: [pr]
+    steps:
+      - name: "Removing package-validated label"
+        if: needs.pr.outputs.pr != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.removeLabel({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'package-validated'
+            })
+      - name: "Removing installation-validated label"
+        if: needs.pr.outputs.pr != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PR: "${{ needs.pr.outputs.pr }}"
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.removeLabel({
+              issue_number: process.env.PR,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'installation-validated'
+            })

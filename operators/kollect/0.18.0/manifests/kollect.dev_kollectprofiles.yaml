@@ -1,0 +1,283 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: kollectprofiles.kollect.dev
+spec:
+  group: kollect.dev
+  names:
+    kind: KollectProfile
+    listKind: KollectProfileList
+    plural: kollectprofiles
+    shortNames:
+    - kprof
+    singular: kollectprofile
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KollectProfile is the Schema for the kollectprofiles API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of KollectProfile
+            properties:
+              attributes:
+                description: |-
+                  attributes lists the values to extract from each matching resource.
+                  Required when export.mode is Attributes (default); optional when export.mode is Resource.
+                items:
+                  description: AttributeSpec describes a single value extracted from
+                    a target resource.
+                  properties:
+                    name:
+                      description: name is the unique key under which the extracted
+                        value is stored.
+                      type: string
+                    optional:
+                      description: optional marks the attribute as non-fatal when
+                        extraction yields no value.
+                      type: boolean
+                    path:
+                      description: path is the JSONPath or CEL expression used to
+                        extract the value.
+                      type: string
+                    type:
+                      description: type is the expected value type (for example string,
+                        int, or bool).
+                      type: string
+                  required:
+                  - name
+                  - path
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              export:
+                description: |-
+                  export optionally enables full-resource export with path pruning (ADR-0306).
+                  When omitted, the profile behaves as export.mode: Attributes.
+                properties:
+                  as:
+                    default: resource
+                    description: as is the attribute key under which the embedded
+                      pruned object is stored.
+                    type: string
+                  dedupeIdentity:
+                    description: |-
+                      dedupeIdentity strips identity fields already carried on the Item envelope
+                      (uid, namespace, name, GVK) from the embedded object to avoid triple storage.
+                      Defaults to true.
+                    type: boolean
+                  include:
+                    default: SpecAndStatus
+                    description: include selects which top-level object sections survive
+                      pruning.
+                    enum:
+                    - MetadataOnly
+                    - SpecOnly
+                    - StatusOnly
+                    - SpecAndStatus
+                    - All
+                    type: string
+                  mode:
+                    default: Attributes
+                    description: |-
+                      mode selects between curated attribute extraction and full-resource export.
+                      Attributes (default) keeps current behaviour; Resource embeds a pruned object.
+                    enum:
+                    - Attributes
+                    - Resource
+                    type: string
+                  prune:
+                    description: prune declares path-based exclusions applied to the
+                      embedded object.
+                    properties:
+                      cel:
+                        description: |-
+                          cel lists CEL predicates evaluated against the object; true drops the matched
+                          value. Reserved for Phase 2 — not yet enforced by the collector.
+                        items:
+                          type: string
+                        type: array
+                      defaults:
+                        description: |-
+                          defaults applies built-in noise exclusions (managedFields, resourceVersion,
+                          generation, last-applied-configuration, argo tracking-id). Defaults to true.
+                        type: boolean
+                      jsonPaths:
+                        description: jsonPaths lists kubectl/JSONPath expressions
+                          to drop (warn-only parse in Phase 1).
+                        items:
+                          type: string
+                        type: array
+                      jsonPointers:
+                        description: jsonPointers lists RFC 6901 pointers to drop,
+                          matching Argo CD ignoreDifferences UX.
+                        items:
+                          type: string
+                        type: array
+                      scrubKeys:
+                        description: |-
+                          scrubKeys lists case-insensitive key names redacted at any depth, merging with
+                          the operator scrubKeys denylist (ADR-0303).
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                type: object
+              metrics:
+                description: |-
+                  metrics lists kube-state-metrics-style Prometheus series emitted on operator /metrics.
+                  Each path must reference an attribute name from spec.attributes (ADR-0304).
+                items:
+                  description: |-
+                    MetricSpec describes one kube-state-metrics-style Prometheus series from collected CR fields.
+                    Paths reference attribute names defined in spec.attributes (ADR-0304 spike).
+                  properties:
+                    labels:
+                      description: |-
+                        labels lists optional bounded label keys copied from extracted attributes.
+                        Each entry must match an attribute name; cardinality is bounded by distinct label tuples.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                    name:
+                      description: name is the bounded Prometheus series identifier
+                        within a profile.
+                      type: string
+                    path:
+                      description: |-
+                        path is the attribute name whose numeric values are aggregated for this series.
+                        Must match an entry in spec.attributes[].name.
+                      type: string
+                  required:
+                  - name
+                  - path
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              targetGVK:
+                description: targetGVK selects the Kubernetes resource kind this profile
+                  applies to.
+                properties:
+                  group:
+                    description: group is the API group of the target resource (empty
+                      for the core group).
+                    type: string
+                  kind:
+                    description: kind is the API kind of the target resource.
+                    type: string
+                  version:
+                    description: version is the API version of the target resource.
+                    type: string
+                required:
+                - kind
+                - version
+                type: object
+            required:
+            - targetGVK
+            type: object
+          status:
+            description: status defines the observed state of KollectProfile
+            properties:
+              conditions:
+                description: |-
+                  conditions represent the current state of the KollectProfile resource.
+                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
+
+                  Standard condition types include:
+                  - "Available": the resource is fully functional
+                  - "Progressing": the resource is being created or updated
+                  - "Degraded": the resource failed to reach or maintain its desired state
+
+                  The status of each condition is one of True, False, or Unknown.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

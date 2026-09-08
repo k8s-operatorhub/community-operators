@@ -1,0 +1,628 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: kollect.v0.18.0
+  namespace: placeholder
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectProfile",
+          "metadata": {
+            "name": "deployment-images",
+            "namespace": "default"
+          },
+          "spec": {
+            "targetGVK": {
+              "group": "apps",
+              "version": "v1",
+              "kind": "Deployment"
+            },
+            "attributes": [
+              {
+                "name": "image",
+                "path": "$.spec.template.spec.containers[0].image",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectTarget",
+          "metadata": {
+            "name": "nginx-deployments",
+            "namespace": "default"
+          },
+          "spec": {
+            "profileRef": "deployment-images",
+            "labelSelector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "nginx"
+              }
+            },
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectInventory",
+          "metadata": {
+            "name": "team-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "exportMinInterval": "30s",
+            "snapshotSinkRefs": [
+              {
+                "name": "git-inventory",
+                "exportMinInterval": "1h"
+              }
+            ],
+            "databaseSinkRefs": [
+              {
+                "name": "postgres-inventory"
+              }
+            ],
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectSnapshotSink",
+          "metadata": {
+            "name": "git-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "git",
+            "endpoint": "https://github.com/platformrelay/kollect-inventory-demo.git",
+            "cluster": "prod-west",
+            "pathTemplate": "clusters/{cluster}/inventory/{namespace}/{name}.json",
+            "connectionTest": true,
+            "secretRef": {
+              "name": "git-push-credentials",
+              "namespace": "default"
+            },
+            "git": {
+              "branch": "main",
+              "pushPolicy": "Commit",
+              "auth": {
+                "type": "token"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectEventSink",
+          "metadata": {
+            "name": "nats-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "nats",
+            "cluster": "prod-west",
+            "connectionTest": true,
+            "secretRef": {
+              "name": "nats-credentials",
+              "namespace": "default"
+            },
+            "nats": {
+              "url": "nats://nats.kollect-system.svc:4222",
+              "subject": "inventory.events",
+              "stream": "kollect_events"
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectDatabaseSink",
+          "metadata": {
+            "name": "postgres-inventory",
+            "namespace": "default"
+          },
+          "spec": {
+            "type": "postgres",
+            "cluster": "prod-west",
+            "connectionTest": true,
+            "provisioning": {
+              "mode": "ensure"
+            },
+            "postgres": {
+              "databaseRef": {
+                "name": "inventory-postgres-dsn",
+                "namespace": "default"
+              },
+              "schema": "public",
+              "table": "inventory_items"
+            }
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectConnectionTest",
+          "metadata": {
+            "name": "postgres-inventory-probe",
+            "namespace": "default"
+          },
+          "spec": {
+            "sinkRef": {
+              "databaseSinkRef": "postgres-inventory"
+            },
+            "ttlSecondsAfterFinished": 300
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectScope",
+          "metadata": {
+            "name": "team-ceiling",
+            "namespace": "default"
+          },
+          "spec": {
+            "allowedGVKs": [
+              {
+                "group": "apps",
+                "version": "v1",
+                "kind": "Deployment"
+              },
+              {
+                "group": "",
+                "version": "v1",
+                "kind": "Service"
+              }
+            ],
+            "allowedNamespaces": [
+              "default"
+            ],
+            "snapshotSinkRefs": [
+              "git-inventory"
+            ],
+            "databaseSinkRefs": [
+              "postgres-inventory"
+            ],
+            "minExportInterval": "30s"
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterTarget",
+          "metadata": {
+            "name": "platform-deployments"
+          },
+          "spec": {
+            "profileRef": {
+              "name": "deployment-images",
+              "namespace": "default"
+            },
+            "namespaceSelector": {
+              "matchLabels": {
+                "kollect.dev/tenant": "platform"
+              }
+            },
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterInventory",
+          "metadata": {
+            "name": "platform-rollup"
+          },
+          "spec": {
+            "targetRefs": [
+              "platform-deployments"
+            ],
+            "namespaceSelector": {
+              "matchLabels": {
+                "kollect.dev/tenant": "platform"
+              }
+            },
+            "sinkNamespace": "default",
+            "snapshotSinkRefs": [
+              {
+                "name": "git-inventory"
+              }
+            ],
+            "databaseSinkRefs": [
+              {
+                "name": "postgres-inventory"
+              }
+            ],
+            "suspend": false
+          }
+        },
+        {
+          "apiVersion": "kollect.dev/v1alpha1",
+          "kind": "KollectClusterScope",
+          "metadata": {
+            "name": "platform-ceiling"
+          },
+          "spec": {
+            "allowedGVKs": [
+              {
+                "group": "apps",
+                "version": "v1",
+                "kind": "Deployment"
+              },
+              {
+                "group": "",
+                "version": "v1",
+                "kind": "Service"
+              }
+            ],
+            "deniedNamespaces": [
+              "kube-system"
+            ],
+            "allowedStaticRefNamespaces": [
+              "default"
+            ],
+            "snapshotSinkRefs": [
+              "git-inventory"
+            ],
+            "databaseSinkRefs": [
+              "postgres-inventory"
+            ],
+            "minExportInterval": "30s"
+          }
+        }
+      ]
+    categories: Monitoring,Integration & Delivery
+    capabilities: Full Lifecycle
+    containerImage: ghcr.io/platformrelay/kollect@sha256:9f116431941d1816bfdb22f574f3394c30cf41a348082e1028b2a16b5e0ccc5c
+    createdAt: "2026-08-18T00:00:00Z"
+    support: platformrelay
+    repository: https://github.com/platformrelay/kollect
+    description: Kubernetes inventory export operator — declare what to collect once and export durable rows to Git, databases, object storage, and event streams.
+    operators.operatorframework.io/builder: operator-sdk-v1.39.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "true"
+    features.operators.openshift.io/tls-profiles: "false"
+spec:
+  displayName: Kollect
+  description: |
+    ## Kollect
+
+    Kollect turns Kubernetes state into durable inventory. Declare what matters once
+    in `KollectProfile` and `KollectTarget` resources; the operator keeps rows current
+    with shared informers and exports the same canonical snapshot to Git, databases,
+    object storage, and event streams in parallel.
+
+    ### Features
+
+    * **Decoupled read model** — consumers query sinks, not the apiserver
+    * **Event-driven collection** — one shared informer per GVK, no polling
+    * **Schema-flexible extraction** — CEL and JSONPath attributes in profiles
+    * **Pluggable sinks** — snapshot, database, and event sink families
+    * **Multi-tenant governance** — `KollectScope` gates teams and sinks
+    * **Fleet-ready** — cluster-scoped targets fan in to shared sinks
+
+    ### Capability Level: Full Lifecycle
+
+    Kollect installs and manages its CRDs, reconciles inventory continuously, and
+    coordinates export to configured sinks.
+
+    ### Prerequisites
+
+    * Kubernetes 1.28+
+    * For validating webhooks outside this bundle, cert-manager and webhook TLS
+      configuration are required (Helm chart path documented upstream)
+
+  maturity: alpha
+  version: 0.18.0
+  minKubeVersion: "1.28.0"
+
+  keywords:
+    - kubernetes
+    - inventory
+    - operator
+    - gitops
+    - export
+    - observability
+    - multi-tenant
+    - fleet
+
+  maintainers:
+    - name: kollect contributors
+      email: maintainers@platformrelay.github.io
+
+  provider:
+    name: platformrelay
+
+  links:
+    - name: Documentation
+      url: https://platformrelay.github.io/Kollect/
+    - name: GitHub
+      url: https://github.com/platformrelay/kollect
+
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIj4KICA8dGl0bGUgaWQ9InRpdGxlIj5Lb2xsZWN0PC90aXRsZT4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIgZmlsbD0iIzA3MTQyNiIvPgogIDxnIGRhdGEtY29uY2VwdD0iY29sbGVjdG9yLWFwZXJ0dXJlIj4KICAgIDxwYXRoIGZpbGw9IiNlYWYwZmEiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTkgOGgxNHYxOEw0MyA4aDE1TDM2IDMybDIyIDI0SDQzTDIzIDM4djE4SDl6bTggMTYgMjEgOC0yMSA4eiIvPgogICAgPHBhdGggZmlsbD0iIzI1NjNlYiIgZD0iTTE5IDI2LjI1aDMuNXYzLjVIMTl6bTUuNzUgNGgzLjV2My41aC0zLjV6TTE5IDM0LjI1aDMuNXYzLjVIMTl6Ii8+CiAgICA8Y2lyY2xlIGN4PSIzOSIgY3k9IjMyIiByPSI0IiBmaWxsPSIjNWVlYWQ0Ii8+CiAgPC9nPgo8L3N2Zz4K
+      mediatype: image/svg+xml
+
+  # Kollect's controller watches cluster-wide: it never reads olm.targetNamespaces
+  # and sets no WATCH_NAMESPACE, so a namespace-scoped install would silently
+  # collect from the whole cluster. Advertise AllNamespaces only until that
+  # plumbing exists (ADR-0708 follow-up D9).
+  installModes:
+    - type: OwnNamespace
+      supported: false
+    - type: SingleNamespace
+      supported: false
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: kollect-controller-manager
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+                - namespaces
+                - secrets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - selfsubjectaccessreviews
+                - subjectaccessreviews
+              verbs:
+                - create
+            - apiGroups:
+                - cert-manager.io
+              resources:
+                - certificates
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - kollect.dev
+              resources:
+                - kollectclusterinventories
+                - kollectclustertargets
+                - kollectconnectiontests
+                - kollectdatabasesinks
+                - kollecteventsinks
+                - kollectinventories
+                - kollectsnapshotsinks
+                - kollecttargets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - kollect.dev
+              resources:
+                - kollectclusterinventories/finalizers
+                - kollectclustertargets/finalizers
+                - kollectinventories/finalizers
+                - kollecttargets/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - kollect.dev
+              resources:
+                - kollectclusterinventories/status
+                - kollectclustertargets/status
+                - kollectconnectiontests/status
+                - kollectdatabasesinks/status
+                - kollecteventsinks/status
+                - kollectinventories/status
+                - kollectsnapshotsinks/status
+                - kollecttargets/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - kollect.dev
+              resources:
+                - kollectclusterscopes
+                - kollectprofiles
+                - kollectscopes
+              verbs:
+                - get
+                - list
+                - watch
+      permissions:
+        - serviceAccountName: kollect-controller-manager
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+      deployments:
+        - name: kollect-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+                app.kubernetes.io/name: kollect
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  control-plane: controller-manager
+                  app.kubernetes.io/name: kollect
+              spec:
+                serviceAccountName: kollect-controller-manager
+                terminationGracePeriodSeconds: 10
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: manager
+                    image: ghcr.io/platformrelay/kollect@sha256:9f116431941d1816bfdb22f574f3394c30cf41a348082e1028b2a16b5e0ccc5c
+                    imagePullPolicy: IfNotPresent
+                    command:
+                      - /manager
+                    args:
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                      - --validating-webhooks-enabled=false
+                    ports:
+                      - containerPort: 8081
+                        name: health
+                        protocol: TCP
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 256Mi
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                    securityContext:
+                      readOnlyRootFilesystem: true
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
+
+  customresourcedefinitions:
+    owned:
+      - name: kollectprofiles.kollect.dev
+        version: v1alpha1
+        kind: KollectProfile
+        displayName: Kollect Profile
+        description: Declares extraction schema and attributes for a target GVK.
+      - name: kollecttargets.kollect.dev
+        version: v1alpha1
+        kind: KollectTarget
+        displayName: Kollect Target
+        description: Selects Kubernetes resources and binds a profile for collection.
+      - name: kollectinventories.kollect.dev
+        version: v1alpha1
+        kind: KollectInventory
+        displayName: Kollect Inventory
+        description: Aggregates collected rows and schedules export to sinks.
+      - name: kollectsnapshotsinks.kollect.dev
+        version: v1alpha1
+        kind: KollectSnapshotSink
+        displayName: Kollect Snapshot Sink
+        description: State-store sink for Git, object storage, and similar backends.
+      - name: kollecteventsinks.kollect.dev
+        version: v1alpha1
+        kind: KollectEventSink
+        displayName: Kollect Event Sink
+        description: Event-stream sink for Kafka, NATS, and similar backends.
+      - name: kollectdatabasesinks.kollect.dev
+        version: v1alpha1
+        kind: KollectDatabaseSink
+        displayName: Kollect Database Sink
+        description: Database sink for Postgres, MongoDB, BigQuery, and similar backends.
+      - name: kollectconnectiontests.kollect.dev
+        version: v1alpha1
+        kind: KollectConnectionTest
+        displayName: Kollect Connection Test
+        description: Probes sink connectivity and records probe status.
+      - name: kollectscopes.kollect.dev
+        version: v1alpha1
+        kind: KollectScope
+        displayName: Kollect Scope
+        description: Namespaced governance boundary for targets, inventories, and sinks.
+      - name: kollectclustertargets.kollect.dev
+        version: v1alpha1
+        kind: KollectClusterTarget
+        displayName: Kollect Cluster Target
+        description: Cluster-scoped target for fleet inventory collection.
+      - name: kollectclusterinventories.kollect.dev
+        version: v1alpha1
+        kind: KollectClusterInventory
+        displayName: Kollect Cluster Inventory
+        description: Cluster-scoped inventory rollup for platform operators.
+      - name: kollectclusterscopes.kollect.dev
+        version: v1alpha1
+        kind: KollectClusterScope
+        displayName: Kollect Cluster Scope
+        description: Cluster-scoped governance boundary for fleet mode.
+
+  relatedImages:
+    - name: kollect
+      image: ghcr.io/platformrelay/kollect@sha256:9f116431941d1816bfdb22f574f3394c30cf41a348082e1028b2a16b5e0ccc5c

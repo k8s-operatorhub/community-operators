@@ -1,0 +1,332 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    containerImage: quay.io/keydrahq/keydra-operator:0.0.1
+    repository: https://github.com/keydrahq/keydra-operator
+    capabilities: Basic Install
+    categories: "Database,Developer Tools"
+    certified: "false"
+    alm-examples: |
+      [
+        {
+          "apiVersion": "keydra.io/v1alpha1",
+          "kind": "Keydra",
+          "metadata": { "name": "keydra" },
+          "spec": {
+            "database": { "url": "postgresql://keydra-db:5432/keydra" },
+            "secret": { "name": "keydra" },
+            "route": { "enabled": true },
+            "proxy": { "enabled": true, "trusted": "10.0.0.0/8" }
+          }
+        },
+        {
+          "apiVersion": "keydra.io/v1alpha1",
+          "kind": "KeydraConnection",
+          "metadata": { "name": "orders-cache" },
+          "spec": {
+            "keydraRef": "keydra",
+            "host": "orders-redis",
+            "port": 6379,
+            "engine": "RESP",
+            "type": "STANDALONE",
+            "guarded": true,
+            "passwordSecret": { "name": "orders-redis", "key": "password" }
+          }
+        }
+      ]
+  name: keydra-operator.v0.0.1
+spec:
+  customresourcedefinitions:
+    owned:
+    - kind: KeydraConnection
+      name: keydraconnections.keydra.io
+      version: v1alpha1
+    - kind: Keydra
+      name: keydras.keydra.io
+      version: v1alpha1
+  description: |-
+    Keydra is a web-based management console for Redis, Valkey, KeyDB, Dragonfly, Garnet, Aerospike and TiKV: browse keys with cursor-based scanning, read and write values, run a policed console, watch what a server is doing, take backups to seven kinds of destination, and give people access to the targets they should have and no others.
+
+    The operator installs an instance from a Keydra resource, and — this is the part a chart cannot do — lets a target be declared as a KeydraConnection resource, so a Redis that something else in the cluster created can be handed to the console by the same manifest that created it, and taken away by the same deletion.
+
+    Two things it deliberately does not do. It does not install a PostgreSQL: what lives there is everything Keydra knows, and a database packaged inside an application's operator is a database nobody is backing up. And it does not generate the key that encrypts stored target credentials: a generated key is regenerated on the next reconciliation, and what that produces is an instance that starts and cannot read a single stored credential. Both are named in the resource and supplied by whoever installs it.
+  displayName: Keydra
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJLZXlkcmEiPgogIDxzdHlsZT4uaXtzdHJva2U6IzE1MTUxNX0uaXB7ZmlsbDojMTUxNTE1fUBtZWRpYShwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuaXtzdHJva2U6I0ZGRkZGRn0uaXB7ZmlsbDojRkZGRkZGfX08L3N0eWxlPgogIDxnIGZpbGw9Im5vbmUiIGNsYXNzPSJpIiBzdHJva2Utd2lkdGg9IjIuMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4KICAgIDxjaXJjbGUgY3g9IjcuNSIgY3k9IjE2LjAiIHI9IjQuMCIvPgogICAgPHBhdGggZD0iTTExLjUgMTYuMCBIMTcuMCIvPgogICAgPHBhdGggZD0iTTE3LjAgMTYuMCBMMjAuNTQgMTIuNDYgTTE3LjAgMTYuMCBMMjIuMDAgMTYuMDAgTTE3LjAgMTYuMCBMMjAuNTQgMTkuNTQiLz4KICA8L2c+CiAgPGNpcmNsZSBjeD0iNy41IiBjeT0iMTYuMCIgcj0iMS4xIiBjbGFzcz0iaXAiLz4KICA8ZyBmaWxsPSIjRUUwMDAwIj48Y2lyY2xlIGN4PSIyMy4zNiIgY3k9IjkuNjQiIHI9IjIuMiIvPjxjaXJjbGUgY3g9IjI2LjAwIiBjeT0iMTYuMDAiIHI9IjIuMiIvPjxjaXJjbGUgY3g9IjIzLjM2IiBjeT0iMjIuMzYiIHI9IjIuMiIvPjwvZz4KPC9zdmc+
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - keydra.io
+          resources:
+          - keydraconnections
+          - keydraconnections/status
+          - keydraconnections/finalizers
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+          - update
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+        - apiGroups:
+          - keydra.io
+          resources:
+          - keydras
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - keydra.io
+          resources:
+          - keydras
+          - keydras/status
+          - keydras/finalizers
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+          - update
+          - create
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - ingresses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - route.openshift.io
+          resources:
+          - routes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - monitoring.coreos.com
+          resources:
+          - servicemonitors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: keydra-operator
+      deployments:
+      - name: keydra-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: keydra-operator
+          template:
+            metadata:
+              annotations:
+                app.quarkus.io/quarkus-version: 3.38.0
+                app.quarkus.io/commit-id: 7569836923228d57c1972b77d6dbc641f0f10439
+                app.quarkus.io/vcs-uri: https://github.com/keydrahq/keydra-operator.git
+                app.quarkus.io/build-timestamp: 2026-08-31 - 18:45:08 +0000
+              labels:
+                app.kubernetes.io/managed-by: quarkus
+                app.kubernetes.io/version: 0.0.1
+                app.kubernetes.io/name: keydra-operator
+            spec:
+              containers:
+              - env:
+                - name: KUBERNETES_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYDRACONNECTION_NAMESPACES
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: "metadata.annotations['olm.targetNamespaces']"
+                - name: QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYDRA_NAMESPACES
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: "metadata.annotations['olm.targetNamespaces']"
+                image: quay.io/keydrahq/keydra-operator:0.0.1
+                imagePullPolicy: Always
+                livenessProbe:
+                  failureThreshold: 3
+                  httpGet:
+                    path: /q/health/live
+                    port: 8080
+                    scheme: HTTP
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 10
+                name: keydra-operator
+                ports:
+                - containerPort: 8080
+                  name: management
+                  protocol: TCP
+                - containerPort: 8081
+                  name: http
+                  protocol: TCP
+                readinessProbe:
+                  failureThreshold: 3
+                  httpGet:
+                    path: /q/health/ready
+                    port: 8080
+                    scheme: HTTP
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 10
+                startupProbe:
+                  failureThreshold: 3
+                  httpGet:
+                    path: /q/health/started
+                    port: 8080
+                    scheme: HTTP
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 10
+              serviceAccountName: keydra-operator
+              terminationGracePeriodSeconds: 10
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: AllNamespaces
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  keywords:
+  - redis
+  - valkey
+  - keydb
+  - dragonfly
+  - garnet
+  - aerospike
+  - tikv
+  - key-value
+  - console
+  - database
+  links:
+  - name: Documentation
+    url: https://keydrahq.github.io/keydra/docs/en/latest/
+  - name: Source
+    url: https://github.com/keydrahq/keydra
+  - name: Operator
+    url: https://github.com/keydrahq/keydra-operator
+  - name: Container image
+    url: https://quay.io/repository/keydrahq/keydra
+  maintainers:
+  - email: keydra@keydra.io
+    name: keydrahq
+  maturity: alpha
+  nativeAPIs:
+  - kind: PersistentVolumeClaim
+    group: ""
+    version: v1
+  - kind: Service
+    group: ""
+    version: v1
+  - kind: ServiceAccount
+    group: ""
+    version: v1
+  - kind: Deployment
+    group: apps
+    version: v1
+  - kind: Ingress
+    group: networking.k8s.io
+    version: v1
+  - kind: PodDisruptionBudget
+    group: policy
+    version: v1
+  provider:
+    name: The Keydra Authors
+    url: https://github.com/keydrahq
+  version: 0.0.1

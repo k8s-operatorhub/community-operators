@@ -1,0 +1,351 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "invokeai.redhat.com/v1alpha1",
+          "kind": "InvokeAIPlatform",
+          "metadata": {
+            "name": "my-studio",
+            "namespace": "ai-workloads"
+          },
+          "spec": {
+            "backends": [
+              {
+                "extraArgs": [
+                  "--stage-overrides={\"0\": {\"gpu_memory_utilization\": 0.65}}"
+                ],
+                "model": "Qwen/Qwen2.5-Omni-7B",
+                "name": "reasoning",
+                "resources": {
+                  "limits": {
+                    "cpu": "8",
+                    "memory": "32Gi",
+                    "nvidia.com/gpu": "1"
+                  },
+                  "requests": {
+                    "cpu": "4",
+                    "memory": "24Gi",
+                    "nvidia.com/gpu": "1"
+                  }
+                },
+                "role": "reasoning",
+                "runtime": "vllm-multimodal"
+              },
+              {
+                "model": "black-forest-labs/FLUX.2-klein-4B",
+                "name": "image-generation",
+                "resources": {
+                  "limits": {
+                    "cpu": "4",
+                    "memory": "24Gi",
+                    "nvidia.com/gpu": "1"
+                  },
+                  "requests": {
+                    "cpu": "2",
+                    "memory": "16Gi",
+                    "nvidia.com/gpu": "1"
+                  }
+                },
+                "role": "image-generation",
+                "runtime": "vllm-multimodal"
+              }
+            ],
+            "invokeai": {
+              "image": "quay.io/redhat-et/invokeai-vllm-omni-bridge:latest",
+              "port": 9090,
+              "resources": {
+                "limits": {
+                  "cpu": "4",
+                  "memory": "16Gi"
+                },
+                "requests": {
+                  "cpu": "2",
+                  "memory": "8Gi"
+                }
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: AI/Machine Learning
+    containerImage: quay.io/redhat-et/invokeai-operator:v0.0.1
+    createdAt: "2026-08-19T09:19:07Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/red-hat-et/invokeai-operator
+    support: sttadic
+  name: invokeai-operator.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: InvokeAIPlatform is the Schema for the invokeaiplatforms API.
+      displayName: InvokeAI Platform
+      kind: InvokeAIPlatform
+      name: invokeaiplatforms.invokeai.redhat.com
+      version: v1alpha1
+      resources:
+      - kind: Deployment
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: InferenceService
+        name: ""
+        version: v1beta1
+      - kind: ServingRuntime
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: InvokeAI canvas/workflow engine deployment configuration.
+        displayName: InvokeAI
+        path: invokeai
+      - description: Optional list of KServe inference backends to deploy and wire into InvokeAI.
+        displayName: Backends
+        path: backends
+  description: |
+    InvokeAI is an open-source creative engine for AI image generation and node-based
+    workflow automation. It provides a web canvas for composing generative pipelines and
+    a REST API that third-party plugins can use to drive inference. More information is
+    available at https://invoke-ai.github.io/InvokeAI/ and the operator source is at
+    https://github.com/red-hat-et/invokeai-operator.
+
+    ## Features
+
+    The InvokeAI Operator manages the full lifecycle of an InvokeAI deployment on
+    Kubernetes and OpenShift from a single custom resource (InvokeAIPlatform).
+
+    - Deploys InvokeAI as a Kubernetes Deployment and ClusterIP Service, keeping them
+      in sync with the CR spec on every change.
+    - Optionally deploys KServe InferenceServices for reasoning and image-generation
+      backends, and wires their in-cluster predictor URLs into InvokeAI via environment
+      variables automatically.
+    - Self-heals: if the InvokeAI Deployment or any managed InferenceService is deleted,
+      the operator recreates it within seconds.
+    - Cleans up orphaned InferenceServices when a backend is removed from the CR spec.
+    - Optionally creates KServe ServingRuntimes when a runtime container image is
+      provided in the CR spec, so no manual runtime setup is required.
+    - Supports both RawDeployment and Serverless (Knative) KServe modes via a single
+      spec field.
+    - Reports per-backend readiness, predictor URLs, and a platform-level phase
+      (Pending, Deploying, Ready, Degraded) on the CR status subresource.
+
+    ## Prerequisites
+
+    - Kubernetes 1.25+ or OpenShift 4.12+.
+    - KServe v0.14+ must be installed and running on the cluster before creating an
+      InvokeAIPlatform CR that includes backends. The operator does not install KServe.
+    - GPU nodes with the nvidia.com/gpu extended resource are required for inference
+      backends. Each backend requests GPU resources via the CR spec.
+    - The InvokeAI container image and any vLLM runtime image must be accessible from
+      the cluster (public registry or image pull secret configured on the namespace).
+  displayName: InvokeAI Operator
+  icon:
+  - base64data: PHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMjQgMjAgMjAwMCAyMDAwIiB3aWR0aD0iMjAwMCIgaGVpZ2h0PSIyMDAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWlkWU1pZCBtZWV0Ij4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDQ2LDEwNCwyMjQpIiBkPSJNIDEwMDQuOSAxNDcuMzUxIEMgMTA0My4zMSAxNDIuNTUzIDEwODAuMjYgMTYzLjE4NiAxMTEzLjg0IDE3OS4yMTIgQyAxMTM0LjcyIDE4OS4xNzkgMTE1NS42IDE5OS44NTIgMTE3Ni4zMyAyMTAuMTg5IEwgMTM2MC41MSAzMDIuMjIxIEwgMTQ4NC44NSAzNjMuOTc4IEMgMTUwNi45IDM3NC45MzkgMTU0NC4wNSAzOTEuODAzIDE1NjIuNTMgNDA2LjQxMyBDIDE1NzguNzcgNDE5LjA4NiAxNTkxLjM1IDQzNS44NCAxNTk5IDQ1NC45NjUgQyAxNjA3LjExIDQ3NS43MiAxNjE4LjA0IDUyNS4zMzYgMTYyMy45NiA1NDkuMzcyIEMgMTY0My4yIDYyOC4wNDMgMTY2MS4wNyA3MDcuMDQxIDE2NzcuNTggNzg2LjMyOSBMIDE3MTQuMjMgOTU1LjAwNCBDIDE3MzMuODEgMTA0NS42OSAxNzUzLjEyIDEwODMuOSAxNjg5LjA3IDExNjQuMTkgQyAxNjQ0LjQ5IDEyMjAuMDcgMTYwMC4yNCAxMjc5Ljk1IDE1NTUuNTUgMTMzNi4yOCBDIDE1NTMuNzUgMTI1OC41OCAxNTU0LjQ1IDExNzIuNTMgMTU1NS4zNSAxMDk0Ljc5IEMgMTU2OS42MSAxMTA1LjkgMTU4My44OCAxMTE3LjY1IDE2MDEuMTEgMTEyMy44NSBDIDE2MjAuNzEgMTEzMC45MSAxNjQxLjg0IDExMjQuMDMgMTY0Ny40MSAxMTAyLjUgQyAxNjQ5Ljc4IDEwOTMuMyAxNjQ4LjI3IDEwODMuNTMgMTY0My4yMiAxMDc1LjQ3IEMgMTYzMC40MyAxMDU0LjYxIDE1ODUuNTQgMTA0NS41MSAxNTYyLjk4IDEwMzkuNzcgQyAxNTgzLjg2IDEwMzIuNTEgMTYwNS4xMSAxMDI0LjU1IDE2MjYuMTIgMTAxNy44NyBDIDE2MjUuMzUgOTUzLjQ4MyAxNjI1LjExIDg4NC44MTQgMTYyNS45MSA4MjAuNDg4IEMgMTU3Ni40MSA4MTkuNTA2IDE1MjMuNDcgODIwLjU1MiAxNDczLjc5IDgyMC44MzUgQyAxNDY1LjA0IDc2Ni4yMTUgMTQ0Mi4zNSA3MDIuODQ3IDE0MTIuNzQgNjU2LjA3OSBDIDE0MTguNTUgNjUxLjk3MiAxNDIzLjMxIDY0OC4wMDggMTQyOC44IDY0My40NjQgQyAxNDMwLjg4IDYzNC45NDUgMTQzMi45MSA2MjYuNjg0IDE0MzguMTQgNjE5LjA5NiBDIDE0NjAuMTcgNTg3LjIwOCAxNTE1LjA3IDU4MS4xOTEgMTUyOS4xNSA1NDQuMTA3IEMgMTUzNS4yOCA1MjcuOTkgMTUyMy41NiA1MDEuNDkxIDE1MDQuODYgNDk3Ljk5NCBDIDE0NjAuMTkgNDg5LjYzOCAxNDQ1LjQ5IDU0OC43MjIgMTQxNi4wNCA1NjkuMzgxIEMgMTM5OS44NCA1ODAuNzUyIDEzODMuNDEgNTc4LjExNCAxMzY1LjMxIDU4OS4xNTYgQyAxMjc2LjUzIDQ5NC4wMDMgMTE5MC4zOSA0NDUuNTUzIDEwNTkuNjYgNDMxLjYxIEMgMTA1OS42IDQyNy42OTMgMTA1OS41OSA0MTguMjA4IDEwNTguNjYgNDE0Ljg0OSBDIDEwNTQuMzYgMzk5LjMzIDEwNDQuNzkgMzk0LjkyIDEwNDMuOCAzNzcuMTU2IEMgMTA0Mi40MSAzNTIuMDM4IDEwNTQuMDEgMzMwLjA1NCAxMDU0LjA4IDMwNS4zOTcgQyAxMDU0LjExIDI5NC40MzMgMTA1MC45NSAyODEuNzMyIDEwNDIuODUgMjczLjg2NSBDIDEwMzYuODcgMjY4LjA1MiAxMDI1IDI2NSAxMDE2Ljc3IDI2NS4xNyBDIDk1OS40MjYgMjc1LjQ0NyA5ODYuMDcyIDMyNy41MSA5OTAuNTM2IDM2NC42OTkgQyA5OTEuOTggMzc2LjcyMiA5ODkuNzc5IDM4OC4zNDcgOTg2LjIwOCAzOTkuODQxIEMgOTcyLjM1MiA0MDkuNzY1IDk3NC40ODYgNDE1LjQ0OCA5NzQuNDE1IDQzMS42NzIgQyA4NTAuNDU3IDQ0NC4zOTUgNzUzLjMgNDk1LjEzNCA2NzAuMjEzIDU4Ni43OTMgQyA2NTQuNDY1IDU3Ni4yMTcgNjQ2LjE2OCA1ODAuMjk3IDYzMC43OTQgNTczLjM5NiBDIDU5Ny41MyA1NTguNDY0IDU4MS4zMDUgNDk0LjI5IDU0MC4zOTkgNDkzLjQzNCBDIDUzMC44NzcgNDkzLjMxMyA1MjEuNzE2IDQ5Ny4wNzIgNTE1LjAyNSA1MDMuODQ3IEMgNTA3LjU1NSA1MTEuMzYzIDUwMi41MDkgNTI0LjExOCA1MDMuMTc4IDUzNC41NTIgQyA1MDUuNTk2IDU3Mi4yNDMgNTY3LjQ0NCA1ODYuMTg4IDU5MC42NSA2MDkuODQgQyA2MDAuOTkgNjIwLjM4IDYwMS42MDIgNjI2LjYwNCA2MDEuOTAzIDYzOS45NTggQyA2MDguMDM1IDY0NS4wMzkgNjE0Ljc3MyA2NTAuMTUgNjIxLjA2NSA2NTUuMDk3IEMgNTg1LjcxMyA3MTEuNjM2IDU3MS4wMjYgNzU2LjA1NCA1NTYuNDc0IDgyMC43OTMgQyA1MDcuNjgyIDgyMC4xNzggNDU4Ljg4NSA4MjAuMDA4IDQxMC4wODkgODIwLjI4NCBMIDQxMC4xNyAxMDE2LjU2IEMgNDI5LjEzNCAxMDIyLjgyIDQ1NC45MjMgMTAzMS4xMiA0NzIuNzQgMTAzOS4zMSBDIDQ0MC45OTEgMTA0OS40NiAzNTIuOTE0IDEwNTguODcgMzg3LjUwNyAxMTE0Ljk4IEMgNDA3Ljg4NCAxMTQ4LjAzIDQ1Ni4yOTcgMTEwOC42MyA0NzcuNjYyIDEwOTMuMzYgQyA0NzkuMDExIDExNzQuMTQgNDc4LjEzNiAxMjU5LjU3IDQ3Ny43NDkgMTM0MC41OCBDIDQ2My41NTQgMTMyMC41OCA0NDQuODgxIDEyOTcuMzQgNDI5LjgwMiAxMjc3LjU5IEwgMzY1Ljc0MiAxMTkyLjY0IEMgMzUwLjk4MyAxMTczLjIyIDMyNC4wMjggMTEzOS43IDMxMi43MDIgMTExOC45IEMgMzA1LjY1OCAxMTA2LjA5IDMwMC45NzggMTA5Mi4xMSAyOTguODg5IDEwNzcuNjQgQyAyOTcuMTggMTA2NS43MyAyOTcuMjM2IDEwNTMuNjQgMjk5LjA1NSAxMDQxLjc2IEMgMzAzLjkzIDEwMDguNjIgMzE0Ljg0OCA5NjMuNzQgMzIyLjI4NiA5MzAuNjI4IEwgMzU1Ljg0OCA3NzguNTc4IEMgMzcwLjc3OCA3MTAuMzIyIDM4Ni4yNTMgNjQyLjE4NyA0MDIuMjcxIDU3NC4xNzkgQyA0MDkuOTM3IDU0MS43NTUgNDE5LjU5MiA0OTYuNDIyIDQyOS41NjIgNDY1LjU0MSBDIDQzMy44NTMgNDUyLjY3MSA0NDAuMjMgNDQwLjU5NSA0NDguNDM5IDQyOS43OTUgQyA0NTYuODczIDQxOC42MjkgNDY3LjIzNSA0MDkuMDYxIDQ3OS4wMzYgNDAxLjU0MSBDIDUwMC41NDQgMzg3LjkxNSA1MzIuNjQzIDM3Mi4zNzIgNTU1Ljc4IDM2MC42ODcgTCA2NzIuODQ1IDMwMS42MTMgTCA4MjYuNzUzIDIyNC4yNzggQyA4NzIuMjEzIDIwMS4zNDYgOTU3LjcyMSAxNTQuMTE0IDEwMDQuOSAxNDcuMzUxIHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDQ2LDEwNCwyMjQpIiBkPSJNIDkzOC44ODggODU5LjMxNCBDIDk5MS45ODIgODU4LjU2OSAxMDQ1LjA4IDg1OC40OTMgMTA5OC4xOCA4NTkuMDg3IEMgMTEwNy41OCA4NzQuNzYgMTExOC4wMyA4OTUuMjgyIDExMjYuOTIgOTExLjY1NyBMIDExODAuNzMgMTAxMC45MyBDIDEyMzYuNTYgMTExMy41NyAxMjkxLjY5IDEyMTYuNiAxMzQ2LjEgMTMyMCBDIDEzNzQuNTMgMTM3My4zMiAxNDAyLjYyIDE0MjYuODMgMTQzMC4zNiAxNDgwLjUyIEMgMTQzOC4zOCAxNDk2LjEgMTQ1OS42OCAxNTM0LjY2IDE0NjUuMDYgMTU0OS4wMyBDIDEzOTYuNzIgMTU0OC42OSAxMzI4LjM3IDE1NDguOTYgMTI2MC4wMyAxNTQ5Ljg2IEMgMTI0NS4zMyAxNTIwLjYyIDEyMjkuMzEgMTQ5MS44MiAxMjE0LjQzIDE0NjIuMDIgQyAxMTA0Ljc5IDE0NTkuOTcgOTkxLjQ4NCAxNDYyLjE3IDg4MS41NTggMTQ2Mi4wOCBDIDg4OS4wMTggMTQ0NS40NyA5MDMuODUyIDE0MTguOTggOTEzLjA3OSAxNDAyLjM5IEMgOTMyLjA3OSAxMzY4LjI0IDk0OS4zOTYgMTMzNy4yNiA5NjYuNTE2IDEzMDIuMDYgQyAxMDEwLjQ1IDEzMDAuMTEgMTA1NC43OCAxMzAxLjU2IDEwOTguNzcgMTMwMS4wOCBDIDExMDguNDYgMTMwMC45NyAxMTIwLjUxIDEzMDEuNzEgMTEyOS45NiAxMzAwLjUgQyAxMTE0Ljc1IDEyNzQuNTkgMTA5Ni41IDEyMzYuODQgMTA4Mi4xMSAxMjA5LjEzIEwgMTAxNC42MSAxMDgxLjUgQyA5NDcuNjc4IDEyMDcuNTggODg1LjA2OCAxMzM2LjM4IDgxOC4wMDQgMTQ2Mi40NSBDIDgwMi44MTkgMTQ5MSA3ODcuMDgzIDE1MjAuMTIgNzcyLjg2MSAxNTQ5LjExIEwgNTcxLjUwNyAxNTQ4LjkyIEMgNTgwLjY1OCAxNTI3LjM0IDYwMi4wODYgMTQ4OS43OCA2MTMuODM1IDE0NjcuNjQgTCA2OTYuMzU3IDEzMTIuMzkgTCA4NTQuNTY0IDEwMTYuMTMgQyA4ODIuMzk1IDk2My43MSA5MTAuNTAzIDkxMS40MzcgOTM4Ljg4OCA4NTkuMzE0IHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDE5LDM2LDYyKSIgZD0iTSA0NDUuOTk4IDg1NC4yNzggQyA1MjMuMzg1IDg1My4yMTYgNjAyLjU1OCA4NTQuMTg4IDY4MC4xMTUgODU0LjAxMyBMIDY4MC4xMDEgMTE0My42NCBDIDY4MC4xMDEgMTE2Mi4wOCA2ODIuMjMzIDEyNTguNTYgNjc4LjE2OSAxMjcwLjM4IEMgNjczLjYyNCAxMjgzLjYgNjU1LjcxNCAxMzEyLjA0IDY0OC4xMTggMTMyNi4zNiBMIDU3MS41OTkgMTQ3MS42MyBDIDU1My4xMDggMTUwNy43IDUzNC4zNjkgMTU0My42NCA1MTUuMzgyIDE1NzkuNDYgQyA1MTMuNTc2IDE1MTYuOTMgNTE1LjExNSAxNDQ3LjQ2IDUxNS4xMTQgMTM4NC40MSBMIDUxNS4xNzcgMTAxMy45NyBMIDQ0Ni43NzIgOTg5LjkxMiBDIDQ0Ny40MDQgOTQ1Ljc5MSA0NDYuMDc2IDg5OC43NTcgNDQ1Ljk5OCA4NTQuMjc4IHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDE5LDM2LDYyKSIgZD0iTSAxMzYyLjQxIDg1NS45OSBMIDE1ODkuOTIgODU2LjA3MyBDIDE1ODkuOSA4OTcuMzcxIDE1ODkuMjkgOTQwLjAxNCAxNTkwLjE0IDk4MS4xOTUgTCAxNTg5Ljk1IDk5Mi45MDMgTCAxNTc0LjM4IDk5OC41MTEgQyAxNTU5LjEgMTAwNC44NiAxNTM5LjkzIDEwMTEuNDEgMTUyNC4xMiAxMDE2LjggTCAxNTIzLjM1IDE0NTYuNjkgQyAxNTIzLjUyIDE0OTguNTggMTUyMy40MyAxNTQwLjQ2IDE1MjMuMSAxNTgyLjM0IEMgMTQ4NS45NiAxNTA3LjYyIDE0NDUuNDcgMTQzMi43MyAxNDA3LjUzIDEzNTguMDggTCAxMzgxLjg5IDEzMDcuOTYgQyAxMzY5LjU4IDEyODMuODYgMTM2NS4xOSAxMjc4LjA2IDEzNjMuOTkgMTI1MC41MiBDIDEzNjIuMTggMTIwOS4wNyAxMzYyLjY5IDExNjcuOCAxMzYyLjY2IDExMjYuMzMgTCAxMzYyLjQxIDg1NS45OSB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYigxOSwzNiw2MikiIGQ9Ik0gMTA0OC40OSAxNzgxLjI3IEMgMTA0Ni4zOCAxNzg3LjA5IDEwNDUuMzUgMTc5Ny4yNyAxMDQyLjg5IDE4MDQuNDkgQyAxMDA0LjQgMTkxNy41NCA4MjYuMzE3IDE5MjIuODcgNzc0LjQ3IDE4MTkuMDQgQyA3NjAuMjA3IDE3ODkuOTEgNzU3LjkwMyAxNzU2LjM1IDc2OC4wNDkgMTcyNS41NCBDIDc5Ni41MyAxNjQxLjIzIDkwMi40ODUgMTYxNy42OSA5NzcuMjA3IDE2NTEuOTMgQyAxMDA2LjYxIDE2NjUuNDEgMTAyNi4xNSAxNjg3LjI2IDEwNDAuMjQgMTcxNS43OSBDIDEwNDguNDkgMTczOS4zNCAxMDUxLjEgMTc1NS45OSAxMDQ4LjQ5IDE3ODEuMjcgeiBNIDg1My4yMjUgMTgxMC41OCBDIDg2MS40NTQgMTgxOS45OCA4NzIuMDUzIDE4MjcgODgzLjkxOCAxODMwLjkxIEMgOTE3LjE1OSAxODQxLjg4IDk1My4zODIgMTgyNi41NiA5NjguNjY2IDE3OTUuMDcgQyA5ODMuOTUgMTc2My41OCA5NzMuNTc4IDE3MjUuNjQgOTQ0LjQwMSAxNzA2LjMxIEMgOTE1LjIyMyAxNjg2Ljk3IDg3Ni4yNDMgMTY5Mi4yMSA4NTMuMjAzIDE3MTguNTYgQyA4MzAuMTYzIDE3NDQuOTEgODMwLjE3MiAxNzg0LjI0IDg1My4yMjUgMTgxMC41OCB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYig0NiwxMDQsMjI0KSIgZD0iTSAxNjk5LjE4IDE2MTMuNSBDIDE3MjQuNDggMTYxMy4yOSAxNzQ5Ljc5IDE2MTMuMjYgMTc3NS4wOSAxNjEzLjQxIEMgMTgwOS45NCAxNzA0LjQ5IDE4NDguMTcgMTc5Ni41MSAxODgxLjMyIDE4ODguMDQgQyAxODU2LjgxIDE4ODguNzIgMTgyOS43NyAxODg4LjE4IDE4MDQuOTkgMTg4OC4zMSBDIDE3OTkuMiAxODc1LjQ5IDE3OTAuNzQgMTg1NS45OSAxNzg2LjIzIDE4NDMuMDQgTCAxNzcwLjExIDE4NDIuODcgTCAxNjc4LjU4IDE4NDIuOTEgQyAxNjcyLjMzIDE4NTcuODkgMTY2Ni4yOSAxODcyLjk1IDE2NjAuNDYgMTg4OC4xIEwgMTU4Ny4zNCAxODg4LjEgQyAxNjEyLjM5IDE4MjQuNTQgMTYzNy44OCAxNzYxLjE2IDE2NjMuODEgMTY5Ny45NSBMIDE2ODUuOTcgMTY0My44OCBDIDE2ODkuMzYgMTYzNS42NiAxNjk0Ljk4IDE2MjAuOSAxNjk5LjE4IDE2MTMuNSB6IE0gMTY5OC42NyAxNzg4LjgzIEwgMTczMy4wNSAxNzg4Ljc4IEwgMTc2NS42NSAxNzg4Ljc4IEMgMTc2Mi4zNyAxNzc5LjgyIDE3MzMuOTMgMTcwMS42IDE3MzEuNDIgMTY5OC42OSBDIDE3MjAuMjggMTcyOC42NiAxNzA5LjM3IDE3NTguNyAxNjk4LjY3IDE3ODguODMgeiIvPgo8cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwLDApIiBmaWxsPSJyZ2IoMTksMzYsNjIpIiBkPSJNIDIxNC44MTEgMTY0My41OCBDIDIzMC43NjYgMTY0NS4zMyAyNTIuMjA2IDE2NDMuNDEgMjY4LjQ3IDE2NDMuOTEgQyAyNzMuNDUyIDE2NDQuMDYgMjgzLjQ1NyAxNjQzLjUxIDI4Ny43OTYgMTY0NC42NyBDIDMyMS44OCAxNjg3LjI2IDM1NS4yODMgMTczMC4zOSAzODcuOTkyIDE3NzQuMDQgQyAzODcuNTIyIDE3MzEuMTIgMzg3LjgzNSAxNjg3LjE4IDM4Ny45OTYgMTY0NC4yMiBDIDQxMC44ODMgMTY0My42NiA0MzUuNjkgMTY0NC4xMiA0NTguNzI1IDE2NDQuMTMgQyA0NjAuMjkxIDE3MjMuNDcgNDU4LjkzMiAxODA4LjYgNDU4LjkzIDE4ODguMzUgTCAzOTYuMzE3IDE4ODguMTMgQyAzODMuNTIyIDE4NzMuMzYgMzY4LjcwMyAxODUzLjczIDM1Ni40NTMgMTgzOC4yMiBDIDMzMi4zMjQgMTgwOC4wNiAzMDguNTc4IDE3NzcuNiAyODUuMjE4IDE3NDYuODMgQyAyODUuNjgxIDE3OTMuOTIgMjg1LjAxNSAxODQwLjk5IDI4NS42NCAxODg4LjE3IEMgMjYyLjI1MSAxODg4LjAyIDIzOC44NjIgMTg4OC4wNSAyMTUuNDc0IDE4ODguMjYgQyAyMTMuNTQ5IDE4MzEuMDQgMjE2LjI2OCAxNzcwLjI1IDIxNS4xNjQgMTcxMi43NCBDIDIxNC43NTEgMTY5MS4yMyAyMTYuMjc0IDE2NjQuMzYgMjE0LjgxMSAxNjQzLjU4IHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDE5LDM2LDYyKSIgZD0iTSAxMjQ1LjI5IDE2NDQuMTQgTCAxMzMxLjUzIDE2NDQuMTggQyAxMjk1LjU5IDE2NzkuMzggMTI1OS44MiAxNzE3LjUxIDEyMjQuMjIgMTc1My40NiBMIDEyOTEuMjYgMTgzMC4xMSBDIDEzMDcuNDkgMTg0OS41OSAxMzI0LjQ0IDE4NjguNDMgMTM0MC40NyAxODg4LjA2IEMgMTMxMy43MyAxODg5LjI3IDEyODAuMTIgMTg4OC4zMyAxMjUyLjY0IDE4ODguNTUgQyAxMjI1LjkzIDE4NTkuMDUgMTE5Ny44MiAxODI1LjEgMTE3Mi4xMyAxNzk0LjQ4IEwgMTE1OC4wOCAxODA5LjQ1IEwgMTE1OC4yNyAxODg4LjE2IEMgMTEzNC4wNCAxODg4LjAzIDExMDkuODEgMTg4OC4wMyAxMDg1LjU4IDE4ODguMTUgTCAxMDg1LjgyIDE2NDQuMTMgTCAxMTU4LjQ5IDE2NDQuMSBDIDExNTguMjQgMTY3NS41NCAxMTU4LjE1IDE3MDYuOTkgMTE1OC4yMyAxNzM4LjQzIEMgMTE2NS45MyAxNzI4LjMzIDExODEuNTIgMTcxMi4zOSAxMTkwLjU2IDE3MDIuNjUgQyAxMjA4LjY2IDE2ODMuMDIgMTIyNi45MSAxNjYzLjUxIDEyNDUuMjkgMTY0NC4xNCB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYigxOSwzNiw2MikiIGQ9Ik0gMTM2MS4wNCAxNjQ0LjE3IEMgMTQyOC40IDE2NDMuMDggMTQ5OC42MiAxNjQ0LjExIDE1NjYuMjIgMTY0NC4xMiBDIDE1NjYuNTggMTY2MS40NiAxNTY2LjMgMTY3OS43MiAxNTY2LjMxIDE2OTcuMTMgQyAxNTIyLjU5IDE2OTcuOTEgMTQ3Ny4zOCAxNjk3LjExIDE0MzMuNDcgMTY5Ny4yNSBDIDE0MzMuNTggMTcxMC45MSAxNDMzLjYgMTcyNC41NiAxNDMzLjU0IDE3MzguMjEgTCAxNTQ0LjA0IDE3MzguNDcgTCAxNTQ0LjAzIDE3ODguOTYgQyAxNTA5LjYyIDE3ODguMjYgMTQ3My4yOSAxNzg4Ljg2IDE0MzguNzUgMTc4OC45MSBDIDE0MzYuMDYgMTc4OC44MiAxNDM2LjE5IDE3ODguNzEgMTQzMy43MyAxNzg5LjcgQyAxNDMzLjE2IDE3OTIuOTUgMTQzMy40NiAxODI4LjYyIDE0MzMuNDIgMTgzNC4yNCBDIDE0NzguNjIgMTgzMy44NCAxNTI0LjU4IDE4MzQuMyAxNTY5Ljg0IDE4MzQuNCBMIDE1NjkuODMgMTg4OC41NSBDIDE1NTEuMzMgMTg4Ny4zNiAxNTE4LjggMTg4OC40NCAxNDk5LjE0IDE4ODguNDggTCAxMzYwLjg4IDE4ODguNjggTCAxMzYxLjA0IDE2NDQuMTcgeiIvPgo8cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwLDApIiBmaWxsPSJyZ2IoMTksMzYsNjIpIiBkPSJNIDY4My42ODggMTY0NC4xMiBMIDc2MS42MDYgMTY0NC4xOSBDIDc1NS4xNDkgMTY2My41NiA3NDAuODY3IDE2OTUuMDEgNzMyLjU4OCAxNzE0Ljc0IEMgNzI2LjA0NyAxNzMyLjc3IDcxNi4yNDQgMTc1NC41OSA3MDguNjkgMTc3Mi43MiBMIDY2MC40NzkgMTg4OC4xOSBDIDYzNi4yMjggMTg4OC4wNyA2MTEuOTc3IDE4ODguMDggNTg3LjcyNiAxODg4LjIyIEMgNTc3LjgwOCAxODY0LjkgNDg1LjgxOCAxNjQ5LjI4IDQ4Ni43NDIgMTY0NC40OSBDIDUxMi4wODQgMTY0My40NiA1NDEuNjQxIDE2NDQuMTEgNTY3LjMwMyAxNjQ0LjExIEMgNTcyLjk3OSAxNjU2LjggNTc5LjI2MSAxNjc0LjM1IDU4NC40NSAxNjg3LjY3IEwgNjI0LjkzNSAxNzkyLjgxIEwgNjgzLjY4OCAxNjQ0LjEyIHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDQ2LDEwNCwyMjQpIiBkPSJNIDEwNjIuMDUgNTI0Ljk0MSBDIDEwNjMuMTMgNTI0LjkzNCAxMDY0LjIgNTI0LjkzOSAxMDY1LjI4IDUyNC45NTYgQyAxMTQ0LjQ1IDUyNS45NzMgMTIzNi41MyA1ODYuMjg1IDEyOTAuNjIgNjQyLjE2NyBDIDEyNjguMjkgNjU2LjU3NiAxMjQ1LjcgNjcyLjE0NSAxMjIzLjYxIDY4Ny4wMTggQyAxMjA4LjE2IDY5Ny45MzkgMTE5Mi4xMiA3MDguNjI4IDExNzYuNCA3MTkuMTMzIEMgMTEzOS41IDc0My43OSAxMTA4LjUzIDc3NS41NzIgMTA3My4zOSA3MjcuNTM4IEMgMTA2OS4yOCA2OTUuNzM2IDEwNjguMyA2NjUuNjY2IDEwNjYuODEgNjMzLjcxOSBMIDEwNjIuMDUgNTI0Ljk0MSB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYig0NiwxMDQsMjI0KSIgZD0iTSA5NjIuOTAyIDUyNi4zMTkgQyA5NjYuMDc3IDUyNi43MyA5NjguNDE2IDUyNy4zMzEgOTY4LjY4OCA1MzEuMDk4IEMgOTcwLjI0MyA1NTUuNjgxIDk2Ni42MDcgNTgwLjgxOCA5NjUuMjE5IDYwNS4zNTUgQyA5NjMuMjY3IDYzOS44MzUgOTYyLjk3OSA2NzQuMjA5IDk1OC4xMDggNzA4LjI3NyBDIDk0Ny43MjMgNzgwLjkxOSA5MDEuNTY1IDc0Ny45OTkgODYxLjc2OCA3MjEuODggQyA4NDYuNDQ1IDcxMS44MjMgODI5LjE0NSA2OTkuOTQ4IDgxMy44NSA2ODkuNTk3IEMgNzg5Ljg3OSA2NzMuNjA1IDc2Ni4wNzIgNjU3LjM2OSA3NDIuNDMzIDY0MC44OTIgQyA4MDAuNzgxIDU3OC43NzUgODc4LjUzNSA1MzguMzY4IDk2Mi45MDIgNTI2LjMxOSB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYigxOSwzNiw2MikiIGQ9Ik0gNjQuMjE0NSAxNjE0LjA4IEwgMTUxLjA2MSAxNjE0LjIxIEwgMTUxLjAwMyAxODg4Ljc4IEwgNjQuMDg0NCAxODg4LjgzIEMgNjMuNTExNSAxNzk4LjEgNjMuMjQ3OSAxNzA0Ljc1IDY0LjIxNDUgMTYxNC4wOCB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYig0NiwxMDQsMjI0KSIgZD0iTSAxMzQyLjk3IDcxNi44NDMgQyAxMzU0LjYzIDcyNi44MyAxMzc3LjIgODAyLjE1OSAxMzgyLjQ4IDgyMC4yMTQgTCAxMzI2Ljk5IDgyMC4xMjQgTCAxMzI3LjIxIDk1NC4yOTkgQyAxMzA3LjAxIDk0OC40NzkgMTI3NS40MSA5MzQuOTg1IDEyNTUuMDUgOTI3LjAwMyBMIDEyMDguNzMgOTA4Ljg3IEMgMTIwMS45OSA4OTcuNTYyIDExOTAuMjEgODY3LjM3OSAxMTg1LjgyIDg1NC41NzUgQyAxMjAyLjE3IDgzNS4xNzMgMTI0Ny40NiA3OTcuODE4IDEyNjguMTIgNzc5LjkgQyAxMjg3IDc2My41MjMgMTMyNC4wMiA3MzAuMDUxIDEzNDIuOTcgNzE2Ljg0MyB6Ii8+CjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsMCkiIGZpbGw9InJnYig0NiwxMDQsMjI0KSIgZD0iTSA2ODguMzIgNzE2LjQzMSBDIDY5MC41NjEgNzE2Ljk5OCA2OTIuNTQyIDcxNy44MSA2OTQuMjg2IDcxOS4zOTMgQyA3NDIuMTc4IDc2Mi44NzEgNzkzLjMwNiA4MDMuNDM5IDg0MC45OTUgODQ3LjAzNyBDIDgzOC4wNDcgODY3LjU1MiA4MzMuOTg5IDg4OS4wODEgODI1LjQgOTA3Ljk0OSBDIDgxMy4wNzUgOTEzLjg3OSA3OTEuMzU4IDkyMS40MjEgNzc4LjI0NSA5MjYuMzgzIEMgNzYyLjYwOCA5MzIuMzYyIDcyOS4yMDkgOTQ2LjA2MiA3MTQuNjUzIDk0OS4zNCBDIDcxMy4xNDEgOTA4LjkxMiA3MTQuMjg5IDg2MS40MDEgNzE0LjM0MiA4MjAuMjUzIEwgNjQ5LjI0IDgyMC4zOSBDIDY1Ni4xNDQgNzg5LjEzMSA2NzEuNzI5IDc0My41OTEgNjg4LjMyIDcxNi40MzEgeiIvPgo8cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwLDApIiBmaWxsPSJyZ2IoNDYsMTA0LDIyNCkiIGQ9Ik0gMTkxMi45MiAxNjE0LjExIEMgMTkzNS43NCAxNjE0Ljc3IDE5NjEuNTMgMTYxNC4yMyAxOTg0LjU3IDE2MTQuMjUgQyAxOTg2LjE1IDE3MDQuMTYgMTk4NC40MiAxNzk4LjEyIDE5ODQuNzQgMTg4OC40NyBDIDE5NjMgMTg4OS4yNyAxOTM0Ljk3IDE4ODguNzUgMTkxMi45OCAxODg4LjM4IEMgMTkxMS41NyAxNzk4LjkxIDE5MTIuNTUgMTcwMy43OSAxOTEyLjkyIDE2MTQuMTEgeiIvPgo8cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwLDApIiBmaWxsPSJyZ2IoNDYsMTA0LDIyNCkiIGQ9Ik0gMTI1Mi4zIDEwNDguODYgQyAxMjYzLjM1IDEwNDguODMgMTMxNS41MSAxMDYyLjQ2IDEzMjguNjMgMTA2Ni4yIEwgMTMyOS4zNyAxMTM5LjQyIEMgMTMyOS4zOCAxMTUyLjg3IDEzMjkuNTUgMTE3My4zOSAxMzI3LjYxIDExODYuMzEgTCAxMzI2Ljk1IDExODYuNDUgQyAxMzI1LjQ5IDExODUuNDMgMTI1NC44MiAxMDU2LjY4IDEyNTIuMyAxMDQ4Ljg2IHoiLz4KPHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCwwKSIgZmlsbD0icmdiKDQ2LDEwNCwyMjQpIiBkPSJNIDc3Ny42OCAxMDQ4LjIgTCA3ODIuMDA0IDEwNDcuOTQgTCA3ODMuMjM3IDEwNDkuMTYgQyA3ODIuODIyIDEwNTUuMjkgNzI2LjMzMSAxMTU3Ljk1IDcxOC45MjMgMTE3MS4wNiBDIDcxOC4wMTkgMTE3MS42IDcxNy40NjMgMTE3MS41MSA3MTYuMjg1IDExNzEuNjcgQyA3MTIuOTQgMTE2Ni44OCA3MTQuMjc4IDEwNzUuNzggNzE0LjMwOSAxMDYzLjEgQyA3MzUuMzMgMTA1Ny43IDc1Ni40NTggMTA1Mi43MyA3NzcuNjggMTA0OC4yIHoiLz4KPC9zdmc+
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - invokeai.redhat.com
+          resources:
+          - invokeaiplatforms
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - invokeai.redhat.com
+          resources:
+          - invokeaiplatforms/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - invokeai.redhat.com
+          resources:
+          - invokeaiplatforms/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - serving.kserve.io
+          resources:
+          - inferenceservices
+          - servingruntimes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: invokeai-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: invokeai-operator
+          control-plane: controller-manager
+        name: invokeai-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: invokeai-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: invokeai-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: quay.io/redhat-et/invokeai-operator:v0.0.1
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: invokeai-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: invokeai-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - invokeai
+  - ai
+  - machine-learning
+  - kserve
+  links:
+  - name: InvokeAI Operator
+    url: https://github.com/red-hat-et/invokeai-operator
+  maintainers:
+  - email: stadic@redhat.com
+    name: Stjepan Tadic
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: Stjepan Tadic
+  version: 0.0.1

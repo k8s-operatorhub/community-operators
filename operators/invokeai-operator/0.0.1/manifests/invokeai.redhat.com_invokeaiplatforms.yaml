@@ -1,0 +1,361 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: invokeaiplatforms.invokeai.redhat.com
+spec:
+  group: invokeai.redhat.com
+  names:
+    kind: InvokeAIPlatform
+    listKind: InvokeAIPlatformList
+    plural: invokeaiplatforms
+    singular: invokeaiplatform
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InvokeAIPlatform is the Schema for the invokeaiplatforms API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InvokeAIPlatformSpec defines the desired state of InvokeAIPlatform.
+            properties:
+              backends:
+                description: |-
+                  Backends is an optional list of inference backends to deploy as KServe
+                  InferenceServices and wire into InvokeAI via environment variables.
+                  When omitted, the operator manages only the InvokeAI Deployment and Service,
+                  leaving model serving to the user.
+                items:
+                  description: BackendSpec defines a single inference backend.
+                  properties:
+                    extraArgs:
+                      description: |-
+                        ExtraArgs are additional arguments passed to the vLLM engine via the
+                        InferenceService's args field.
+                      items:
+                        type: string
+                      type: array
+                    model:
+                      description: Model is the HuggingFace model identifier.
+                      type: string
+                    name:
+                      description: |-
+                        Name is a unique identifier for this backend within the CR.
+                        It becomes part of the InferenceService name.
+                      pattern: ^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$
+                      type: string
+                    resources:
+                      description: Resources defines compute resource requirements
+                        for the inference container.
+                      properties:
+                        claims:
+                          description: |-
+                            Claims lists the names of resources, defined in spec.resourceClaims,
+                            that are used by this container.
+
+                            This field depends on the
+                            DynamicResourceAllocation feature gate.
+
+                            This field is immutable. It can only be set for containers.
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                              request:
+                                description: |-
+                                  Request is the name chosen for a request in the referenced claim.
+                                  If empty, everything from the claim is made available, otherwise
+                                  only the result of this request.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Limits describes the maximum amount of compute resources allowed.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Requests describes the minimum amount of compute resources required.
+                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                      type: object
+                    role:
+                      description: |-
+                        Role tells the operator what this backend is for.
+                        "reasoning" → operator sets VLLM_BASE_URL on the InvokeAI deployment.
+                        "image-generation" → operator sets VLLM_IMAGE_BASE_URL.
+                      enum:
+                      - reasoning
+                      - image-generation
+                      type: string
+                    runtime:
+                      default: vllm-multimodal
+                      description: Runtime is the name of the KServe ServingRuntime
+                        or ClusterServingRuntime.
+                      type: string
+                  required:
+                  - model
+                  - name
+                  - role
+                  type: object
+                type: array
+              invokeai:
+                description: InvokeAI configures the InvokeAI canvas/workflow engine
+                  deployment.
+                properties:
+                  image:
+                    description: Image is the container image for the InvokeAI instance.
+                    type: string
+                  port:
+                    default: 9090
+                    description: Port is the port InvokeAI listens on.
+                    format: int32
+                    type: integer
+                  resources:
+                    description: Resources defines compute resource requirements for
+                      the InvokeAI container.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                required:
+                - image
+                type: object
+              kserveMode:
+                default: RawDeployment
+                description: |-
+                  KServeMode specifies whether KServe is deployed as RawDeployment or Serverless (Knative).
+                  This affects the predictor Service name and port used in backend URLs.
+                enum:
+                - RawDeployment
+                - Serverless
+                type: string
+              runtimeImage:
+                description: |-
+                  RuntimeImage is the vLLM-Omni container image used for operator-managed ServingRuntimes.
+                  When set, the operator creates two ServingRuntimes per CR (vllm-multimodal and vllm-diffusion).
+                  When omitted, the operator assumes ServingRuntimes already exist on the cluster.
+                type: string
+            required:
+            - invokeai
+            type: object
+          status:
+            description: InvokeAIPlatformStatus defines the observed state of InvokeAIPlatform.
+            properties:
+              backends:
+                description: Backends reports the observed state of each inference
+                  backend.
+                items:
+                  description: BackendStatus reports the observed state of a single
+                    backend.
+                  properties:
+                    model:
+                      description: Model is the model currently loaded (echoed from
+                        spec for observability).
+                      type: string
+                    name:
+                      description: Name matches the backend's spec.name.
+                      type: string
+                    ready:
+                      description: Ready is true when the InferenceService predictor
+                        is serving.
+                      type: boolean
+                    url:
+                      description: URL is the in-cluster predictor URL the operator
+                        has wired into InvokeAI.
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  type: object
+                type: array
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  platform's current state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              phase:
+                allOf:
+                - enum:
+                  - Pending
+                  - Deploying
+                  - Ready
+                  - Degraded
+                - enum:
+                  - Pending
+                  - Deploying
+                  - Ready
+                  - Degraded
+                description: Phase is the high-level summary of the platform state.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

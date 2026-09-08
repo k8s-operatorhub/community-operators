@@ -1,0 +1,220 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: gateways.konveyor.io
+spec:
+  group: konveyor.io
+  names:
+    kind: Gateway
+    listKind: GatewayList
+    plural: gateways
+    shortNames:
+    - gw
+    singular: gateway
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .spec.model.name
+      name: Model
+      type: string
+    - jsonPath: .status.connectionVerified
+      name: Verified
+      type: boolean
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Gateway is an LLM service endpoint serving exactly one provider/model
+          combination. Each Gateway has credentials and a single model declaration.
+          This mirrors the OpenShell gateway model where one gateway = one model.
+          The controller verifies connectivity on create/update.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: GatewaySpec defines the desired state of a Gateway.
+            properties:
+              credentialRef:
+                description: CredentialRef references a Secret containing the API
+                  credential.
+                properties:
+                  key:
+                    description: |-
+                      Key is the key within the Secret that contains the credential value.
+                      When set, the credential is a single value (e.g. a bearer token) and
+                      is injected into sandbox containers as KONVEYOR_LLM_API_KEY.
+                      When omitted, the credential spans multiple environment variables
+                      (e.g. AWS SigV4: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+                      AWS_REGION) and the whole Secret is exposed to the sandbox container
+                      via envFrom, with the Secret's keys as the variable names.
+                    minLength: 1
+                    type: string
+                  secretName:
+                    description: SecretName is the name of the Secret in the same
+                      namespace.
+                    minLength: 1
+                    type: string
+                required:
+                - secretName
+                type: object
+              endpoint:
+                description: Endpoint is the base URL of the LLM service.
+                minLength: 1
+                type: string
+              model:
+                description: |-
+                  Model is the model served by this gateway. Each Gateway serves
+                  exactly one provider/model combination, mirroring the OpenShell
+                  gateway model where one gateway = one model.
+                properties:
+                  contextWindow:
+                    description: |-
+                      ContextWindow is the maximum context window size in tokens.
+                      Used to validate that an Agent's always-loaded rules fit within budget.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  name:
+                    description: Name is the model identifier (e.g. "claude-sonnet-4-20250514",
+                      "gpt-4o").
+                    minLength: 1
+                    type: string
+                  tier:
+                    description: |-
+                      Tier is an optional label for the model's capability tier
+                      (e.g. "premium", "efficient").
+                    type: string
+                required:
+                - contextWindow
+                - name
+                type: object
+              provider:
+                description: |-
+                  Provider is the runtime provider identifier (e.g. "anthropic",
+                  "openai", "gcp-vertex-ai"). Injected as KONVEYOR_LLM_PROVIDER
+                  so the harness can map credentials to provider-specific env vars.
+                  This is a pre-OpenShell shim — when OpenShell is integrated,
+                  inference.local eliminates the need for provider-specific
+                  credential mapping and this field is removed.
+                minLength: 1
+                type: string
+            required:
+            - credentialRef
+            - endpoint
+            - model
+            - provider
+            type: object
+          status:
+            description: GatewayStatus defines the observed state of a Gateway.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  Gateway's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              connectionVerified:
+                description: |-
+                  ConnectionVerified indicates whether the controller has successfully
+                  verified connectivity to the gateway endpoint.
+                type: boolean
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

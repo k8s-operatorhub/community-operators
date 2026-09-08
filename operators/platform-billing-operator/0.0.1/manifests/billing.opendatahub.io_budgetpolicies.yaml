@@ -1,0 +1,269 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: budgetpolicies.billing.opendatahub.io
+spec:
+  group: billing.opendatahub.io
+  names:
+    kind: BudgetPolicy
+    listKind: BudgetPolicyList
+    plural: budgetpolicies
+    singular: budgetpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.tenantRef.name
+      name: Tenant
+      type: string
+    - jsonPath: .status.currentSpend
+      name: Spend
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          BudgetPolicy is the Schema for the budgetpolicies API.
+          It defines spending caps and threshold-based actions for a TenantAccount.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BudgetPolicySpec defines the desired state of a BudgetPolicy.
+            properties:
+              caps:
+                description: Caps defines the spending caps with thresholds.
+                items:
+                  description: BudgetCap defines a spending cap with thresholds.
+                  properties:
+                    amount:
+                      description: Amount is the cap amount as a decimal string.
+                      pattern: ^\d+(\.\d{1,6})?$
+                      type: string
+                    period:
+                      description: Period is the time window for this cap.
+                      enum:
+                      - Monthly
+                      - Weekly
+                      - Daily
+                      type: string
+                    thresholds:
+                      description: Thresholds are the percentage trigger points within
+                        this cap.
+                      items:
+                        description: BudgetThreshold defines a percentage trigger
+                          point within a cap.
+                        properties:
+                          action:
+                            description: |-
+                              Action is the enforcement action to take when this threshold fires.
+                              Notify always fires alongside Throttle or Freeze.
+                            enum:
+                            - Notify
+                            - Throttle
+                            - Freeze
+                            type: string
+                          pct:
+                            description: Pct is the percentage of the cap amount at
+                              which this threshold fires.
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                        required:
+                        - action
+                        - pct
+                        type: object
+                      minItems: 1
+                      type: array
+                  required:
+                  - amount
+                  - period
+                  - thresholds
+                  type: object
+                minItems: 1
+                type: array
+              selector:
+                description: Selector optionally scopes the budget to a subset of
+                  the tenant's keys.
+                properties:
+                  keyLabels:
+                    additionalProperties:
+                      type: string
+                    description: KeyLabels matches API keys carrying these labels.
+                    type: object
+                type: object
+              tenantRef:
+                description: TenantRef references the TenantAccount this budget applies
+                  to.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+            required:
+            - caps
+            - tenantRef
+            type: object
+          status:
+            description: BudgetPolicyStatus defines the observed state of a BudgetPolicy.
+            properties:
+              capPeriodEnds:
+                description: |-
+                  CapPeriodEnds tracks the period boundary for each cap independently,
+                  allowing caps with different periods (Daily/Weekly/Monthly) to coexist.
+                items:
+                  description: CapPeriodEnd tracks the period boundary for a single
+                    cap.
+                  properties:
+                    capIndex:
+                      description: CapIndex identifies which cap in the spec this
+                        entry belongs to.
+                      format: int32
+                      type: integer
+                    periodEnd:
+                      description: PeriodEnd is the end of the current evaluation
+                        period for this cap (UTC).
+                      format: date-time
+                      type: string
+                  required:
+                  - capIndex
+                  - periodEnd
+                  type: object
+                type: array
+              conditions:
+                description: Conditions represent the latest available observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currentSpend:
+                description: |-
+                  CurrentSpend is the current period spend as a decimal string.
+                  Reflects the last-evaluated cap's spend.
+                type: string
+              firedThresholds:
+                description: |-
+                  FiredThresholds tracks which thresholds have fired in the current period.
+                  Reset on period rollover per cap.
+                items:
+                  description: FiredThreshold records a threshold that has already
+                    fired in the current period.
+                  properties:
+                    capIndex:
+                      description: CapIndex identifies which cap in the spec this
+                        threshold belongs to.
+                      format: int32
+                      type: integer
+                    firedAt:
+                      description: FiredAt is the timestamp when the threshold fired.
+                      format: date-time
+                      type: string
+                    pct:
+                      description: Pct is the threshold percentage that fired.
+                      format: int32
+                      type: integer
+                  required:
+                  - capIndex
+                  - firedAt
+                  - pct
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

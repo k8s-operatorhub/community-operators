@@ -1,0 +1,268 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  creationTimestamp: null
+  name: ociclusterautoscalers.capi.openshift.io
+spec:
+  group: capi.openshift.io
+  names:
+    kind: OCIClusterAutoscaler
+    listKind: OCIClusterAutoscalerList
+    plural: ociclusterautoscalers
+    singular: ociclusterautoscaler
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          OCIClusterAutoscaler is the Schema for the ociclusterautoscalers API.
+          The controller manages singleton cluster-scoped resources, so only one
+          OCIClusterAutoscaler may actively reconcile in a cluster.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OCIClusterAutoscalerSpec defines the desired state of OCIClusterAutoscaler
+            properties:
+              autoscaling:
+                description: Autoscaling configuration
+                properties:
+                  enableRdma:
+                    description: |-
+                      EnableRDMA places autoscaled nodes in an OCI Compute Cluster and enables the
+                      Compute HPC RDMA Authentication Oracle Cloud Agent plugin.
+                    type: boolean
+                  imageId:
+                    description: ImageID is the OCID of the custom RHCOS image for
+                      deploying new nodes during autoscaling
+                    type: string
+                  maxNodes:
+                    description: maxNodes is the maximum number of nodes in the autoscaling
+                      group
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  minNodes:
+                    description: minNodes is the minimum number of nodes in the autoscaling
+                      group
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  poolIdentifier:
+                    description: |-
+                      PoolIdentifier is an optional lowercase identifier appended to the CAPI cluster name
+                      when naming autoscaler node pool resources.
+                    maxLength: 5
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: poolIdentifier is immutable
+                      rule: self == oldSelf
+                  rdmaComputeClusterId:
+                    description: |-
+                      RDMAComputeClusterID is the OCID of the OCI Compute Cluster used by
+                      the RDMA worker pool.
+                    type: string
+                  rdmaFailureDomain:
+                    description: |-
+                      RDMAFailureDomain is the CAPI failure-domain key for the availability
+                      domain that contains the OCI Compute Cluster (for example, "1").
+                    type: string
+                  shape:
+                    description: nodeShape is the OCI compute shape for autoscaling
+                      nodes
+                    type: string
+                  shapeConfig:
+                    description: ShapeConfig contains flexible shape configuration
+                    properties:
+                      cpus:
+                        description: CPUs is the number of OCPUs
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      memory:
+                        description: Memory is the amount of memory in GB
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: minNodes must be less than or equal to maxNodes
+                  rule: '!has(self.minNodes) || !has(self.maxNodes) || self.minNodes
+                    <= self.maxNodes'
+              capi:
+                description: CAPI deployment configuration
+                properties:
+                  clusterName:
+                    description: ClusterName is the name of the CAPI cluster
+                    maxLength: 63
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: clusterName is immutable
+                      rule: self == oldSelf
+                type: object
+              clusterAutoscaler:
+                description: ClusterAutoscaler deployment configuration
+                properties:
+                  cloudProvider:
+                    description: CloudProvider is the cloud provider to use for the
+                      helm chart
+                    type: string
+                  createRBAC:
+                    description: |-
+                      CreateRBAC is whether or not to create the RBAC resources from the helm chart
+                      for the cluster-autoscaler
+                    type: boolean
+                  createServiceAccount:
+                    description: |-
+                      CreateServiceAccount is whether or not to create the service account
+                      from the helm chart for the cluster-autoscaler
+                    type: boolean
+                  name:
+                    description: Name is the name of the cluster-autoscaler deployment
+                    maxLength: 63
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: name is immutable
+                      rule: self == oldSelf
+                  repositoryURL:
+                    description: RepositoryURL is the URL for the helm chart of the
+                      cluster-autoscaler
+                    type: string
+                  serviceAccountName:
+                    description: ServiceAccountName is the name of the service account
+                      the cluster-autoscaler deployment will use
+                    maxLength: 63
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  version:
+                    description: Version is the helm chart version of the cluster-autoscaler
+                      to install
+                    type: string
+                type: object
+            required:
+            - autoscaling
+            type: object
+            x-kubernetes-validations:
+            - message: spec.capi.clusterName and spec.autoscaling.poolIdentifier must
+                produce a node pool name no longer than 51 characters
+              rule: '!has(self.capi) || !has(self.capi.clusterName) || size(self.capi.clusterName)
+                == 0 || ((!has(self.autoscaling.poolIdentifier) || size(self.autoscaling.poolIdentifier)
+                == 0) ? size(self.capi.clusterName) <= 51 : size(self.capi.clusterName)
+                + size(self.autoscaling.poolIdentifier) + 1 <= 51)'
+          status:
+            description: OCIClusterAutoscalerStatus defines the observed state of
+              OCIClusterAutoscaler
+            properties:
+              capiInstalled:
+                description: CAPIInstalled indicates whether CAPI components are installed
+                type: boolean
+              clusterAutoscalerDeployed:
+                description: ClusterAutoscalerDeployed indicates whether cluster-autoscaler
+                  is deployed
+                type: boolean
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the autoscaler's current state.
+                  Ready reflects the steady-state install/runtime path; CleanupSucceeded reports cleanup separately.
+                  Stable condition types are Ready, PolicyAccepted, ProvidersReady, AutoscalerReady,
+                  ScalingResourcesReady, and CleanupSucceeded.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the last generation observed by
+                  the controller
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase of the autoscaler
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

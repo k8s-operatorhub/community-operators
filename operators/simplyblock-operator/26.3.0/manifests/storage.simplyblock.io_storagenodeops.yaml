@@ -1,0 +1,201 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: storagenodeops.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: StorageNodeOps
+    listKind: StorageNodeOpsList
+    plural: storagenodeops
+    shortNames:
+    - snops
+    singular: storagenodeops
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.storageNodeRef
+      name: Node
+      type: string
+    - jsonPath: .spec.action
+      name: Action
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.subPhase
+      name: SubPhase
+      type: string
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          StorageNodeOps is a one-shot operational CR targeting a single StorageNode.
+          Analogous to a Kubernetes Job — it drives an action (shutdown, restart, suspend,
+          resume, remove/drain) to completion and records the result. Only one
+          StorageNodeOps can be active per StorageNode at a time.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StorageNodeOpsSpec defines the desired state of a StorageNodeOps.
+            properties:
+              action:
+                description: Action is the operation to perform. Immutable.
+                enum:
+                - shutdown
+                - restart
+                - suspend
+                - resume
+                - remove
+                - migrate
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              drain:
+                description: Drain configures the drain workflow. Only applicable
+                  when action=remove.
+                properties:
+                  systemVolumeFilterRegex:
+                    description: |-
+                      SystemVolumeFilterRegex is a Go regular expression matched against backend
+                      volume names. Matching volumes are treated as system volumes: excluded from
+                      drain migration and deleted inline during the Verifying phase.
+                      Defaults to "^sb-fio-baseline-.*".
+                    type: string
+                type: object
+              force:
+                description: Force enables forced execution where the backend supports
+                  it.
+                type: boolean
+              newSsdPcie:
+                description: |-
+                  NewSsdPcie lists additional NVMe PCIe addresses to bind on the target host
+                  during a migration. Passed through to the control-plane restart as
+                  new_ssd_pcie. Only applicable when action=migrate.
+                items:
+                  type: string
+                type: array
+              reattachVolume:
+                description: |-
+                  ReattachVolume reattaches volumes during the node restart.
+                  Applicable when action=restart or action=migrate.
+                type: boolean
+              storageNodeRef:
+                description: StorageNodeRef is the name of the target StorageNode.
+                  Immutable.
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              targetWorkerNode:
+                description: |-
+                  TargetWorkerNode is the Kubernetes worker hostname the storage node is
+                  relocated onto. Required (and only used) when action=migrate.
+
+                  A migration is NOT a drain/remove: the storage node keeps its backend UUID
+                  and its partition / logical-volume assignments follow it. The operator
+                  issues a control-plane restart pointed at the target host's
+                  storage-node-api (node_address), waits for the node to come back online
+                  there, then /promotes it (starting a rebalance) and re-points the
+                  StorageNode's spec.workerNode and the owning StorageNodeSet.workerNodes
+                  from the source worker to this one. No fresh storage node is provisioned
+                  and no VolumeMigration CRs are created. Immutable.
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+            required:
+            - action
+            - storageNodeRef
+            type: object
+            x-kubernetes-validations:
+            - message: field targetWorkerNode is immutable once set
+              rule: '!has(oldSelf.targetWorkerNode) || has(self.targetWorkerNode)'
+          status:
+            description: StorageNodeOpsStatus holds the observed state of a StorageNodeOps.
+            properties:
+              completedAt:
+                description: CompletedAt is when the operation finished (successfully
+                  or not).
+                format: date-time
+                type: string
+              message:
+                description: Message is a human-readable description of the current
+                  state or failure reason.
+                type: string
+              phase:
+                description: Phase is the high-level lifecycle phase.
+                enum:
+                - Pending
+                - Running
+                - Succeeded
+                - Failed
+                type: string
+              startedAt:
+                description: StartedAt is when the operation began.
+                format: date-time
+                type: string
+              subPhase:
+                description: SubPhase tracks the active drain step when action=remove
+                  and phase=Running.
+                enum:
+                - Validating
+                - Suspending
+                - Migrating
+                - Verifying
+                - Removing
+                - Preparing
+                - Restarting
+                - Promoting
+                type: string
+              triggered:
+                description: |-
+                  Triggered indicates the backend action POST has been sent (used during
+                  Suspending to avoid duplicate POSTs across reconcile iterations).
+                type: boolean
+              volumesMigrated:
+                description: VolumesMigrated is the count of volumes successfully
+                  migrated (drain only).
+                type: integer
+              volumesPending:
+                description: VolumesPending is the count of volumes awaiting migration
+                  (drain only).
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

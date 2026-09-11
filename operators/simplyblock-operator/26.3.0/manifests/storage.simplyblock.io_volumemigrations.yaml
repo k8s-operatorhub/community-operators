@@ -1,0 +1,247 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: volumemigrations.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: VolumeMigration
+    listKind: VolumeMigrationList
+    plural: volumemigrations
+    shortNames:
+    - vmig
+    singular: volumemigration
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.pvName
+      name: PV
+      type: string
+    - jsonPath: .spec.targetNodeUUID
+      name: Target Node
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.memberCount
+      name: Volumes
+      priority: 1
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          VolumeMigration triggers a storage-node migration for a single PersistentVolume.
+          Create a VolumeMigration to move a volume's backing logical volume to a different
+          storage node. The controller resolves the PV to a logical volume UUID, submits the
+          migration via the storage API, and tracks progress until completion or failure.
+          Set spec.abort=true to cancel an in-progress migration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VolumeMigrationSpec defines the desired state of a VolumeMigration.
+            properties:
+              abort:
+                description: |-
+                  Abort requests cancellation of an in-progress migration. Set to true to
+                  cancel; the phase will transition to Aborted once the backend confirms.
+                type: boolean
+              pvName:
+                description: |-
+                  PVName is the name of the PersistentVolume whose backing logical volume
+                  should be migrated. The PV must be provisioned by the simplyblock CSI driver.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              targetNodeUUID:
+                description: |-
+                  TargetNodeUUID is the UUID of the storage node that should host the
+                  volume after migration.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+            required:
+            - pvName
+            - targetNodeUUID
+            type: object
+          status:
+            description: VolumeMigrationStatus defines the observed state of a VolumeMigration.
+            properties:
+              clusterUUID:
+                description: ClusterUUID is the storage cluster UUID resolved from
+                  the PV.
+                type: string
+              completedAt:
+                description: CompletedAt is the time the migration finished (successfully
+                  or not).
+                format: date-time
+                type: string
+              connections:
+                description: |-
+                  Connections holds the NVMe-oF connection parameters for the new target-side
+                  paths returned by CreateMigration. Used during the Validating phase to
+                  establish and verify the paths before calling ContinueMigration, and again to
+                  release them if the migration never cuts over.
+
+                  These are the parameters the paths are actually connected with, not verbatim
+                  what CreateMigration answered: ctrlLossTmo is replaced with the value every
+                  path in this system uses, because a target path becomes the volume's data path
+                  at cutover. The rest is passed through.
+                items:
+                  description: |-
+                    MigrationConnection holds the NVMe-oF connection parameters for one path
+                    on the migration target node, as returned by the storage API's CreateMigration.
+                    All fields are passed verbatim to `nvme connect` in the validation Job.
+                  properties:
+                    ctrlLossTmo:
+                      type: integer
+                    fastIOFailTmo:
+                      type: integer
+                    ip:
+                      type: string
+                    keepAliveTmo:
+                      type: integer
+                    nqn:
+                      type: string
+                    nrIoQueues:
+                      type: integer
+                    port:
+                      type: integer
+                    reconnectDelay:
+                      type: integer
+                    transport:
+                      type: string
+                  required:
+                  - ip
+                  - nqn
+                  - port
+                  - transport
+                  type: object
+                type: array
+              deferredSince:
+                description: |-
+                  DeferredSince is when the storage API first refused to accept this migration
+                  because the cluster was busy with work that ends on its own (a data realignment
+                  or another node migration). While set, the migration is being retried and has
+                  not started. It bounds the retrying: past a fixed window the migration fails
+                  rather than waiting forever. Cleared once the migration is submitted.
+                format: date-time
+                type: string
+              errorMessage:
+                description: ErrorMessage holds the failure reason when Phase is Failed.
+                type: string
+              memberCount:
+                description: |-
+                  MemberCount is the number of volumes (namespaces) in the migrated
+                  subsystem, as reported by the storage API. More than one means the
+                  migration moves sibling volumes along with this one.
+                type: integer
+              migrationUUID:
+                description: |-
+                  MigrationUUID is the identifier returned by the storage API when the
+                  migration was submitted. Used for polling and cancellation.
+                type: string
+              phase:
+                description: Phase is the current lifecycle phase of the migration.
+                enum:
+                - Pending
+                - Validating
+                - Running
+                - Completed
+                - Failed
+                - Aborted
+                type: string
+              poolUUID:
+                description: PoolUUID is the storage pool UUID that contains the volume.
+                type: string
+              sourceNodeUUID:
+                description: |-
+                  SourceNodeUUID is the storage node UUID where the volume resided before
+                  migration, as reported by the storage API.
+                type: string
+              startedAt:
+                description: StartedAt is the time the migration was submitted to
+                  the storage API.
+                format: date-time
+                type: string
+              subsystemNQN:
+                description: |-
+                  SubsystemNQN is the NQN of the volume's NVMe subsystem, resolved from the
+                  storage API when the migration is submitted. The migration is addressed by
+                  it, and every volume sharing the subsystem moves with it.
+                type: string
+              validationJobs:
+                description: |-
+                  ValidationJobs are the Jobs that run `nvme connect` for each connection path
+                  and validate ANA state before ContinueMigration is called — one per worker
+                  node that consumes a volume of the migrated subsystem. A subsystem migrates
+                  as a unit, so every consuming node must have the new paths before cutover;
+                  all of these Jobs must succeed. Set during the Validating phase; cleared when
+                  the phase advances to Running.
+                items:
+                  description: |-
+                    ValidationJob is one NVMe path-validation Job and the worker node it runs on.
+                    The node is a consumer of some volume in the migrated subsystem — the volume named
+                    in the spec, or one of its siblings sharing the same NVMe subsystem.
+                  properties:
+                    jobName:
+                      description: JobName is the name of the Job object in the VolumeMigration's
+                        namespace.
+                      type: string
+                    node:
+                      description: Node is the Kubernetes node name the Job is pinned
+                        to.
+                      type: string
+                    succeeded:
+                      description: |-
+                        Succeeded records that this node's validation passed. It is kept because the
+                        Job's own existence is not a reliable record: Jobs are reaped, and re-reading a
+                        reaped Job would otherwise look like "never validated" and start it again.
+                      type: boolean
+                  required:
+                  - jobName
+                  - node
+                  type: object
+                type: array
+              volumeUUID:
+                description: VolumeUUID is the logical volume UUID resolved from the
+                  PV's CSI volume handle.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,459 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "k8boss.io/v1alpha1",
+          "kind": "PlatformConfig",
+          "metadata": {
+            "name": "default"
+          },
+          "spec": {
+            "flowProvider": "Hubble",
+            "paused": false
+          }
+        },
+        {
+          "apiVersion": "k8boss.io/v1alpha1",
+          "kind": "RuntimeSecurityPolicy",
+          "metadata": {
+            "name": "payments-api-runtime"
+          },
+          "spec": {
+            "deniedBinaries": [
+              "/bin/sh",
+              "/bin/bash",
+              "/usr/bin/nc"
+            ],
+            "selector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "payments-api"
+              }
+            },
+            "tracingPolicyRef": "block-shell-exec"
+          }
+        },
+        {
+          "apiVersion": "k8boss.io/v1alpha1",
+          "kind": "SegmentationPolicy",
+          "metadata": {
+            "name": "payments-api-segmentation"
+          },
+          "spec": {
+            "egress": [
+              {
+                "peerSelector": {
+                  "app.kubernetes.io/name": "payments-db"
+                },
+                "ports": [
+                  5432
+                ]
+              }
+            ],
+            "ingress": [
+              {
+                "peerNamespace": "storefront",
+                "peerSelector": {
+                  "app.kubernetes.io/name": "checkout-web"
+                },
+                "ports": [
+                  8443
+                ]
+              }
+            ],
+            "providerRef": "Hubble",
+            "selector": {
+              "matchLabels": {
+                "app.kubernetes.io/name": "payments-api"
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Security,Networking,Monitoring
+    containerImage: ghcr.io/aesaganda/k8boss-operator@sha256:4fffce07f23a34b3291caf32c51bec38032ff46f29bf846b57284263ca8c5f43
+    createdAt: "2026-09-10T00:00:00Z"
+    description: Reconciles Kubernetes-native segmentation and runtime-security intent
+      into the K8Boss Knowledge Graph, with evidence.
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/aesaganda/k8boss-operator
+    support: https://github.com/aesaganda/k8boss-operator/issues
+  labels:
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "true"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+  name: k8boss-operator.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: 'Cluster-wide K8Boss operator configuration. Exactly one instance,
+        named "default", governs the cluster: it selects the flow-telemetry provider
+        and holds the kill switch that halts every K8Boss reconciler. An instance
+        under any other name reports NotSingleton and governs nothing.'
+      displayName: Platform Config
+      kind: PlatformConfig
+      name: platformconfigs.k8boss.io
+      resources:
+      - kind: SegmentationPolicy
+        name: ""
+        version: v1alpha1
+      - kind: RuntimeSecurityPolicy
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: Which FlowProvider backs flow telemetry for this cluster. This
+          is observability only — enforcement is the CNI's job, and K8Boss does not
+          claim to observe enforcement.
+        displayName: Flow Provider
+        path: flowProvider
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:RHNO
+        - urn:alm:descriptor:com.tectonic.ui:select:Hubble
+        - urn:alm:descriptor:com.tectonic.ui:select:Calico
+        - urn:alm:descriptor:com.tectonic.ui:select:Goldmane
+        - urn:alm:descriptor:com.tectonic.ui:select:Mock
+      - description: Halts every K8Boss reconciler without deleting or deregistering
+          anything already reconciled. Defaults to TRUE so that a freshly installed
+          operator cannot silently begin mutating cluster state.
+        displayName: Paused
+        path: paused
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+      statusDescriptors:
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      - description: One entry per provider the control plane reported, including
+          providers whose health could NOT be determined (health=Unknown with a reason).
+          A missing entry never means healthy.
+        displayName: Provider Health
+        path: providerHealth
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Provider Health
+      - displayName: Observed Generation
+        path: observedGeneration
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      version: v1alpha1
+    - description: Attaches K8Boss Knowledge Graph evidence to an EXISTING Tetragon
+        TracingPolicy for a set of workloads. It does not replace, generate or install
+        Tetragon policy — K8Boss verifies what Tetragon reports.
+      displayName: Runtime Security Policy
+      kind: RuntimeSecurityPolicy
+      name: runtimesecuritypolicies.k8boss.io
+      specDescriptors:
+      - displayName: Workload Selector
+        path: selector.matchLabels
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:selector:core:v1:Pod
+      - description: Name of an existing Tetragon TracingPolicy in this namespace.
+          K8Boss correlates evidence against it; it does not create it.
+        displayName: Tetragon TracingPolicy
+        path: tracingPolicyRef
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Absolute paths whose execution K8Boss treats as a violation when
+          correlating runtime evidence for the selected workloads.
+        displayName: Denied Binaries
+        path: deniedBinaries
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      statusDescriptors:
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      - displayName: Observed Generation
+        path: observedGeneration
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      version: v1alpha1
+    - description: Declares network segmentation intent for a set of workloads in
+        one namespace. K8Boss reconciles that intent through its control-plane API
+        and records it in the Knowledge Graph with evidence; it does not itself program
+        the data plane.
+      displayName: Segmentation Policy
+      kind: SegmentationPolicy
+      name: segmentationpolicies.k8boss.io
+      specDescriptors:
+      - description: Labels selecting the workloads this policy governs, within its
+          own namespace.
+        displayName: Workload Selector
+        path: selector.matchLabels
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:selector:core:v1:Pod
+      - displayName: Ingress Rules
+        path: ingress
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Ingress
+      - displayName: Egress Rules
+        path: egress
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Egress
+      - description: Overrides PlatformConfig.spec.flowProvider for this policy only.
+          Empty uses the cluster default.
+        displayName: Flow Provider Override
+        path: providerRef
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      statusDescriptors:
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      - description: Which FlowProvider this policy was reconciled under. NOT a claim
+          that anything is enforcing the policy — it is set only on the confirmed-success
+          path.
+        displayName: Resolved Flow Provider
+        path: resolvedFlowProvider
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - displayName: Observed Generation
+        path: observedGeneration
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:hidden
+      version: v1alpha1
+  description: |
+    K8Boss gives you visibility into Kubernetes network policy, service-mesh
+    posture, runtime process activity and GitOps delivery. It reads clusters,
+    correlates what it finds, and routes every mutation through governance.
+
+    This operator is the **Kubernetes-native intent layer** for that platform.
+    It turns three CRDs into reconciled, evidence-backed facts in the K8Boss
+    Knowledge Graph:
+
+    * **SegmentationPolicy** — network segmentation intent for a set of
+      workloads in a namespace.
+    * **RuntimeSecurityPolicy** — attaches Knowledge Graph evidence to an
+      existing Tetragon `TracingPolicy`.
+    * **PlatformConfig** — a cluster-scoped singleton that selects the flow
+      telemetry provider and holds the kill switch.
+
+    ### Requires a K8Boss control plane — this operator does not install one
+
+    This operator is a **bridge**, not an installer. Every reconcile is an
+    authenticated call to a K8Boss backend that must already be running, and
+    the operator writes nothing to a database directly. The operator is open
+    source (Apache-2.0); the K8Boss control plane it talks to is a separate,
+    commercially licensed product and is **not** installed by this operator.
+    Before it can do any work you need:
+
+    1. A K8Boss control plane, deployed separately via its Helm chart.
+    2. This cluster registered in that control plane, which yields a numeric
+       cluster id.
+    3. An operator API token that matches `OPERATOR_API_TOKEN` on the backend.
+
+    Installed without those, the operator comes up **healthy and idle** and
+    says so on the CR status conditions rather than pretending to work. It
+    deliberately distinguishes "nobody has told us where the backend is" from
+    "the backend is down" — reporting the second as the first would be a claim
+    the system cannot support.
+
+    ### Design commitments
+
+    * **No edge without evidence.** Every graph edge the operator creates
+      records why it exists, where that came from and how sure it is.
+    * **Time is a property of the edge.** Deleting a CR *closes* its edges
+      through a finalizer; nothing is hard-deleted, so history stays queryable.
+    * **Paused by default.** `PlatformConfig.spec.paused` defaults to `true`,
+      so an operator with no configuration applied cannot silently start
+      mutating cluster state.
+
+    ### Licence
+
+    This operator is licensed under the Apache License 2.0. The K8Boss control
+    plane is a separate commercial product under its own terms.
+  displayName: K8Boss
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdHlsZT0ic3RvcC1jb2xvcjojM2I4MmY2Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3R5bGU9InN0b3AtY29sb3I6IzYzNjZmMSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0idXJsKCNnKSIvPgogIDx0ZXh0IHg9IjE2IiB5PSIyMiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXdlaWdodD0iYm9sZCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiPks4PC90ZXh0Pgo8L3N2Zz4=
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - k8boss.io
+          resources:
+          - platformconfigs
+          - runtimesecuritypolicies
+          - segmentationpolicies
+          verbs:
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - k8boss.io
+          resources:
+          - platformconfigs/status
+          - runtimesecuritypolicies/status
+          - segmentationpolicies/status
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - k8boss.io
+          resources:
+          - runtimesecuritypolicies/finalizers
+          - segmentationpolicies/finalizers
+          verbs:
+          - update
+        serviceAccountName: k8boss-operator
+      deployments:
+      - label:
+          app.kubernetes.io/component: operator
+          app.kubernetes.io/name: k8boss-operator
+        name: k8boss-operator
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/component: operator
+              app.kubernetes.io/name: k8boss-operator
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/component: operator
+                app.kubernetes.io/name: k8boss-operator
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: kubernetes.io/arch
+                        operator: In
+                        values:
+                        - amd64
+                        - arm64
+                      - key: kubernetes.io/os
+                        operator: In
+                        values:
+                        - linux
+              containers:
+              - args:
+                - --leader-elect=true
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                env:
+                - name: K8BOSS_CLUSTER_ID
+                - name: K8BOSS_BACKEND_URL
+                  value: http://k8boss-backend.k8boss-system.svc:8010
+                - name: K8BOSS_OPERATOR_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      key: token
+                      name: k8boss-operator
+                      optional: true
+                image: ghcr.io/aesaganda/k8boss-operator@sha256:4fffce07f23a34b3291caf32c51bec38032ff46f29bf846b57284263ca8c5f43
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: probes
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 8081
+                  name: probes
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: probes
+                  initialDelaySeconds: 5
+                  periodSeconds: 20
+                  timeoutSeconds: 5
+                resources:
+                  limits:
+                    memory: 256Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: k8boss-operator
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - create
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: k8boss-operator
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - networkpolicy
+  - segmentation
+  - zero-trust
+  - service-mesh
+  - tetragon
+  - runtime-security
+  - knowledge-graph
+  - gitops
+  links:
+  - name: Source
+    url: https://github.com/aesaganda/k8boss-operator
+  - name: Documentation
+    url: https://github.com/aesaganda/k8boss-operator#readme
+  - name: Issues
+    url: https://github.com/aesaganda/k8boss-operator/issues
+  maintainers:
+  - email: erensaganda@gmail.com
+    name: Eren Saganda
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: Eren Saganda
+    url: https://github.com/aesaganda/k8boss-operator
+  relatedImages:
+  - image: ghcr.io/aesaganda/k8boss-operator@sha256:4fffce07f23a34b3291caf32c51bec38032ff46f29bf846b57284263ca8c5f43
+    name: manager
+  version: 0.1.0

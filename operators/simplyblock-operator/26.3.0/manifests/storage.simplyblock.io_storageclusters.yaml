@@ -1,0 +1,640 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: storageclusters.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: StorageCluster
+    listKind: StorageClusterList
+    plural: storageclusters
+    singular: storagecluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Backend-reported cluster lifecycle status
+      jsonPath: .status.status
+      name: Status
+      type: string
+    - description: Backend cluster UUID
+      jsonPath: .status.uuid
+      name: UUID
+      type: string
+    - description: Whether initial cluster setup has completed
+      jsonPath: .status.configured
+      name: Configured
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: StorageCluster is the Schema for the storageclusters API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of StorageCluster
+            properties:
+              action:
+                description: Action triggers a cluster-level action.
+                enum:
+                - activate
+                - expand
+                - shutdown
+                - start
+                - restart
+                - node-recycle
+                type: string
+              backup:
+                description: Backup specifies the specification for backup to S3 configuration
+                properties:
+                  credentialsSecretRef:
+                    description: CredentialsSecretRef points to the Secret holding
+                      access_key_id and secret_access_key.
+                    properties:
+                      name:
+                        description: Name is the name of the Secret in the same namespace
+                          as the cluster CR.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  localEndpoint:
+                    pattern: ^https?://[a-zA-Z0-9.-]+(:[0-9]{1,5})?(/.*)?$
+                    type: string
+                  localTesting:
+                    type: boolean
+                  secondaryTarget:
+                    format: int32
+                    type: integer
+                  snapshotBackups:
+                    type: boolean
+                  withCompression:
+                    type: boolean
+                required:
+                - credentialsSecretRef
+                type: object
+              clientDataIfname:
+                description: ClientDataIfname defines the client data network interface.
+                type: string
+              criticalThreshold:
+                description: CriticalThresholdSpec defines critical-level capacity
+                  thresholds.
+                properties:
+                  capacity:
+                    description: Capacity defines the absolute capacity threshold
+                      value.
+                    format: int32
+                    type: integer
+                  provisionedCapacity:
+                    description: ProvisionedCapacity defines the provisioned-capacity
+                      threshold value.
+                    format: int32
+                    type: integer
+                type: object
+              enableFailureDomains:
+                description: |-
+                  EnableFailureDomains opts the cluster into failure-domain mode. When enabled, every
+                  storage node must declare a failure-domain group so the control plane can spread
+                  erasure-coding chunks across independent fault groups. Immutable once set — failure-
+                  domain mode cannot be toggled on a live cluster.
+                type: boolean
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              enableNodeAffinity:
+                description: EnableNodeAffinity enables node-affinity placement for
+                  storage components.
+                type: boolean
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              fabricType:
+                description: FabricType defines the storage fabric type.
+                type: string
+              hashicorpVaultSettings:
+                description: HashicorpVaultSettings configures the Vault endpoint
+                  used by the cluster for key storage.
+                properties:
+                  baseURL:
+                    description: BaseURL is the HashiCorp Vault endpoint (e.g. https://vault.example.com:8200).
+                    pattern: ^https?://[a-zA-Z0-9.-]+(:[0-9]{1,5})?(/.*)?$
+                    type: string
+                type: object
+              maxConcurrentWorkerRestarts:
+                description: |-
+                  MaxConcurrentWorkerRestarts is the maximum number of Kubernetes worker nodes the operator
+                  may drain and restart simultaneously. The effective concurrency applied by the drain
+                  coordinator is min(MaxConcurrentWorkerRestarts, MaxFaultTolerance).
+                  Defaults to 1 when unset.
+                format: int32
+                minimum: 1
+                type: integer
+              maxHugePagesSize:
+                description: |-
+                  MaxHugePagesSize is the maximum allocatable size of huge pages on each
+                  storage node (e.g. "100G", "1T"; a bare number is interpreted as GB). It is
+                  a floor, not a cap: the effective huge-page allocation is the larger of this
+                  value and the minimum the node's device and subsystem count requires. When
+                  omitted the computed minimum is used.
+                type: string
+              maxSubsystemCount:
+                description: |-
+                  MaxSubsystemCount is the maximum number of NVMe-oF subsystems per storage
+                  node. Applies to every storage node in the cluster. Required: it sizes huge
+                  pages, and a node that receives no value fails config generation outright
+                  rather than falling back to a default.
+                format: int32
+                maximum: 75
+                minimum: 10
+                type: integer
+              nodeRecycle:
+                description: NodeRecycle configures the node-recycle action.
+                properties:
+                  refreshSNodeAPI:
+                    description: |-
+                      RefreshSNodeAPI restarts the storage-node DaemonSet pod on each node
+                      after the backend node is shut down and before it is restarted, ensuring
+                      the latest image is running before the node comes back online.
+                    type: boolean
+                type: object
+              nvmfBasePort:
+                description: NvmfBasePort defines the base NVMf service port.
+                format: int32
+                type: integer
+              rpcBasePort:
+                description: RpcBasePort defines the base RPC service port.
+                format: int32
+                type: integer
+              snodeApiPort:
+                description: SnodeApiPort defines the storage-node API port.
+                format: int32
+                type: integer
+              stripe:
+                description: StripeSpec configures erasure-coding data/parity chunk
+                  counts.
+                properties:
+                  dataChunks:
+                    description: DataChunks defines the number of data chunks in the
+                      erasure-coding layout.
+                    format: int32
+                    type: integer
+                  parityChunks:
+                    description: ParityChunks defines the number of parity chunks
+                      in the erasure-coding layout.
+                    format: int32
+                    type: integer
+                type: object
+              vcpuCount:
+                description: |-
+                  VCPUCount is the number of vCPUs allocated to SPDK on each storage node.
+                  This is an explicit core count, not a percentage. Required: the core layout
+                  it produces must match across the cluster, so it is stated rather than left
+                  to a per-node heuristic.
+                format: int32
+                minimum: 6
+                type: integer
+              volumeAutoPlacement:
+                description: |-
+                  VolumeAutoPlacement configures automatic, latency-driven volume rebalancing. When
+                  nil/disabled the operator performs only manually-triggered VolumeMigrations.
+                properties:
+                  defaultCoolDownSeconds:
+                    description: |-
+                      DefaultCoolDownSeconds is the cool-down period (seconds) applied to a volume after
+                      it has been migrated. Defaults to 600.
+                    format: int32
+                    type: integer
+                  enabled:
+                    description: Enabled activates automatic rebalancing for this
+                      cluster. Defaults to false.
+                    type: boolean
+                  evaluationInterval:
+                    description: EvaluationInterval is how often the rebalancer evaluates
+                      load. Defaults to 60s.
+                    type: string
+                  imbalanceThreshold:
+                    description: |-
+                      ImbalanceThreshold is the minimum latency deviation from baseline (in percent)
+                      that a node must exhibit before it is considered a rebalancing source. Defaults to 80.
+                    format: int32
+                    type: integer
+                  iopsWeight:
+                    description: IOPSWeight is the weight applied to per-volume IOPS
+                      in the volume IO score. Defaults to 1.0.
+                    type: number
+                  latencyBenchmarkEnabled:
+                    description: |-
+                      LatencyBenchmarkEnabled enables fio-based NVMe-oF latency measurement via Kubernetes Jobs.
+                      Defaults to false; set to true once a RebalancerImage is configured.
+                    type: boolean
+                  latencyBenchmarkInterval:
+                    description: |-
+                      LatencyBenchmarkInterval is how often fio benchmark Jobs run against each storage node.
+                      Defaults to 5m.
+                    type: string
+                  maxVolumeMigrationsPerCycle:
+                    description: MaxVolumeMigrationsPerCycle is the maximum number
+                      of volumes moved per cycle. Defaults to 10.
+                    format: int32
+                    type: integer
+                  metricsBackend:
+                    description: MetricsBackend selects the data source for I/O metrics.
+                      Defaults to "prometheus".
+                    enum:
+                    - controlplane
+                    - prometheus
+                    - uniform
+                    type: string
+                  migrationEnabled:
+                    description: |-
+                      MigrationEnabled controls whether the rebalancer actually creates VolumeMigration
+                      CRs. When false the rebalancer still runs every cycle — evaluating load, computing
+                      deviations, selecting candidates and emitting metrics — but discards the migrations
+                      instead of creating them (dry-run). Defaults to true.
+                    type: boolean
+                  minHotColdDifferencePct:
+                    description: |-
+                      MinHotColdDifferencePct is the minimum latency-deviation gap (in percentage points)
+                      that a candidate target node must be below the hot source node before a migration is
+                      performed. Prevents migrating between near-equally-loaded nodes. Defaults to 20.
+                    format: int32
+                    type: integer
+                  prometheusURL:
+                    description: PrometheusURL is required when MetricsBackend is
+                      "prometheus".
+                    type: string
+                  storageNodeCandidateCount:
+                    description: |-
+                      StorageNodeCandidateCount is the number of top-loaded nodes evaluated each cycle to
+                      find the best migration source. Defaults to 3.
+                    format: int32
+                    type: integer
+                  throughputWeight:
+                    description: |-
+                      ThroughputWeight is the weight applied to per-volume throughput (MB/s) in the volume
+                      IO score. Defaults to 0.1.
+                    type: number
+                type: object
+              volumeMigrationSettings:
+                description: VolumeMigrationSettings controls volume migration for
+                  this cluster.
+                properties:
+                  dataRealignment:
+                    description: |-
+                      DataRealignment configures the periodic control-plane data realignment that
+                      runs after volumes have been moved. Realignment re-aligns the cluster's internal
+                      data structures to the current volume placement so fault-tolerance (FTT) and
+                      node-affinity guarantees are preserved. It applies to *all* volume moves —
+                      auto-rebalancing, manual VolumeMigrations, and drain/removal-triggered moves —
+                      so it lives here rather than under AutoRebalancing. Enabled by default.
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled activates automatic post-migration data realignment for this cluster.
+                          Defaults to true.
+                        type: boolean
+                      interval:
+                        description: |-
+                          Interval is how often the operator checks whether a realignment is pending
+                          (i.e. at least one volume has moved since the last successful realignment) and,
+                          if so, triggers it. Explicit triggers (see the
+                          simplyblock.io/trigger-realignment annotation) bypass this spacing. Defaults to
+                          10m.
+
+                          Note that this is a floor on the spacing between realignment *requests*, not a
+                          ceiling on how long one takes: a realignment blocks all volume migrations for as
+                          long as the control plane needs, which on a busy cluster has been measured at
+                          tens of minutes. An interval shorter than that means the next realignment is
+                          requested as soon as the previous one finishes and any volume has moved, which is
+                          what MinMoves exists to damp.
+                        type: string
+                      minMoves:
+                        description: |-
+                          MinMoves is how many volume moves must accumulate before a realignment is
+                          triggered. Defaults to 1: every completed migration schedules a realignment.
+
+                          Raise it to batch. Because the control plane refuses new migrations while a
+                          realignment runs, a value of 1 makes the two alternate — one migration completes,
+                          a realignment follows and blocks migrations until it is done. On a cluster where
+                          realignment takes tens of minutes that is most of the available time, so a run
+                          that migrates continuously spends the majority of it waiting. A higher value
+                          trades realignment promptness (data structures stay unaligned for longer, so
+                          fault-tolerance and node-affinity guarantees are restored later) for migration
+                          throughput.
+
+                          Explicit triggers (the simplyblock.io/trigger-realignment annotation) ignore this
+                          threshold, so a drain or node removal still realigns immediately.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  enabled:
+                    description: |-
+                      Enabled turns on volume migration for this cluster. When false, the operator
+                      will not act on VolumeMigration resources for this cluster. Defaults to true.
+                    type: boolean
+                  rebalancerImage:
+                    description: |-
+                      RebalancerImage is the container image used for the volume-migration path
+                      validation Job and the rebalancer latency/baseline Jobs. The image must include
+                      nvme-cli (and, for rebalancing, fio + jq).
+                    type: string
+                type: object
+              warningThreshold:
+                description: WarningThresholdSpec defines warning-level capacity thresholds.
+                properties:
+                  capacity:
+                    description: Capacity defines the absolute capacity threshold
+                      value.
+                    format: int32
+                    type: integer
+                  provisionedCapacity:
+                    description: ProvisionedCapacity defines the provisioned-capacity
+                      threshold value.
+                    format: int32
+                    type: integer
+                type: object
+            required:
+            - maxSubsystemCount
+            - vcpuCount
+            type: object
+            x-kubernetes-validations:
+            - message: field enableNodeAffinity is immutable once set
+              rule: '!has(oldSelf.enableNodeAffinity) || has(self.enableNodeAffinity)'
+            - message: field enableFailureDomains is immutable once set
+              rule: '!has(oldSelf.enableFailureDomains) || has(self.enableFailureDomains)'
+            - message: fabricType is immutable once set
+              rule: '!has(oldSelf.fabricType) || self.fabricType == oldSelf.fabricType'
+            - message: hashicorpVaultSettings is immutable once set
+              rule: '!has(oldSelf.hashicorpVaultSettings) || self.hashicorpVaultSettings
+                == oldSelf.hashicorpVaultSettings'
+            - message: stripe is immutable once set
+              rule: '!has(oldSelf.stripe) || self.stripe == oldSelf.stripe'
+            - message: nvmfBasePort is immutable once set
+              rule: '!has(oldSelf.nvmfBasePort) || self.nvmfBasePort == oldSelf.nvmfBasePort'
+            - message: rpcBasePort is immutable once set
+              rule: '!has(oldSelf.rpcBasePort) || self.rpcBasePort == oldSelf.rpcBasePort'
+            - message: snodeApiPort is immutable once set
+              rule: '!has(oldSelf.snodeApiPort) || self.snodeApiPort == oldSelf.snodeApiPort'
+          status:
+            description: status defines the observed state of StorageCluster
+            properties:
+              actionStatus:
+                description: ActionStatus tracks the most recent action execution
+                  state.
+                properties:
+                  action:
+                    description: Action is the requested action name.
+                    type: string
+                  message:
+                    description: Message is a human-readable action result or error.
+                    type: string
+                  nodeUUID:
+                    description: NodeUUID is the target node UUID for the action.
+                    type: string
+                  observedGeneration:
+                    description: ObservedGeneration is the resource generation observed
+                      by this status.
+                    format: int64
+                    type: integer
+                  state:
+                    type: string
+                  subPhase:
+                    description: SubPhase tracks the active drain step within the
+                      remove action.
+                    enum:
+                    - Validating
+                    - Suspending
+                    - Migrating
+                    - Verifying
+                    - Removing
+                    type: string
+                  triggered:
+                    description: Triggered indicates whether the underlying backend
+                      action has been fired.
+                    type: boolean
+                  updatedAt:
+                    description: UpdatedAt is the timestamp of the last status transition.
+                    format: date-time
+                    type: string
+                  volumesMigrated:
+                    description: VolumesMigrated is the count of volumes successfully
+                      migrated so far.
+                    type: integer
+                  volumesPending:
+                    description: VolumesPending is the count of volumes still awaiting
+                      migration.
+                    type: integer
+                type: object
+              clusterName:
+                description: ClusterName is the resolved backend cluster name.
+                type: string
+              configured:
+                description: Configured indicates whether initial cluster setup completed.
+                type: boolean
+              created:
+                description: |-
+                  Created is the backend creation timestamp.
+                  FIXME: Unused for now (API update required?)
+                format: date-time
+                type: string
+              erasureCodingScheme:
+                description: ErasureCodingScheme is the active erasure-coding layout,
+                  for example "2x1".
+                type: string
+              lastDataRealignmentAt:
+                description: |-
+                  LastDataRealignmentAt is the time of the last successful control-plane data
+                  realignment. It is used to space realignments by DataRealignment.Interval and to
+                  avoid re-running at the end of an interval when nothing is pending.
+                format: date-time
+                type: string
+              lastUpdated:
+                description: |-
+                  LastUpdated is the last backend update timestamp.
+                  FIXME: Unused for now (API update required?)
+                format: date-time
+                type: string
+              maxConcurrentWorkerRestarts:
+                description: |-
+                  MaxConcurrentWorkerRestarts is the effective concurrent-restart limit applied
+                  by the drain coordinator: min(spec.MaxConcurrentWorkerRestarts, MaxFaultTolerance).
+                  Defaults to 1. Exposed here so controllers and tooling can read a single
+                  authoritative value without re-computing it.
+                format: int32
+                type: integer
+              maxFaultTolerance:
+                description: |-
+                  MaxFaultTolerance is the backend-reported maximum number of nodes that can
+                  be simultaneously offline (failed, drained, or restarted) without violating
+                  the cluster's redundancy guarantees.
+                format: int32
+                type: integer
+              mgmtNodes:
+                description: |-
+                  MgmtNodes is the number of management nodes.
+                  FIXME: Unused for now (API update required?)
+                format: int32
+                type: integer
+              nodeRecycleStatus:
+                description: NodeRecycleStatus tracks in-progress state for the node-recycle
+                  action.
+                properties:
+                  nodePhase:
+                    description: |-
+                      NodePhase is the current step for the node being recycled:
+                      "snode-refresh" | "snode-refresh-wait" | "shutting-down" | "restarting" | "rebalancing"
+                    type: string
+                  pendingNodes:
+                    description: PendingNodes is the ordered list of node UUIDs still
+                      to be recycled.
+                    items:
+                      type: string
+                    type: array
+                  phaseTriggered:
+                    description: PhaseTriggered indicates the API call for the current
+                      NodePhase was already sent.
+                    type: boolean
+                  processedNodes:
+                    description: ProcessedNodes is the list of node UUIDs already
+                      recycled.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              nqn:
+                description: NQN is the cluster NVM subsystem qualified name.
+                type: string
+              phase:
+                description: |-
+                  Phase tracks the cluster creation lifecycle to prevent concurrent reconcilers
+                  from creating duplicate clusters. Set to "creation" while a creation is in
+                  progress and cleared once the cluster UUID is persisted.
+                type: string
+              realignedGeneration:
+                description: |-
+                  RealignedGeneration is the VolumeMoveGeneration that the last successfully
+                  requested realignment covers. A realignment is outstanding while
+                  VolumeMoveGeneration exceeds it.
+
+                  This is recorded from the value read *before* the request is sent, because that
+                  is what the realignment can actually account for: a migration completing while
+                  the request is in flight raises VolumeMoveGeneration past it and so correctly
+                  leaves another realignment outstanding, instead of being swallowed by the one
+                  already running.
+                format: int64
+                type: integer
+              rebalancing:
+                description: Rebalancing indicates whether cluster rebalancing is
+                  currently active.
+                type: boolean
+              rebalancingMetrics:
+                description: RebalancingMetrics is updated by the auto-rebalancer
+                  each evaluation cycle.
+                properties:
+                  avgDeviationPct:
+                    description: AvgDeviationPct is the mean latency deviation across
+                      all nodes.
+                    type: number
+                  coolestNodeUUID:
+                    type: string
+                  hottestNodeUUID:
+                    type: string
+                  imbalancePercent:
+                    type: number
+                  lastEvaluatedAt:
+                    format: date-time
+                    type: string
+                  lastMigrationAt:
+                    format: date-time
+                    type: string
+                  maxDeviationPct:
+                    description: MaxDeviationPct is the highest per-node latency deviation
+                      (used as ImbalancePercent).
+                    type: number
+                  nodeMetrics:
+                    items:
+                      description: NodeLoadMetrics holds the latency deviation state
+                        for a single storage node.
+                      properties:
+                        lastUpdated:
+                          format: date-time
+                          type: string
+                        latencyDeviationPct:
+                          type: number
+                        nodeUUID:
+                          type: string
+                        volumeCount:
+                          type: integer
+                      required:
+                      - lastUpdated
+                      - latencyDeviationPct
+                      - nodeUUID
+                      - volumeCount
+                      type: object
+                    type: array
+                required:
+                - avgDeviationPct
+                - coolestNodeUUID
+                - hottestNodeUUID
+                - imbalancePercent
+                - maxDeviationPct
+                type: object
+              status:
+                description: Status is the backend-reported lifecycle status.
+                type: string
+              storageNodes:
+                description: |-
+                  StorageNodes is the number of storage nodes.
+                  FIXME: Unused for now (API update required?)
+                format: int32
+                type: integer
+              subPhase:
+                description: |-
+                  SubPhase tracks the step within the current Phase. Reserved for future
+                  sub-state machine expansion; currently only "creating" is used.
+                type: string
+              uuid:
+                description: UUID is the backend cluster UUID.
+                type: string
+              volumeMoveGeneration:
+                description: |-
+                  VolumeMoveGeneration counts completed volume moves. Every migration that reaches
+                  Completed increments it, and nothing else writes it, so it only ever grows.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

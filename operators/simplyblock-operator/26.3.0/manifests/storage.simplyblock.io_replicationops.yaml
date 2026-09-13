@@ -1,0 +1,180 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: replicationops.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: ReplicationOps
+    listKind: ReplicationOpsList
+    plural: replicationops
+    shortNames:
+    - replops
+    singular: replicationops
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.action
+      name: Action
+      type: string
+    - jsonPath: .spec.scope
+      name: Scope
+      type: string
+    - jsonPath: .spec.ref
+      name: Ref
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.subphase
+      name: Subphase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ReplicationOps is a one-shot user-driven CR for imperative replication operations:
+          failover (planned or unplanned) and failback. The operator drives the backend calls
+          to completion and records per-volume outcomes in status.results. Only one ReplicationOps
+          may be active per ReplicationPolicy at a time, enforced via ReplicationPolicy.status.activeOpsRef.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReplicationOpsSpec defines the desired state of a ReplicationOps.
+            properties:
+              action:
+                description: |-
+                  Action is the operation to perform. Immutable.
+                  failover:  unplanned — promote target clone, source may be down.
+                  failback:  restore source as primary after a prior failover.
+                  migration: planned cutover — calls replication_commit per volume; both clusters stay up.
+                             State progression: replicating → cutover_pending → cutover_done.
+                enum:
+                - failover
+                - failback
+                - migration
+                type: string
+              deleteSource:
+                description: |-
+                  DeleteSource instructs the backend to delete the source volume after a
+                  successful migration cutover. Only meaningful when action=migration.
+                type: boolean
+              ref:
+                description: |-
+                  Ref is the name of the resource identified by Scope:
+                  a ReplicationPair name for scope=target,
+                  a ReplicationPolicy name for scope=policy,
+                  or a ReplicationSlot name for scope=volume. Immutable.
+                type: string
+              scope:
+                description: |-
+                  Scope controls which volumes are affected. Immutable.
+                  target: all volumes across every policy that uses the named ReplicationPair.
+                  policy: all volumes managed by the named ReplicationPolicy CR.
+                  volume: a single ReplicationSlot (planned or unplanned per-volume operation).
+                enum:
+                - target
+                - policy
+                - volume
+                type: string
+              sourceClusterID:
+                description: SourceClusterID is used for failback only. Omit to recover
+                  to the original source.
+                type: string
+            required:
+            - action
+            - ref
+            - scope
+            type: object
+          status:
+            description: ReplicationOpsStatus holds the observed state of a ReplicationOps.
+            properties:
+              completedAt:
+                description: CompletedAt is when the operation finished (successfully
+                  or not).
+                format: date-time
+                type: string
+              message:
+                description: Message is a human-readable description of the current
+                  phase.
+                type: string
+              phase:
+                description: Phase is the current lifecycle phase of this operation.
+                enum:
+                - Pending
+                - Running
+                - Succeeded
+                - Failed
+                type: string
+              results:
+                description: Results holds a per-volume summary of the operation outcome.
+                items:
+                  description: ReplicationOpsResult holds the outcome for a single
+                    volume in a ReplicationOps.
+                  properties:
+                    detail:
+                      description: Detail is an optional human-readable note (error
+                        message or skip reason).
+                      type: string
+                    slotRef:
+                      description: SlotRef is the name of the ReplicationSlot CR.
+                      type: string
+                    status:
+                      description: Status is the outcome for this volume.
+                      enum:
+                      - succeeded
+                      - skipped
+                      - failed
+                      type: string
+                    targetLvolID:
+                      description: TargetLvolID is the UUID of the volume on the target
+                        cluster (failover only).
+                      type: string
+                  required:
+                  - slotRef
+                  - status
+                  type: object
+                type: array
+              startedAt:
+                description: StartedAt is when the operation began.
+                format: date-time
+                type: string
+              subphase:
+                description: |-
+                  Subphase describes what the operation is currently doing within the phase
+                  (e.g. "TriggeringFailover", "UpdatingSlotStatuses", "ReleasingLock").
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

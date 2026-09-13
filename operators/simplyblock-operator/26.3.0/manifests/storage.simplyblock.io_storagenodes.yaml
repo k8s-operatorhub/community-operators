@@ -1,0 +1,330 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  creationTimestamp: null
+  name: storagenodes.storage.simplyblock.io
+spec:
+  group: storage.simplyblock.io
+  names:
+    kind: StorageNode
+    listKind: StorageNodeList
+    plural: storagenodes
+    shortNames:
+    - sn
+    singular: storagenode
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.workerNode
+      name: Worker
+      type: string
+    - jsonPath: .spec.socketId
+      name: Socket
+      type: string
+    - jsonPath: .spec.nodeIndex
+      name: NodeIdx
+      type: integer
+    - jsonPath: .status.failureDomain
+      name: FD
+      priority: 1
+      type: integer
+    - jsonPath: .status.uuid
+      name: UUID
+      type: string
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .status.health
+      name: Health
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          StorageNode is the Schema for a single backend storage node instance.
+          One StorageNode CR exists per (workerNode, socketIndex) pair and is owned
+          by the parent StorageNodeSet.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StorageNodeSpec defines the desired state of a StorageNode.
+            properties:
+              nodeIndex:
+                description: NodeIndex is the per-socket node index (0..nodesPerSocket-1).
+                  Immutable.
+                format: int32
+                type: integer
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              overrides:
+                description: |-
+                  Overrides holds per-node configuration propagated from
+                  StorageNodeSet.spec.nodeConfigs[workerNode] on every reconcile.
+                properties:
+                  deviceNames:
+                    description: |-
+                      DeviceNames explicitly defines the NVMe namespace names to use on this node
+                      (e.g. ["nvme0n1","nvme1n1"]).
+                    items:
+                      type: string
+                    type: array
+                  driveSizeRange:
+                    description: DriveSizeRange overrides the drive size range filter
+                      for this node.
+                    type: string
+                  enableCpuTopology:
+                    description: EnableCpuTopology overrides topology-aware CPU handling
+                      for this node.
+                    type: boolean
+                  expand:
+                    description: |-
+                      Expand marks this node as a cluster-expansion add. When true the backend
+                      node-add endpoint receives expand=true, triggering rebalancing behaviour
+                      appropriate for in-place cluster growth. Overrides StorageNodeSet.spec.expand.
+                    type: boolean
+                  failureDomain:
+                    description: |-
+                      FailureDomain is the failure-domain group index (≥ 0) for this node.
+                      Required when the parent StorageCluster has enableFailureDomains=true.
+                      Overrides StorageNodeSet.spec.nodeFailureDomains[workerNode] when both are set.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  journalManager:
+                    description: JournalManagerSpec overrides journal manager tuning
+                      for this node.
+                    properties:
+                      count:
+                        description: Count is the number of journal managers to configure.
+                        format: int32
+                        type: integer
+                      percentPerDevice:
+                        description: PercentPerDevice is the journal manager capacity
+                          percentage per device.
+                        format: int32
+                        type: integer
+                    type: object
+                  pcieAllowList:
+                    description: PcieAllowList overrides the list of PCI addresses
+                      allowed for use on this node.
+                    items:
+                      type: string
+                    type: array
+                  pcieDenyList:
+                    description: PcieDenyList overrides the list of PCI addresses
+                      excluded from use on this node.
+                    items:
+                      type: string
+                    type: array
+                  pcieModel:
+                    description: PcieModel overrides the PCI model filter for this
+                      node.
+                    type: string
+                  reservedSystemCPU:
+                    description: ReservedSystemCPU overrides the CPUs reserved for
+                      system workloads on this node.
+                    type: string
+                  skipKubeletConfiguration:
+                    description: |-
+                      SkipKubeletConfiguration overrides whether kubelet configuration changes are
+                      skipped for this node.
+                    type: boolean
+                  spdkImage:
+                    description: SpdkImage overrides the SPDK image for this node
+                      (e.g. for phased rollouts).
+                    type: string
+                  spdkProxyImage:
+                    description: SpdkProxyImage overrides the SPDK proxy image for
+                      this node.
+                    type: string
+                  spdkSystemMemory:
+                    description: |-
+                      SpdkSystemMemory overrides the SPDK huge-page memory allocation for this node
+                      (e.g. "4G", "512M").
+                    pattern: ^[0-9]+(G|GI|GB|GiB|M|MI|MB|MiB|g|gi|gb|gib|m|mi|mb|mib)?$
+                    type: string
+                  ubuntuHost:
+                    description: UbuntuHost overrides the Ubuntu host OS flag for
+                      this node.
+                    type: boolean
+                type: object
+              socketId:
+                description: SocketID is the NUMA socket identifier from spec.socketsToUse
+                  (e.g. "0", "1"). Immutable.
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              socketIndex:
+                description: |-
+                  SocketIndex is the global ordinal (socketPosition × nodesPerSocket + nodeIndex).
+                  Used internally by the operator to select the correct backend node from the
+                  RPC-port-sorted list in pollUUIDFromBackend. Immutable.
+                format: int32
+                type: integer
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              storageNodeSetRef:
+                description: StorageNodeSetRef is the name of the owning StorageNodeSet.
+                  Immutable.
+                type: string
+                x-kubernetes-validations:
+                - message: field is immutable
+                  rule: self == oldSelf
+              workerNode:
+                description: |-
+                  WorkerNode is the Kubernetes node hostname this StorageNode runs on.
+                  Users may not change it directly — it is re-pointed only by the operator
+                  during a node migration (StorageNodeOps action=migrate). The
+                  StorageNode validating webhook rejects user-driven changes to this field.
+                type: string
+            required:
+            - storageNodeSetRef
+            - workerNode
+            type: object
+            x-kubernetes-validations:
+            - message: field socketId is immutable once set
+              rule: '!has(oldSelf.socketId) || has(self.socketId)'
+            - message: field nodeIndex is immutable once set
+              rule: '!has(oldSelf.nodeIndex) || has(self.nodeIndex)'
+            - message: field socketIndex is immutable once set
+              rule: '!has(oldSelf.socketIndex) || has(self.socketIndex)'
+          status:
+            description: StorageNodeStatus holds the observed state of a StorageNode.
+            properties:
+              activeOpsRef:
+                description: |-
+                  ActiveOpsRef is the name of the currently active StorageNodeOps CR targeting
+                  this node. Empty when no operation is in progress. Used for mutual exclusion.
+                type: string
+              failureDomain:
+                description: |-
+                  FailureDomain is the effective failure-domain group index for this node
+                  as reported by the backend (≥ 0). Nil when the backend has not assigned one.
+                format: int32
+                type: integer
+              health:
+                description: Health is the backend-reported node health flag.
+                type: boolean
+              hostname:
+                description: Hostname is the node hostname as reported by the backend.
+                type: string
+              latencyMetrics:
+                description: |-
+                  LatencyMetrics holds the fio-measured baseline NVMe-oF latency for this node,
+                  used by the volume rebalancer to make data-placement decisions.
+                properties:
+                  baselineMeasuredAt:
+                    description: BaselineMeasuredAt is when the baseline was established.
+                    format: date-time
+                    type: string
+                  baselineP50NS:
+                    description: BaselineP50NS is the p50 write latency (nanoseconds)
+                      from the initial empty-cluster benchmark.
+                    format: int64
+                    type: integer
+                  baselineP99NS:
+                    description: BaselineP99NS is the p99 write latency (nanoseconds)
+                      from the initial empty-cluster benchmark.
+                    format: int64
+                    type: integer
+                  nodeUUID:
+                    description: NodeUUID is the backend storage node UUID.
+                    type: string
+                required:
+                - nodeUUID
+                type: object
+              ports:
+                description: Ports groups network connectivity fields (addresses and
+                  ports).
+                properties:
+                  lvol:
+                    description: Lvol is the logical-volume subsystem port.
+                    format: int32
+                    type: integer
+                  management:
+                    description: Management is the management IP address of the node.
+                    type: string
+                  nvmeof:
+                    description: NvmeOf is the NVMe-oF fabric port.
+                    format: int32
+                    type: integer
+                  rpc:
+                    description: Rpc is the RPC/management API port.
+                    format: int32
+                    type: integer
+                type: object
+              postedAt:
+                description: |-
+                  PostedAt is the timestamp when the node-add POST was sent.
+                  Used as a provisioning guard against duplicate POSTs.
+                format: date-time
+                type: string
+              resources:
+                description: Resources groups compute and storage resource metrics.
+                properties:
+                  cpu:
+                    description: CPU is the number of SPDK CPU cores allocated to
+                      this node.
+                    format: int32
+                    type: integer
+                  devices:
+                    description: Devices is the device summary (online/total) reported
+                      by the backend.
+                    type: string
+                  memory:
+                    description: Memory is the SPDK memory allocation reported by
+                      the backend.
+                    type: string
+                  volumes:
+                    description: Volumes is the current number of logical volumes
+                      on this node.
+                    format: int32
+                    type: integer
+                type: object
+              status:
+                description: Status is the backend-reported node status (e.g. online,
+                  suspended, offline).
+                type: string
+              uptime:
+                description: Uptime is the node uptime as reported by the backend.
+                type: string
+              uuid:
+                description: UUID is the backend storage node UUID. Set once after
+                  node-add completes.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

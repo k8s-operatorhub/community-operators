@@ -1,0 +1,430 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: krkngraphruns.krkn.krkn-chaos.dev
+spec:
+  group: krkn.krkn-chaos.dev
+  names:
+    kind: KrknGraphRun
+    listKind: KrknGraphRunList
+    plural: krkngraphruns
+    shortNames:
+    - kgr
+    singular: krkngraphrun
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.summary.totalNodes
+      name: Total
+      type: integer
+    - jsonPath: .status.summary.completedNodes
+      name: Completed
+      type: integer
+    - jsonPath: .status.summary.failedNodes
+      name: Failed
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KrknGraphRun is the Schema for the krkngraphruns API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: KrknGraphRunSpec defines the desired state of KrknGraphRun
+            properties:
+              graph:
+                additionalProperties:
+                  description: |-
+                    GraphScenarioNode represents a node in the scenario dependency graph
+                    This mirrors krknctl's ScenarioNode struct but with explicit JSON tags for Kubernetes compatibility
+                  properties:
+                    _comment:
+                      description: Comment is an optional comment describing the scenario
+                      type: string
+                    depends_on:
+                      description: DependsOn is the node ID that this scenario depends
+                        on (parent in the graph)
+                      type: string
+                    env:
+                      additionalProperties:
+                        type: string
+                      description: Env is a map of environment variables for the scenario
+                      type: object
+                    image:
+                      description: Image is the container image for the scenario
+                      type: string
+                    name:
+                      description: Name is the name of the scenario
+                      type: string
+                    volumes:
+                      additionalProperties:
+                        type: string
+                      description: Volumes is a map of volume mounts for the scenario
+                      type: object
+                  type: object
+                description: |-
+                  Graph is the dependency graph of scenarios to execute
+                  Maps node ID to scenario node definition with dependencies
+                  This is compatible with krknctl ScenarioSet for 1:1 JSON compatibility
+                type: object
+              ownerUserId:
+                description: OwnerUserID is the email address of the user who created
+                  this graph run
+                type: string
+              resiliencyMountPath:
+                description: |-
+                  ResiliencyMountPath is the absolute path where resiliency metrics files are mounted.
+                  This path is used to identify which file in each node's Volumes map contains resiliency metrics.
+
+                  File Identification Convention:
+                  The resiliency metrics file is identified by its MOUNT PATH, not by file UUID.
+                  Each node can use a different file UUID in its Volumes map, but they must all mount
+                  to the same path specified here for proper detection.
+
+                  Example:
+                    ResiliencyMountPath: "/etc/kraken/metrics.yaml"
+                    node-1.Volumes: {"uuid-A": "/etc/kraken/metrics.yaml", "uuid-B": "/config.yaml"}
+                    node-2.Volumes: {"uuid-C": "/etc/kraken/metrics.yaml"}  // Different UUID, same path - OK!
+
+                  When a matching mount path is found, the controller sets RESILIENCY_FILE environment variable
+                  to this path in the scenario pod.
+
+                  If not specified, pods will only have RESILIENCY_SCORE=true and krkn will use its internal
+                  default metrics collection.
+
+                  Populated from HTTP header: X-Resiliency-Mount-Path
+                  Must be an absolute path if specified
+                type: string
+              resiliencyScoreBaseline:
+                description: |-
+                  ResiliencyScoreBaseline is the user-defined minimum acceptable resiliency score.
+                  After the graph run completes, the calculated score is compared against this baseline:
+                  - calculated >= baseline: Status = "pass"
+                  - calculated < baseline: Status = "fail"
+                  - no baseline: Status = "no-baseline"
+
+                  This value is REQUIRED when ResiliencyScoreEnabled is true.
+
+                  Populated from HTTP header: X-Resiliency-Baseline
+                  Must be a non-negative number
+                type: number
+              resiliencyScoreEnabled:
+                description: |-
+                  ResiliencyScoreEnabled enables resiliency score calculation for this graph run.
+                  When enabled:
+                  1. RESILIENCY_SCORE=true environment variable is set in all scenario pods
+                  2. If ResiliencyMountPath is specified, the controller identifies the resiliency metrics file
+                     by matching the mount path in node.Volumes and sets RESILIENCY_FILE=<path> env var
+                  3. Upon completion, the controller calculates the final score and stores it in Status.ResiliencyScores
+
+                  Populated from HTTP header: X-Resiliency-Score
+                  When enabled, X-Resiliency-Baseline header is REQUIRED
+                type: boolean
+              targetClusters:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: |-
+                  TargetClusters is a map of provider-name to list of cluster names
+                  Example: {"krkn-operator": ["cluster1", "cluster2"], "krkn-operator-acm": ["cluster3"]}
+                minProperties: 1
+                type: object
+              targetRequestId:
+                description: TargetRequestID is the reference to the KrknTargetRequest
+                  CR
+                type: string
+            required:
+            - graph
+            - targetClusters
+            - targetRequestId
+            type: object
+          status:
+            description: KrknGraphRunStatus defines the observed state of KrknGraphRun
+            properties:
+              completionTime:
+                description: CompletionTime is when the graph run completed
+                format: date-time
+                type: string
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the graph run's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              nodeStatuses:
+                description: NodeStatuses contains the status of each node in the
+                  graph
+                items:
+                  description: NodeStatus represents the status of a single node in
+                    the dependency graph
+                  properties:
+                    completionTime:
+                      description: CompletionTime is when this node completed execution
+                      format: date-time
+                      type: string
+                    dependsOn:
+                      description: DependsOn is the list of node IDs that this node
+                        depends on
+                      items:
+                        type: string
+                      type: array
+                    message:
+                      description: Message contains additional information about the
+                        node status
+                      type: string
+                    nodeId:
+                      description: NodeID is the unique identifier for this node in
+                        the graph
+                      type: string
+                    nodeName:
+                      description: NodeName is the human-readable name of the scenario
+                      type: string
+                    phase:
+                      description: Phase is the current phase of this node
+                      enum:
+                      - Pending
+                      - Running
+                      - Completed
+                      - Failed
+                      - Blocked
+                      type: string
+                    scenarioRunRef:
+                      description: ScenarioRunRef is the reference to the KrknScenarioRun
+                        CR created for this node
+                      type: string
+                    startTime:
+                      description: StartTime is when this node started execution
+                      format: date-time
+                      type: string
+                  required:
+                  - nodeId
+                  - nodeName
+                  - phase
+                  type: object
+                type: array
+              phase:
+                description: Phase is the overall phase of the graph run
+                enum:
+                - Pending
+                - Running
+                - Completed
+                - Failed
+                - PartiallyFailed
+                type: string
+              resiliencyScores:
+                description: |-
+                  ResiliencyScores tracks per-cluster resiliency scores throughout the GraphRun lifecycle.
+                  One entry per target cluster. The array goes through two phases:
+
+                  1. Sentinel phase (on creation, when Spec.ResiliencyScoreEnabled is true):
+                     Each entry has Calculated == -1 and Status == "calculating".
+                     This lets the frontend show "Calculating..." immediately.
+
+                  2. Final phase (on terminal state: Completed, Failed, or PartiallyFailed):
+                     The controller replaces sentinel entries with real scores (Calculated >= 0).
+                     Status becomes "pass", "fail", "no-baseline", or "error".
+                     Once set to real values, scores are IMMUTABLE to preserve historical accuracy.
+
+                  Frontend interpretation:
+                    - absent/empty → resiliency scoring not enabled (show N/A)
+                    - Calculated == -1 → score calculation in progress (show "Calculating...")
+                    - Calculated >= 0 → real score (display value)
+                items:
+                  description: |-
+                    GraphClusterScore represents the resiliency score for a specific cluster in a graph run.
+                    When a graph run executes on multiple clusters, this structure tracks the score contribution
+                    from each cluster, along with per-node breakdown.
+                  properties:
+                    baseline:
+                      description: |-
+                        Baseline is the user-defined minimum acceptable score (from Spec.ResiliencyScoreBaseline)
+                        Used for pass/fail determination
+                      type: number
+                    calculated:
+                      description: |-
+                        Calculated is the aggregated resiliency score for this cluster (0-100).
+                        This is calculated by averaging the scores from all nodes that ran on this cluster.
+
+                        Sentinel convention:
+                          -1 means score calculation is in progress (Status will be "calculating").
+                          The controller sets this on GraphRun creation when ResiliencyScoreEnabled is true,
+                          then replaces it with the real score (>= 0) once the run reaches a terminal phase.
+                          Frontend interpretation: -1 → "Calculating...", >= 0 → display value, absent → N/A.
+                      type: number
+                    clusterName:
+                      description: ClusterName is the name of the cluster this score
+                        applies to
+                      type: string
+                    message:
+                      description: Message provides human-readable context about the
+                        score (e.g., "Score 85.0 meets baseline 80.0")
+                      type: string
+                    nodeContributions:
+                      additionalProperties:
+                        type: number
+                      description: |-
+                        NodeContributions maps each node ID to its individual resiliency score on this cluster
+                        This allows the frontend to show which nodes contributed what score
+                        Example: {"node-1": 85.5, "node-2": 92.3}
+                      type: object
+                    providerName:
+                      description: ProviderName is the provider that owns this cluster
+                        (e.g., "krkn-operator-acm")
+                      type: string
+                    status:
+                      description: |-
+                        Status indicates the current state of this cluster's score.
+
+                        Lifecycle: calculating → pass/fail/no-baseline (or error on failure).
+
+                        Values:
+                          - "calculating": score computation in progress (Calculated == -1, set at GraphRun init)
+                          - "pass":        calculated score >= baseline
+                          - "fail":        calculated score < baseline
+                          - "no-baseline": score calculated but no baseline was specified for comparison
+                          - "error":       score calculation failed (see Message for details)
+                      enum:
+                      - pass
+                      - fail
+                      - no-baseline
+                      - calculating
+                      - error
+                      type: string
+                  required:
+                  - calculated
+                  - clusterName
+                  - status
+                  type: object
+                type: array
+              resolvedLevels:
+                description: |-
+                  ResolvedLevels contains the pre-computed topological levels for frontend rendering
+                  Each inner array represents a level of nodes that can run in parallel
+                  Example: [["node1", "node2"], ["node3"], ["node4", "node5"]]
+                items:
+                  items:
+                    type: string
+                  type: array
+                type: array
+              startTime:
+                description: StartTime is when the graph run started
+                format: date-time
+                type: string
+              summary:
+                description: Summary contains aggregate statistics about the graph
+                  run
+                properties:
+                  completedNodes:
+                    description: CompletedNodes is the number of successfully completed
+                      nodes
+                    type: integer
+                  failedNodes:
+                    description: FailedNodes is the number of failed nodes
+                    type: integer
+                  pendingNodes:
+                    description: PendingNodes is the number of pending nodes (including
+                      blocked nodes)
+                    type: integer
+                  runningNodes:
+                    description: RunningNodes is the number of currently running nodes
+                    type: integer
+                  totalNodes:
+                    description: TotalNodes is the total number of nodes in the graph
+                    type: integer
+                required:
+                - completedNodes
+                - failedNodes
+                - pendingNodes
+                - runningNodes
+                - totalNodes
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

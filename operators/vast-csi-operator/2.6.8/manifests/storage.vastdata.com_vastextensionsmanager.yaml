@@ -1,0 +1,241 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: vastextensionsmanagers.storage.vastdata.com
+spec:
+  group: storage.vastdata.com
+  names:
+    kind: VastExtensionsManager
+    listKind: VastExtensionsManagerList
+    plural: vastextensionsmanagers
+    singular: vastextensionsmanager
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.image.csiAddonsController.repository
+          name: Controller Image
+          type: string
+        - jsonPath: .spec.replication.maxGroupPvcs
+          name: Max Group PVCs
+          type: integer
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: VastExtensionsManager installs the cluster-wide replication stack (CSI-Addons controller, VAST replication CRDs, admission webhooks, and replication controllers). Create exactly one instance in the operator namespace.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: Spec defines the desired state of VastExtensionsManager.
+              properties:
+                controller:
+                  description: Scheduling, resource, and probe configuration for controller deployments.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                image:
+                  description: |-
+                    Container images for the extensions manager. By default the operator manages
+                    these images and updates them when the operator is upgraded.
+                  properties:
+                    csiAddonsController:
+                      properties:
+                        imagePullPolicy:
+                          default: IfNotPresent
+                          enum:
+                            - Always
+                            - IfNotPresent
+                            - Never
+                          type: string
+                        repository:
+                          description: Custom image. Used only when "Use custom images" is enabled.
+                          type: string
+                      type: object
+                    useCustomRepositories:
+                      default: false
+                      description: |-
+                        Leave disabled (recommended) so the operator uses the images that ship
+                        with this operator version and updates them on upgrade. Enable only if
+                        you need to pull images from a private or custom registry.
+                      type: boolean
+                    vastExtensionController:
+                      properties:
+                        imagePullPolicy:
+                          default: IfNotPresent
+                          enum:
+                            - Always
+                            - IfNotPresent
+                            - Never
+                          type: string
+                        repository:
+                          description: Custom image. Used only when "Use custom images" is enabled.
+                          type: string
+                      type: object
+                  type: object
+                imagePullSecrets:
+                  description: Image pull secrets for extensions manager container images.
+                  items:
+                    properties:
+                      name:
+                        type: string
+                    type: object
+                  type: array
+                  x-kubernetes-list-type: atomic
+                replication:
+                  description: Replication controller, CSI-Addons cluster controller, and admission webhook configuration.
+                  properties:
+                    applyExistingPvcs:
+                      default: true
+                      description: Label existing PVCs that match VolumeMapping on PrimaryStorageClass reconcile.
+                      type: boolean
+                    devLogging:
+                      default: true
+                      description: Enables human-readable console logging (colored levels, caller, ISO-8601 timestamps).
+                      type: boolean
+                    maxConcurrentReconciles:
+                      default: 5
+                      description: Worker count per controller-runtime controller.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                    maxGroupPvcs:
+                      default: 10000
+                      description: Maximum PVCs per VolumeGroupReplication / VolumeReplication group.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                    pvNameFormat:
+                      default: '{pv_name}-repl-{endpoint}'
+                      description: Format string for destination PV names.
+                      type: string
+                    pvcNameFormat:
+                      default: '{pvc_name}-repl-{endpoint}'
+                      description: Format string for destination PVC names.
+                      type: string
+                    webhooks:
+                      description: Replication admission webhook handlers.
+                      properties:
+                        pvcLabels:
+                          description: Mutating webhook that injects replication labels onto PVCs at creation time.
+                          properties:
+                            enabled:
+                              default: true
+                              type: boolean
+                            failurePolicy:
+                              default: Fail
+                              enum:
+                                - Fail
+                                - Ignore
+                              type: string
+                            filterConfig:
+                              properties:
+                                csiDriverName:
+                                  default: ""
+                                  type: string
+                                csiDriverNameRegex:
+                                  default: .*vastdata.*
+                                  description: Required unless csiDriverName is set. Only PVCs whose StorageClass provisioner matches this regex are processed.
+                                  type: string
+                                pvcNameRegex:
+                                  default: ""
+                                  type: string
+                                storageClassName:
+                                  default: ""
+                                  type: string
+                                storageClassNameRegex:
+                                  default: ""
+                                  type: string
+                              type: object
+                            timeoutSeconds:
+                              default: 30
+                              format: int32
+                              maximum: 30
+                              minimum: 1
+                              type: integer
+                          type: object
+                        vastStorageClassReplication:
+                          description: Validating webhook for VastStorageClassReplication CR create/update.
+                          properties:
+                            enabled:
+                              default: true
+                              type: boolean
+                            failurePolicy:
+                              default: Fail
+                              enum:
+                                - Fail
+                                - Ignore
+                              type: string
+                            timeoutSeconds:
+                              default: 30
+                              format: int32
+                              maximum: 30
+                              minimum: 1
+                              type: integer
+                          type: object
+                        vastVolumeReplication:
+                          description: Validating webhook for VastVolumeReplication CR create/update.
+                          properties:
+                            enabled:
+                              default: true
+                              type: boolean
+                            failurePolicy:
+                              default: Fail
+                              enum:
+                                - Fail
+                                - Ignore
+                              type: string
+                            timeoutSeconds:
+                              default: 30
+                              format: int32
+                              maximum: 30
+                              minimum: 1
+                              type: integer
+                          type: object
+                      type: object
+                  type: object
+                webhook:
+                  description: Webhook server infrastructure (HTTPS port, TLS).
+                  properties:
+                    certManager:
+                      properties:
+                        certificateRef:
+                          properties:
+                            name:
+                              default: ""
+                              description: cert-manager Certificate CR name for the MWC caBundle.
+                              type: string
+                            namespace:
+                              default: ""
+                              description: Namespace of the Certificate CR.
+                              type: string
+                          type: object
+                        enabled:
+                          default: false
+                          description: When true, webhook TLS is provided by cert-manager.
+                          type: boolean
+                      type: object
+                    port:
+                      default: 9443
+                      format: int32
+                      type: integer
+                  type: object
+              required:
+                - replication
+              type: object
+            status:
+              description: Status defines the observed state of VastExtensionsManager
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

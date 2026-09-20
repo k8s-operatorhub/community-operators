@@ -1,0 +1,725 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "Flow",
+          "metadata": {
+            "name": "handle-order"
+          },
+          "spec": {
+            "params": [
+              {
+                "description": "Order identifier",
+                "name": "orderId",
+                "required": true
+              }
+            ],
+            "steps": [
+              {
+                "action": {
+                  "http": {
+                    "method": "GET",
+                    "resultMappings": {
+                      "customerName": "$.customerName",
+                      "id": "$.id"
+                    },
+                    "timeoutSeconds": 30,
+                    "url": "https://orders.internal/api/orders/$(params.orderId)"
+                  },
+                  "type": "http"
+                },
+                "name": "enrich-order"
+              },
+              {
+                "action": {
+                  "http": {
+                    "body": "{\"text\": \"Order $(steps.enrich_order.results.customerName) processed\"}",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "url": "https://hooks.slack.com/services/REPLACE_ME"
+                  },
+                  "type": "http"
+                },
+                "name": "notify-slack",
+                "runAfter": [
+                  "enrich-order"
+                ],
+                "when": [
+                  {
+                    "expression": "steps.enrich_order.status == \"Succeeded\""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "FlowRun",
+          "metadata": {
+            "name": "handle-order-manual-test"
+          },
+          "spec": {
+            "flowRef": {
+              "name": "handle-order"
+            },
+            "params": [
+              {
+                "name": "orderId",
+                "value": "12345"
+              }
+            ],
+            "triggerRef": {
+              "name": "order-received",
+              "type": "webhook"
+            },
+            "ttlAfterFinished": "24h"
+          }
+        },
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "Integration",
+          "metadata": {
+            "name": "github-api",
+            "namespace": "default"
+          },
+          "spec": {
+            "http": {
+              "auth": {
+                "bearer": {
+                  "tokenSecretRef": {
+                    "key": "token",
+                    "name": "github-api-token"
+                  }
+                },
+                "type": "bearer"
+              },
+              "baseUrl": "https://api.github.com",
+              "defaultHeaders": {
+                "Content-Type": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28"
+              }
+            },
+            "type": "http"
+          }
+        },
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "Integration",
+          "metadata": {
+            "name": "kafka-cluster"
+          },
+          "spec": {
+            "kafka": {
+              "bootstrapServers": [
+                "kafka.default.svc.cluster.local:9092"
+              ],
+              "sasl": {
+                "mechanism": "PLAIN",
+                "passwordSecretRef": {
+                  "key": "password",
+                  "name": "kafka-credentials"
+                },
+                "usernameSecretRef": {
+                  "key": "username",
+                  "name": "kafka-credentials"
+                }
+              }
+            },
+            "type": "kafka"
+          }
+        },
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "Trigger",
+          "metadata": {
+            "name": "example-trigger"
+          },
+          "spec": {
+            "flowRef": {
+              "name": "handle-order"
+            },
+            "type": "webhook",
+            "webhook": {
+              "path": "/hooks/example"
+            }
+          }
+        },
+        {
+          "apiVersion": "automation.kubezap.io/v1alpha1",
+          "kind": "WebhookGatewayConfig",
+          "metadata": {
+            "name": "default",
+            "namespace": "default"
+          },
+          "spec": {
+            "hpa": {
+              "maxReplicas": 20,
+              "minReplicas": 2,
+              "targetCPUUtilization": 60
+            },
+            "tls": {
+              "clientCASecretRef": {
+                "name": "webhook-gateway-mtls-ca"
+              },
+              "serverSecretRef": {
+                "name": "webhook-gateway-tls"
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Integration & Delivery
+    containerImage: ghcr.io/kubezap/controller@sha256:9993f042cf0405b96fba41666c1accc9b4115af1958069cce27cdb68f17bbd52
+    createdAt: "2026-09-20T22:35:20Z"
+    description: Declarative workflow automation for Kubernetes
+    operatorframework.io/suggested-namespace: kubezap-system
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/kubezap/kubezap-operator
+    support: KubeZap Community
+  name: kubezap.v0.2.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: FlowRun is an execution instance of a Flow, created by a gateway
+        when a trigger fires.
+      displayName: Flow Run
+      kind: FlowRun
+      name: flowruns.automation.kubezap.io
+      resources:
+      - kind: FlowRun
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: |-
+          Reference to the Flow to execute. The Flow must be in the same namespace as the FlowRun.
+          Cross-namespace FlowRefs are not supported in v1alpha1 and are deferred to v1beta1 with a FlowGrant CRD.
+        displayName: Flow Reference
+        path: flowRef
+      - description: Optional runtime parameters.
+        displayName: Parameters
+        path: params
+      - description: Originating trigger reference.
+        displayName: Trigger Reference
+        path: triggerRef
+      - description: TTL for cleanup after completion.
+        displayName: TTL After Finished
+        path: ttlAfterFinished
+      version: v1alpha1
+    - description: Flow defines an ordered workflow of steps with conditional logic
+        and data transforms.
+      displayName: Flow
+      kind: Flow
+      name: flows.automation.kubezap.io
+      resources:
+      - kind: Flow
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: Parameters that can be passed into the Flow.
+        displayName: Parameters
+        path: params
+      - description: Ordered list of steps in the Flow.
+        displayName: Steps
+        path: steps
+      version: v1alpha1
+    - description: Integration connects KubeZap to an external system (Kafka, plugin,
+        etc.).
+      displayName: Integration
+      kind: Integration
+      name: integrations.automation.kubezap.io
+      resources:
+      - kind: Deployment
+        name: ""
+        version: v1
+      - kind: Role
+        name: ""
+        version: v1
+      - kind: RoleBinding
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: ServiceAccount
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: AMQP specific configuration. Required when type=amqp.
+        displayName: AMQP
+        path: amqp
+      - description: HTTP specific configuration. Required when type=http.
+        displayName: HTTP
+        path: http
+      - description: Kafka specific configuration. Required when type=kafka.
+        displayName: Kafka
+        path: kafka
+      - description: NATS specific configuration. Required when type=nats.
+        displayName: NATS
+        path: nats
+      - description: Plugin specific configuration. Required when type=plugin.
+        displayName: Plugin
+        path: plugin
+      - description: |-
+          Integration type.
+          kafka: first-party Kafka gateway (IBM/sarama).
+          amqp: first-party AMQP gateway; covers RabbitMQ, ActiveMQ, Solace, Azure Service Bus.
+            Use spec.amqp.version to select 0-9-1 or 1.0 wire protocol.
+          nats: first-party NATS gateway; supports Core and JetStream.
+          plugin: community or custom image implementing the KubeZap plugin contract.
+            See docs/api/plugin-contract.md.
+          http: lightweight HTTP endpoint with base URL, auth, and default headers.
+        displayName: Type
+        path: type
+      version: v1alpha1
+    - description: |-
+        Trigger connects an event source (webhook, cron, Kafka, AMQP, NATS, or a
+        Kubernetes resource event) to a Flow, creating a FlowRun each time it fires.
+      displayName: Trigger
+      kind: Trigger
+      name: triggers.automation.kubezap.io
+      resources:
+      - kind: Deployment
+        name: ""
+        version: v1
+      - kind: HorizontalPodAutoscaler
+        name: ""
+        version: v2
+      - kind: Role
+        name: ""
+        version: v1
+      - kind: RoleBinding
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      - kind: ServiceAccount
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: Type of trigger (webhook, cron, kafka, amqp, nats, resource)
+        displayName: Type
+        path: type
+      - description: Webhook configuration (only for type=webhook)
+        displayName: Webhook
+        path: webhook
+      - description: Reference to the flow this trigger invokes.
+        displayName: Flow Reference
+        path: flowRef
+      version: v1alpha1
+    - description: |-
+        WebhookGatewayConfig is the Schema for the webhookgatewayconfigs API.
+
+        At most one WebhookGatewayConfig may exist per namespace. This is enforced
+        by requiring the object be named "default" (see the XValidation rule
+        above) rather than by an admission webhook — Kubernetes' own
+        per-(namespace, name) uniqueness in etcd then makes "at most one" hold
+        unconditionally, with no dependency on webhook/cert infrastructure being
+        deployed or healthy. See docs/design/webhookgatewayconfig-singleton-name.md.
+      displayName: Webhook Gateway Config
+      kind: WebhookGatewayConfig
+      name: webhookgatewayconfigs.automation.kubezap.io
+      resources:
+      - kind: HorizontalPodAutoscaler
+        name: ""
+        version: v2
+      - kind: PodDisruptionBudget
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: |-
+          HPA overrides the webhook gateway's HorizontalPodAutoscaler behavior.
+          Any field left unset keeps today's operator default for that field
+          (minReplicas=1, maxReplicas=10, targetCPUUtilization=70).
+        displayName: HPA
+        path: hpa
+      - description: |-
+          PodDisruptionBudget configures a PodDisruptionBudget for the webhook
+          gateway Deployment. When omitted (or MinAvailable is unset), no
+          PodDisruptionBudget is created — matching today's behavior (none exists).
+        displayName: Pod Disruption Budget
+        path: podDisruptionBudget
+      - description: |-
+          TLS configures inbound TLS/mTLS termination for the webhook gateway.
+          When omitted, the gateway serves plain HTTP.
+        displayName: TLS
+        path: tls
+      version: v1alpha1
+  description: |
+    KubeZap is an enterprise-grade Kubernetes operator providing declarative
+    workflow automation.
+
+    ## Features
+
+    - **Webhook triggers**: Expose HTTP endpoints that fire workflows on incoming
+      requests with HMAC, bearer token, OIDC/JWT, API-key, mTLS, and IP-allowlist
+      authentication.
+    - **Cron triggers**: Schedule workflow executions using standard cron expressions.
+    - **Kafka triggers**: Consume from Kafka topics and create a FlowRun per message
+      with partition/offset dedup keys.
+    - **CEL conditions**: Per-step `when` expressions with full access to trigger
+      payload and upstream step results.
+    - **Data transforms**: `type: transform` steps for payload shaping between steps.
+    - **Retry policies**: Configurable per-step exponential backoff.
+    - **Plugin integrations**: Operator-managed plugin Deployments with automatic
+      RBAC and secret injection.
+    - **Observability**: Prometheus metrics, OpenTelemetry traces, and structured JSON
+      access logs out of the box.
+
+    ## Multi-namespace support
+
+    Set `WATCH_NAMESPACES` on the operator Deployment:
+    - Empty (default) — AllNamespaces
+    - Single value — OwnNamespace / SingleNamespace
+    - Comma-separated — MultiNamespace
+
+    ## Resource Trigger RBAC Note
+
+    In AllNamespaces mode, `type: resource` triggers (alpha) watch arbitrary Kubernetes
+    resource kinds. The controller ServiceAccount must have `get`, `list`, and `watch`
+    permissions on each target resource type. These permissions are NOT included in the
+    default RBAC — users must grant them explicitly via an additional ClusterRole or Role.
+  displayName: KubeZap
+  icon:
+  - base64data: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAv0lEQVR42u3ayw2AMAyD4Z4ZgCNnhmAC5mAuVoUZgNhJxC9lAH881MrtWLaj9QwAAAIB07y2GAAAAAAAkAHYz8s5AADoMAAAAEhdyBoDer+Bxp9Q739AsR6bALrdhAOg2wg5ANL0coA0uhxgSK8CeKKrAM70wQBz9GBASvoYQFb0GEBu+k8AaddQvdjKbOaKPPiXgFLRHwMKpjcBqrTTBdNrAeXOB+qUWQAAAOCICQAArhoAAAAAgBbAzV0APwTc+OiGxC5YJyAAAAAASUVORK5CYII=
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        - apiGroups:
+          - admissionregistration.k8s.io
+          resources:
+          - validatingwebhookconfigurations
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: kubezap-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: kubezap
+          control-plane: controller-manager
+        name: kubezap-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: kubezap
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: kubezap
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:9090
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                - --executor-image=ghcr.io/kubezap/http-executor@sha256:4ea18f3d0d47ec073aa94701b09a7290c3d7d3b95f89413b5877e1cc98635695
+                - --executor-port=8091
+                command:
+                - /manager
+                env:
+                - name: WEBHOOK_GATEWAY_IMAGE
+                  value: ghcr.io/kubezap/webhook-gateway@sha256:baeecfe6dae639ef21b51ecab4881099b1324e061544fe9cf9154b415a33d41c
+                - name: KAFKA_GATEWAY_IMAGE
+                  value: ghcr.io/kubezap/kafka-gateway@sha256:77273a969c8b50c3d7f57a71d7b1c81328957dc29deb26d08e2cf4051767b63d
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: ghcr.io/kubezap/controller@sha256:9993f042cf0405b96fba41666c1accc9b4115af1958069cce27cdb68f17bbd52
+                imagePullPolicy: IfNotPresent
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: kubezap-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - flowruns
+          - triggers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - flowruns/finalizers
+          - triggers/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - flowruns/status
+          - flows/status
+          - integrations/status
+          - webhookgatewayconfigs/status
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - triggers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - flows
+          - integrations
+          verbs:
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - automation.kubezap.io
+          resources:
+          - webhookgatewayconfigs
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - keda.sh
+          resources:
+          - scaledobjects
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        serviceAccountName: kubezap-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: false
+    type: AllNamespaces
+  keywords:
+  - automation
+  - workflow
+  - kafka
+  - webhook
+  - cron
+  - kubernetes
+  - operator
+  links:
+  - name: KubeZap Documentation
+    url: https://github.com/kubezap/kubezap-operator/docs
+  - name: Source Code
+    url: https://github.com/kubezap/kubezap-operator
+  maintainers:
+  - email: 6481864+Borfswitch@users.noreply.github.com
+    name: KubeZap Maintainers
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: KubeZap Community
+    url: https://github.com/kubezap/kubezap-operator
+  version: 0.2.1

@@ -1,0 +1,220 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: webhookgatewayconfigs.automation.kubezap.io
+spec:
+  group: automation.kubezap.io
+  names:
+    kind: WebhookGatewayConfig
+    listKind: WebhookGatewayConfigList
+    plural: webhookgatewayconfigs
+    singular: webhookgatewayconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          WebhookGatewayConfig is the Schema for the webhookgatewayconfigs API.
+
+          At most one WebhookGatewayConfig may exist per namespace. This is enforced
+          by requiring the object be named "default" (see the XValidation rule
+          above) rather than by an admission webhook — Kubernetes' own
+          per-(namespace, name) uniqueness in etcd then makes "at most one" hold
+          unconditionally, with no dependency on webhook/cert infrastructure being
+          deployed or healthy. See docs/design/webhookgatewayconfig-singleton-name.md.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              WebhookGatewayConfigSpec defines per-namespace configuration for the webhook
+              gateway Deployment. At most one WebhookGatewayConfig may exist per namespace
+              — enforced by requiring the object be named "default" (see the
+              WebhookGatewayConfig type's XValidation rule), so Kubernetes' own
+              per-(namespace, name) uniqueness guarantees the singleton with no admission
+              webhook involved. See docs/design/webhookgatewayconfig-singleton-name.md.
+
+              A namespace with no WebhookGatewayConfig object — and any field left unset on
+              one that does exist — behaves exactly as it did before this CRD existed:
+              HPA min=1/max=10/target-CPU=70%, no PodDisruptionBudget, no gateway TLS.
+            properties:
+              hpa:
+                description: |-
+                  HPA overrides the webhook gateway's HorizontalPodAutoscaler behavior.
+                  Any field left unset keeps today's operator default for that field
+                  (minReplicas=1, maxReplicas=10, targetCPUUtilization=70).
+                properties:
+                  maxReplicas:
+                    description: |-
+                      MaxReplicas is the ceiling of the HPA's replica range. Defaults to 10
+                      when unset.
+                    format: int32
+                    type: integer
+                  minReplicas:
+                    description: |-
+                      MinReplicas is the floor of the HPA's replica range. Only validated to
+                      be a positive integer — no minimum-for-HA is enforced, since 1 replica
+                      remains a legitimate, currently-default, non-HA choice for a
+                      low-traffic namespace. Defaults to 1 when unset.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  targetCPUUtilization:
+                    description: |-
+                      TargetCPUUtilization is the target average CPU utilization percentage
+                      the HPA scales toward. Defaults to 70 when unset.
+                    format: int32
+                    type: integer
+                type: object
+              podDisruptionBudget:
+                description: |-
+                  PodDisruptionBudget configures a PodDisruptionBudget for the webhook
+                  gateway Deployment. When omitted (or MinAvailable is unset), no
+                  PodDisruptionBudget is created — matching today's behavior (none exists).
+                properties:
+                  minAvailable:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MinAvailable is the minimum number (or percentage) of webhook gateway
+                      Pods that must remain available during a voluntary disruption. Unset
+                      means no PodDisruptionBudget is created for this namespace's gateway.
+                    x-kubernetes-int-or-string: true
+                type: object
+              tls:
+                description: |-
+                  TLS configures inbound TLS/mTLS termination for the webhook gateway.
+                  When omitted, the gateway serves plain HTTP.
+                properties:
+                  clientCASecretRef:
+                    description: |-
+                      ClientCASecretRef references a Secret in this namespace containing
+                      ca.crt, used to verify client certificates for mutual TLS. Only
+                      effective when ServerSecretRef is also set.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  serverSecretRef:
+                    description: |-
+                      ServerSecretRef references a Secret in this namespace containing tls.crt
+                      and tls.key (cert-manager compatible) used to terminate TLS on the
+                      webhook gateway's listener. When omitted, the gateway serves plain HTTP.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+            type: object
+          status:
+            description: WebhookGatewayConfigStatus defines the observed state of
+              WebhookGatewayConfig.
+            properties:
+              conditions:
+                description: Standard Kubernetes conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        type: object
+        x-kubernetes-validations:
+        - message: the only valid name for a WebhookGatewayConfig is 'default'
+          rule: self.metadata.name == 'default'
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

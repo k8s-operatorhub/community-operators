@@ -1,0 +1,700 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: triggers.automation.kubezap.io
+spec:
+  group: automation.kubezap.io
+  names:
+    kind: Trigger
+    listKind: TriggerList
+    plural: triggers
+    singular: trigger
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Trigger connects an event source (webhook, cron, Kafka, AMQP, NATS, or a
+          Kubernetes resource event) to a Flow, creating a FlowRun each time it fires.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TriggerSpec defines the desired state of Trigger.
+            properties:
+              amqp:
+                description: Amqp configuration (only for type=amqp)
+                properties:
+                  integrationRef:
+                    description: Reference to an Integration CR with AMQP connection
+                      details.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  routingKey:
+                    description: RoutingKey is the AMQP routing key or binding pattern.
+                    type: string
+                  topic:
+                    description: Topic (queue name) to consume from.
+                    type: string
+                required:
+                - integrationRef
+                - topic
+                type: object
+              cooldown:
+                description: Cooldown/debounce policy to limit the number of firings
+                  in a window.
+                properties:
+                  maxInvocations:
+                    description: MaxInvocations allowed within Window. If zero, no
+                      limit is applied.
+                    format: int32
+                    type: integer
+                  window:
+                    default: 60s
+                    description: Window for counting invocations, e.g. "60s". If omitted,
+                      defaults to 60s.
+                    type: string
+                type: object
+              cron:
+                description: Cron configuration (only for type=cron)
+                properties:
+                  schedule:
+                    description: |-
+                      Schedule in standard cron format (e.g. "*/5 * * * *").
+                      Supports the robfig/cron v3 extended syntax including @every and @daily.
+                    minLength: 1
+                    type: string
+                  timezone:
+                    description: |-
+                      Timezone for the schedule, e.g. "America/New_York".
+                      Defaults to UTC if omitted.
+                    type: string
+                required:
+                - schedule
+                type: object
+              enabled:
+                default: true
+                description: Whether this trigger is active
+                type: boolean
+              event:
+                description: |-
+                  Event or condition type for resource triggers (create/update/delete).
+                  For external triggers (webhook/cron/kafka/amqp/nats) this is typically empty.
+                type: string
+              flowRef:
+                description: Reference to the flow this trigger invokes.
+                properties:
+                  name:
+                    description: |-
+                      Name of the Flow CR to execute. The Flow must be in the same namespace as the referencing resource.
+                      Cross-namespace FlowRefs are not supported in v1alpha1 and are deferred to v1beta1 with a FlowGrant CRD.
+                    type: string
+                required:
+                - name
+                type: object
+              flowRunGC:
+                description: |-
+                  FlowRunGC configures garbage collection of completed FlowRuns for this Trigger.
+                  Operator-level defaults apply when omitted; set individual fields to override per-trigger.
+                properties:
+                  maxFailed:
+                    description: |-
+                      MaxFailed is the maximum number of failed FlowRuns to retain for this Trigger.
+                      When exceeded, the oldest failed FlowRuns are deleted. Set to 0 to disable
+                      count-based GC for failed runs (TTL still applies).
+                      Defaults to a higher value than MaxSucceeded to retain failure history for debugging.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  maxSucceeded:
+                    description: |-
+                      MaxSucceeded is the maximum number of succeeded FlowRuns to retain for this Trigger.
+                      When exceeded, the oldest succeeded FlowRuns are deleted. Set to 0 to disable
+                      count-based GC for succeeded runs (TTL still applies).
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  ttlAfterFailed:
+                    description: |-
+                      TTLAfterFailed is the duration to retain a failed FlowRun after completion.
+                      Overrides the operator's --flowrun-ttl-failed flag for this Trigger.
+                      Set to "0s" to delete failed FlowRuns immediately (not recommended — loses debug history).
+                    type: string
+                  ttlAfterSucceeded:
+                    description: |-
+                      TTLAfterSucceeded is the duration to retain a succeeded FlowRun after completion.
+                      Overrides the operator's --flowrun-ttl-succeeded flag for this Trigger.
+                      Set to "0s" to delete succeeded FlowRuns immediately.
+                    type: string
+                type: object
+              kafka:
+                description: Kafka configuration (only for type=kafka)
+                properties:
+                  consumerGroup:
+                    description: ConsumerGroup ID. Defaults to "kubezap-<trigger-name>"
+                      at runtime.
+                    type: string
+                  integrationRef:
+                    description: Reference to an Integration CR with Kafka connection
+                      details.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  topic:
+                    description: Topic to consume from.
+                    type: string
+                required:
+                - integrationRef
+                - topic
+                type: object
+              nats:
+                description: Nats configuration (only for type=nats)
+                properties:
+                  integrationRef:
+                    description: Reference to an Integration CR with NATS connection
+                      details.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  subject:
+                    description: |-
+                      Subject is the NATS subject to subscribe to.
+                      Supports NATS wildcards (e.g. "orders.*", "events.>").
+                    type: string
+                required:
+                - integrationRef
+                - subject
+                type: object
+              resource:
+                description: |-
+                  Resource configuration (only for type=resource).
+                  Watches a Kubernetes resource type for create/update/delete events
+                  and fires the trigger when a matching event occurs.
+                properties:
+                  apiVersion:
+                    description: APIVersion of the resource to watch (e.g. "v1", "apps/v1",
+                      "automation.kubezap.io/v1alpha1").
+                    minLength: 1
+                    type: string
+                  cooldown:
+                    description: |-
+                      Cooldown is a minimum duration that must elapse between FlowRun creations
+                      for the same resource and event type. Events arriving within this window
+                      after the last FlowRun creation are suppressed. Useful for resources that
+                      churn rapidly (e.g. Pod status updates). If omitted, no per-resource
+                      cooldown is applied.
+                    type: string
+                  events:
+                    description: |-
+                      Events specifies which event types fire the trigger.
+                      Valid values: create, update, delete. Defaults to [create] if omitted.
+                    items:
+                      type: string
+                    type: array
+                  kind:
+                    description: Kind of the resource to watch (e.g. "Pod", "ConfigMap",
+                      "Deployment").
+                    minLength: 1
+                    type: string
+                  labelSelector:
+                    description: |-
+                      LabelSelector limits events to resources matching these labels.
+                      If omitted, all resources of the specified kind are watched.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  namespace:
+                    description: Namespace to watch. If empty, watches the Trigger's
+                      own namespace.
+                    type: string
+                  watchFields:
+                    description: |-
+                      WatchFields limits update events to fire only when one of these
+                      JSON path expressions changes. Only effective for update events.
+                      Uses dot-notation paths, e.g. ".status.phase", ".spec.replicas".
+                      If omitted, all updates fire the trigger.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - apiVersion
+                - kind
+                type: object
+              type:
+                description: Type of trigger (webhook, cron, kafka, amqp, nats, resource)
+                enum:
+                - webhook
+                - cron
+                - kafka
+                - amqp
+                - nats
+                - resource
+                type: string
+              webhook:
+                description: Webhook configuration (only for type=webhook)
+                properties:
+                  auth:
+                    description: |-
+                      Auth configures authentication for this webhook endpoint.
+                      If omitted, the endpoint accepts requests from any caller.
+                    properties:
+                      apiKey:
+                        description: API key header verification. Used when type is
+                          "apiKey".
+                        properties:
+                          header:
+                            default: X-Api-Key
+                            description: Header name to check for the API key.
+                            type: string
+                          secretRef:
+                            description: Secret reference — key contains the expected
+                              API key value.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - secretRef
+                        type: object
+                      basic:
+                        description: HTTP Basic authentication. Used when type is
+                          "basic".
+                        properties:
+                          passwordKey:
+                            default: password
+                            description: Key in the Secret that holds the password.
+                            type: string
+                          secretRef:
+                            description: Reference to the Secret containing the username
+                              and password.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          usernameKey:
+                            default: username
+                            description: Key in the Secret that holds the username.
+                            type: string
+                        required:
+                        - secretRef
+                        type: object
+                      bearer:
+                        description: Bearer token verification. Used when type is
+                          "bearer".
+                        properties:
+                          tokenSecretRef:
+                            description: Secret reference — key contains the expected
+                              bearer token value.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - tokenSecretRef
+                        type: object
+                      headerEquals:
+                        description: Exact header value match. Used when type is "header-equals".
+                        properties:
+                          header:
+                            description: Header name to check (e.g. "X-Gitlab-Token").
+                            type: string
+                          secretRef:
+                            description: Secret reference — key contains the expected
+                              header value.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - header
+                        - secretRef
+                        type: object
+                      hmac:
+                        description: HMAC signature verification. Used when type is
+                          "hmac".
+                        properties:
+                          provider:
+                            default: github
+                            description: |-
+                              Provider selects the HMAC verification scheme. "github" verifies
+                              X-Hub-Signature-256: sha256=<hex> over the raw body (also used by GitLab,
+                              Stripe, Shopify, and most SaaS webhook senders). "slack" verifies
+                              X-Slack-Signature: v0=<hex> over "v0:<timestamp>:<body>" using
+                              X-Slack-Request-Timestamp, and rejects requests outside
+                              timestampToleranceSeconds to guard against replay.
+                            enum:
+                            - github
+                            - slack
+                            type: string
+                          secretRef:
+                            description: Secret reference — key contains the shared
+                              HMAC secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          timestampToleranceSeconds:
+                            default: 300
+                            description: |-
+                              TimestampToleranceSeconds bounds how far X-Slack-Request-Timestamp may
+                              drift from the current time before the request is rejected. Only used
+                              when provider is "slack". Defaults to 300 (5 minutes), matching Slack's
+                              own recommendation.
+                            format: int32
+                            type: integer
+                        required:
+                        - secretRef
+                        type: object
+                      ipAllowlist:
+                        description: IP address allowlist. Used when type is "ipAllowlist".
+                        properties:
+                          cidrs:
+                            description: |-
+                              CIDR blocks allowed to call this endpoint.
+                              Example: ["10.0.0.0/8", "192.168.1.0/24"]
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - cidrs
+                        type: object
+                      oidc:
+                        description: OIDC/JWT verification. Used when type is "oidc".
+                        properties:
+                          audience:
+                            description: Expected audience claim value.
+                            type: string
+                          issuer:
+                            description: OIDC issuer URL (e.g. https://accounts.google.com).
+                            type: string
+                        required:
+                        - issuer
+                        type: object
+                      type:
+                        description: Authentication method.
+                        enum:
+                        - hmac
+                        - bearer
+                        - oidc
+                        - basic
+                        - apiKey
+                        - ipAllowlist
+                        - header-equals
+                        type: string
+                    required:
+                    - type
+                    type: object
+                  method:
+                    default: POST
+                    enum:
+                    - POST
+                    - PUT
+                    type: string
+                  path:
+                    description: HTTP path exposed by the operator
+                    type: string
+                  rateLimit:
+                    description: |-
+                      RateLimit limits the number of requests accepted per time window.
+                      When set, the webhook gateway enforces this limit locally using an
+                      in-memory sliding window per route path.
+                      Note: local enforcement is per-gateway-replica. For cluster-wide enforcement,
+                      combine with admission-level FlowRun count checking (see docs/guides/webhook-security.md).
+                    properties:
+                      maxRequests:
+                        description: |-
+                          MaxRequests is the maximum number of requests allowed within Window.
+                          Must be > 0 when RateLimit is set.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      window:
+                        default: 60s
+                        description: |-
+                          Window is the duration of the sliding window (e.g. "60s", "1m", "5m").
+                          Defaults to "60s" if omitted.
+                        type: string
+                    required:
+                    - maxRequests
+                    type: object
+                  redactBody:
+                    description: |-
+                      RedactBody when true replaces the webhook request body stored in
+                      FlowRun.Spec.TriggerData with "[REDACTED]". Use when the body contains
+                      credentials or sensitive payloads.
+                    type: boolean
+                  redactHeaders:
+                    description: |-
+                      RedactHeaders is a list of HTTP header names (case-insensitive) whose values
+                      are replaced with "[REDACTED]" before storing in FlowRun.Spec.TriggerData.
+                      The built-in list (Authorization, X-Api-Key, X-Webhook-Secret, X-Hub-Signature,
+                      X-Hub-Signature-256, X-Amz-Security-Token) is always applied regardless of this field.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                required:
+                - path
+                type: object
+            required:
+            - flowRef
+            - type
+            type: object
+          status:
+            description: TriggerStatus defines the observed state of Trigger.
+            properties:
+              conditions:
+                description: Standard Kubernetes conditions
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentInvocationCount:
+                description: CurrentInvocationCount is the number of invocations in
+                  the current cooldown window
+                format: int32
+                type: integer
+              lastError:
+                description: LastError contains a short error message from the last
+                  failed attempt
+                type: string
+              lastResult:
+                description: LastResult indicates the outcome of the last trigger
+                  attempt (e.g., Success, Failed, Skipped, RateLimited)
+                type: string
+              lastTriggeredTime:
+                description: LastTriggeredTime is the timestamp of the last successful
+                  trigger firing
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

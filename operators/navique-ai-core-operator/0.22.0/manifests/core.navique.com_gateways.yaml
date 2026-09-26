@@ -1,0 +1,1454 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: gateways.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: Gateway
+    listKind: GatewayList
+    plural: gateways
+    shortNames:
+    - gw
+    singular: gateway
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.serviceURL
+      name: Endpoint
+      type: string
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .status.modelCount
+      name: Models
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Gateway is an AI gateway (LiteLLM or Wäg) with models, teams, and an
+          organization.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              GatewaySpec defines an AI gateway plus its organization/teams/models. The
+              gateway implementation is selected by Type (LiteLLM by default, Wäg opt-in).
+            properties:
+              database:
+                description: Database selects the LiteLLM backing Postgres.
+                properties:
+                  connectionSecretRef:
+                    description: ConnectionSecretRef supplies a DATABASE_URL for mode=external.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  databaseName:
+                    description: DatabaseName is the logical DB inside the shared
+                      cluster (default "litellm").
+                    type: string
+                  mode:
+                    enum:
+                    - postgresCluster
+                    - external
+                    type: string
+                  postgresClusterRef:
+                    description: |-
+                      ObjectRef references another namespaced object. Namespace is optional and
+                      defaults to the referring object's namespace. Cross-namespace references are
+                      allowed for datastore/gateway/langfuse references; Secret references must stay
+                      in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - mode
+                type: object
+              enableEntraSSO:
+                description: |-
+                  EnableEntraSSO turns on the Azure Entra SSO block on the LiteLLMInstance.
+
+                  Deprecated: set SSO with provider=azure-entra instead. When SSO is nil this
+                  flag still works for backward compatibility, synthesizing an azure-entra
+                  OIDC config that reads the legacy "entra-sso-credentials" Secret.
+                type: boolean
+              guardrailRefs:
+                description: |-
+                  GuardrailRefs cross-references Guardrail CRs (same or other namespace) to
+                  wire into this gateway. Each referenced Guardrail must be Ready; the operator
+                  emits a LiteLLMGuardrail per (guardrail, mode) pointing at the guardrail's
+                  license-gate proxy endpoint. Guardrails are a licensed feature (guardrail);
+                  an unlicensed Guardrail never becomes Ready, so nothing is wired.
+                items:
+                  description: |-
+                    ObjectRef references another namespaced object. Namespace is optional and
+                    defaults to the referring object's namespace. Cross-namespace references are
+                    allowed for datastore/gateway/langfuse references; Secret references must stay
+                    in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              ingress:
+                description: |-
+                  Ingress exposes the LiteLLM gateway publicly (translated to the
+                  LiteLLMInstance ingress). When enabled, status.url reports the public URL;
+                  TLS pulls in cert-manager.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  api:
+                    description: |-
+                      API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                      THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                      a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                      a Gateway API HTTPRoute.
+                    enum:
+                    - Ingress
+                    - Gateway
+                    type: string
+                  basicAuthSecret:
+                    description: |-
+                      BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                      basic-auth annotations.
+                    type: string
+                  className:
+                    type: string
+                  clusterIssuer:
+                    description: ClusterIssuer is the cert-manager ClusterIssuer to
+                      use when TLS is true.
+                    type: string
+                  enabled:
+                    type: boolean
+                  host:
+                    type: string
+                  tls:
+                    description: TLS enables a cert-manager-issued certificate for
+                      Host.
+                    type: boolean
+                type: object
+              instance:
+                description: Instance configures the LiteLLMInstance.
+                properties:
+                  healthCheck:
+                    description: |-
+                      HealthCheck tunes LiteLLM's periodic background health checks of the
+                      configured models. Disabled by default: GET /health probes on demand rather
+                      than running a background loop (background checks add upstream traffic and can
+                      incur cost/rate-limits on some providers). Enable it — and optionally set the
+                      interval — to have the proxy cache health results. Maps to the LiteLLMInstance
+                      generalSettings.backgroundHealthChecks / healthCheckInterval.
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled turns on background model health checks. Default false (disabled):
+                          health is probed on demand at GET /health instead of a background loop.
+                        type: boolean
+                      intervalSeconds:
+                        description: |-
+                          IntervalSeconds is the delay between background health checks (LiteLLM
+                          default 300). Only applies when Enabled is true.
+                        minimum: 1
+                        type: integer
+                    type: object
+                  image:
+                    description: ImageSpec is a container image reference.
+                    properties:
+                      pullPolicy:
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        - Never
+                        type: string
+                      repository:
+                        type: string
+                      tag:
+                        type: string
+                    type: object
+                  jwtAuth:
+                    description: |-
+                      JWTAuth enables JWT-based API authentication on the LiteLLM proxy: LiteLLM
+                      validates a bearer JWT from your IdP and maps its claims to roles/teams. Maps
+                      to the LiteLLMInstance's spec.jwtAuth (general_settings.enable_jwt_auth +
+                      litellm_jwtauth). Requires a LiteLLM Enterprise license (licenseSecretRef).
+                    properties:
+                      adminJWTScope:
+                        description: |-
+                          AdminJWTScope is the scope value that grants proxy-admin access
+                          (litellm_jwtauth.admin_jwt_scope).
+                        type: string
+                      audience:
+                        description: |-
+                          Audience is the expected token audience (`aud`) the proxy validates against
+                          (JWT_AUDIENCE) — typically your app/client ID.
+                        type: string
+                      enabled:
+                        description: Enabled turns on JWT authentication (enable_jwt_auth).
+                        type: boolean
+                      enforceRBAC:
+                        description: |-
+                          EnforceRBAC, when true, denies callers whose roles are not in UserAllowedRoles
+                          (litellm_jwtauth.enforce_rbac).
+                        type: boolean
+                      issuer:
+                        description: |-
+                          Issuer is the expected token issuer (`iss`) the proxy validates against
+                          (JWT_ISSUER), e.g. "https://login.microsoftonline.com/<tenant>/v2.0".
+                        type: string
+                      publicKeyURL:
+                        description: |-
+                          PublicKeyURL is the JWKS endpoint the proxy fetches token-signing keys from
+                          (JWT_PUBLIC_KEY_URL), e.g.
+                          "https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys". Required in
+                          practice: without it LiteLLM cannot validate any token and JWT auth fails even
+                          when the claim mappings below are fully configured.
+                        type: string
+                      teamIDsJWTField:
+                        description: |-
+                          TeamIDsJWTField is the JWT claim holding the caller's team IDs
+                          (litellm_jwtauth.team_ids_jwt_field).
+                        type: string
+                      userAllowedRoles:
+                        description: |-
+                          UserAllowedRoles are the role values (read from UserRolesJWTField) that map to
+                          an 'internal_user' on LiteLLM (litellm_jwtauth.user_allowed_roles).
+                        items:
+                          type: string
+                        type: array
+                      userIDJWTField:
+                        description: |-
+                          UserIDJWTField is the JWT claim used as the LiteLLM user id
+                          (litellm_jwtauth.user_id_jwt_field), e.g. "sub", "oid", or
+                          "preferred_username". Required for JWT auth to resolve a stable user identity.
+                        type: string
+                      userIDUpsert:
+                        description: |-
+                          UserIDUpsert auto-creates (upserts) a LiteLLM internal-user record the first
+                          time a JWT for a new user id is seen (litellm_jwtauth.user_id_upsert). Without
+                          it, callers whose user id has no pre-existing LiteLLM user are rejected.
+                        type: boolean
+                      userRoleJWTField:
+                        description: |-
+                          UserRoleJWTField is the JWT claim holding a SINGLE user role
+                          (litellm_jwtauth.user_role_jwt_field). Use UserRolesJWTField for a list.
+                        type: string
+                      userRolesJWTField:
+                        description: |-
+                          UserRolesJWTField is the JWT claim holding the LIST of the caller's roles
+                          (litellm_jwtauth.user_roles_jwt_field), e.g. "roles".
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                  licenseSecretRef:
+                    description: LicenseSecretRef references the LiteLLM enterprise
+                      license key Secret.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  masterKey:
+                    description: MasterKey configures the LiteLLM master key (auto-generated
+                      by default).
+                    properties:
+                      autoGenerate:
+                        type: boolean
+                      secretRef:
+                        description: SecretKeyRef references a Secret (optionally
+                          a specific key within it).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                  replicas:
+                    default: 1
+                    format: int32
+                    type: integer
+                  resources:
+                    description: ResourceRequirements describes the compute resource
+                      requirements.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  rolePermissions:
+                    additionalProperties:
+                      description: |-
+                        RolePermission restricts what a single LiteLLM role may access — the value of a
+                        role_permissions entry.
+                      properties:
+                        models:
+                          description: Models this role may call.
+                          items:
+                            type: string
+                          type: array
+                        routes:
+                          description: Routes are the API routes this role may access.
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    description: |-
+                      RolePermissions restricts which models (and API routes) each LiteLLM role may
+                      use, keyed by role name (e.g. "internal_user"). Maps to the LiteLLMInstance's
+                      spec.rbac (general_settings.role_permissions); setting any entry turns on
+                      general_settings.enforce_rbac so the restrictions take effect. Requires a
+                      LiteLLM Enterprise license.
+                    type: object
+                  saltKey:
+                    description: SaltKey configures the LiteLLM salt key (auto-generated
+                      by default).
+                    properties:
+                      autoGenerate:
+                        type: boolean
+                      secretRef:
+                        description: SecretKeyRef references a Secret (optionally
+                          a specific key within it).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                  storePromptsInLogs:
+                    description: |-
+                      StorePromptsInLogs enables storing request/response message content in the
+                      LiteLLM spend logs, making prompts/completions visible in the LiteLLM UI Logs.
+                      Off by default for privacy. This is a runtime LiteLLM setting
+                      (general_settings.store_prompts_in_spend_logs) the operator applies via the
+                      proxy admin API once the gateway is ready; nil leaves it unmanaged.
+                    type: boolean
+                type: object
+              mesh:
+                description: |-
+                  Mesh opts this workload's namespace into the cluster ServiceMesh (mTLS +
+                  isolation). Defaults to mode=auto.
+                properties:
+                  mode:
+                    default: auto
+                    enum:
+                    - auto
+                    - enabled
+                    - disabled
+                    type: string
+                type: object
+              models:
+                items:
+                  description: ModelConfig mirrors helm/gateway values.models entries.
+                  properties:
+                    credentials:
+                      description: Credentials, when set, emits a dedicated LiteLLMCredential
+                        (apiBase, etc.).
+                      properties:
+                        apiBase:
+                          type: string
+                        apiVersion:
+                          type: string
+                      type: object
+                    fallbacks:
+                      description: |-
+                        Fallbacks are model aliases to try when this one fails (type=waeg only;
+                        LiteLLM fallbacks are configured on the proxy, not per model CR).
+                      items:
+                        type: string
+                      type: array
+                    maxTokens:
+                      default: 200000
+                      type: integer
+                    model:
+                      type: string
+                    modelId:
+                      description: |-
+                        ModelID is the provider-side model identifier for type=waeg (the
+                        deployment's modelId). Defaults to Model with its provider prefix stripped
+                        ("azure/gpt-4o" → "gpt-4o"). Ignored for type=litellm.
+                      type: string
+                    modelName:
+                      type: string
+                    name:
+                      type: string
+                    provider:
+                      description: |-
+                        Provider is the upstream provider DRIVER (openai, azure, anthropic, …).
+                        Only used when the Gateway is type=waeg, where the catalog splits into a
+                        provider (connection + credential) and a model alias pointing at it —
+                        LiteLLM instead encodes the driver in the Model string. Defaults to the
+                        prefix of Model ("azure/gpt-4o" → "azure", a bare "gpt-4o" → "openai").
+                      type: string
+                    providerName:
+                      description: |-
+                        ProviderName names the Wäg provider-catalog entry this model resolves
+                        against, letting several models share one connection + credential. Defaults
+                        to "<gateway>-<provider driver>". Ignored for type=litellm.
+                      type: string
+                    refSecretKey:
+                      description: RefSecretKey is the key in the model-credentials
+                        Secret holding the API key.
+                      type: string
+                    rpm:
+                      type: integer
+                    timeout:
+                      type: integer
+                    tpm:
+                      type: integer
+                    weight:
+                      description: |-
+                        Weight balances this deployment against others sharing the alias
+                        (type=waeg only).
+                      type: integer
+                  required:
+                  - model
+                  - modelName
+                  - name
+                  - refSecretKey
+                  type: object
+                type: array
+              observability:
+                description: Langfuse is the manual fallback when auto-wiring is unlicensed.
+                properties:
+                  callbackSecretRef:
+                    description: CallbackSecretRef references a Secret with public/secret
+                      Langfuse keys.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  host:
+                    description: Host is the Langfuse base URL.
+                    type: string
+                required:
+                - callbackSecretRef
+                type: object
+              observabilityRef:
+                description: |-
+                  ObservabilityRef cross-references a Langfuse for trace export (auto-wired when
+                  the "auto-wiring" feature is licensed).
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
+              organization:
+                description: OrgConfig configures the LiteLLMOrganization.
+                properties:
+                  budgetDuration:
+                    type: string
+                  maxBudget:
+                    type: integer
+                  name:
+                    type: string
+                  rpmLimit:
+                    type: integer
+                  tpmLimit:
+                    type: integer
+                required:
+                - name
+                type: object
+              secretsRef:
+                description: |-
+                  SecretsRef optionally binds a same-namespace SecretsManagement; the
+                  workload then waits until it is Ready (its ExternalSecrets / SealedSecrets
+                  have produced the Secrets this workload references). Leave it unset to use
+                  plain Kubernetes Secrets you manage yourself — every credential is already
+                  referenced directly, so no ESO or SealedSecrets is needed.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              sso:
+                description: |-
+                  SSO enables OIDC/SSO login on the LiteLLM Admin UI. Translated to the
+                  LiteLLMInstance sso block. Note: LiteLLM SSO is free for up to 5 users; full
+                  SSO requires a LiteLLM Enterprise license.
+                properties:
+                  authorizationEndpoint:
+                    description: |-
+                      AuthorizationEndpoint overrides the OIDC authorization endpoint. The LiteLLM
+                      Gateway's generic-oidc provider requires the three explicit endpoints below
+                      (it does not perform discovery); ChatUI and Langfuse derive them from
+                      IssuerURL and ignore these.
+                    type: string
+                  clientSecretRef:
+                    description: |-
+                      ClientSecretRef references a same-namespace Secret holding this workload's
+                      OAuth client credentials. The Secret must carry the client ID and client
+                      secret under ClientIDKey / ClientSecretKey (defaulting to client-id /
+                      client-secret). Supply it via SecretsManagement (ESO/SealedSecrets).
+                    properties:
+                      clientIDKey:
+                        default: client-id
+                        description: ClientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        type: string
+                      clientSecretKey:
+                        default: client-secret
+                        description: ClientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        type: string
+                      name:
+                        description: Name is the Secret name (same namespace as the
+                          workload).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  issuerURL:
+                    description: |-
+                      IssuerURL is the OIDC issuer / discovery base URL, e.g.
+                      "https://login.microsoftonline.com/<tenant>/v2.0" or
+                      "https://accounts.google.com". Used directly by ChatUI (OPENID_ISSUER) and
+                      Langfuse (AUTH_CUSTOM_ISSUER); for the Gateway it is informational unless the
+                      explicit generic endpoints below are also set.
+                    type: string
+                  provider:
+                    description: |-
+                      Provider selects the LiteLLM Gateway provider flavor. Ignored by ChatUI and
+                      Langfuse (both always use their generic OIDC path). Defaults to generic-oidc.
+                    enum:
+                    - generic-oidc
+                    - azure-entra
+                    - google
+                    - okta
+                    type: string
+                  providerName:
+                    description: |-
+                      ProviderName is the display name / login-button label shown to users
+                      (LibreChat OPENID_BUTTON_LABEL, Langfuse AUTH_CUSTOM_NAME). Defaults to "SSO".
+                    type: string
+                  scopes:
+                    description: Scopes requested from the IdP. Defaults to ["openid","email","profile"].
+                    items:
+                      type: string
+                    type: array
+                  tenantID:
+                    description: |-
+                      TenantID is the directory/tenant ID, required by the Gateway for
+                      provider=azure-entra.
+                    type: string
+                  tokenEndpoint:
+                    description: TokenEndpoint overrides the OIDC token endpoint (Gateway
+                      generic-oidc).
+                    type: string
+                  userinfoEndpoint:
+                    description: UserinfoEndpoint overrides the OIDC userinfo endpoint
+                      (Gateway generic-oidc).
+                    type: string
+                required:
+                - clientSecretRef
+                - issuerURL
+                type: object
+              teams:
+                items:
+                  description: TeamConfig configures a LiteLLMTeam. Defaults mirror
+                    helm/gateway team.yaml.
+                  properties:
+                    budgetDuration:
+                      default: 30d
+                      type: string
+                    maxBudgetMonthly:
+                      default: 500
+                      type: integer
+                    memberManagement:
+                      default: mixed
+                      type: string
+                    members:
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      type: string
+                    rpmLimit:
+                      default: 200
+                      type: integer
+                    tpmLimit:
+                      default: 50000
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                type: array
+              type:
+                default: litellm
+                description: |-
+                  Type selects the gateway implementation:
+
+                    - litellm (default) — the LiteLLM proxy, driven through the litellm-operator.
+                    - waeg — the Wäg AI gateway, driven through the waeg-operator
+                      (gateway.waeg.ai). Wäg is a different product, not a LiteLLM clone: it
+                      mandates a dual-plane store (Postgres AND ClickHouse), needs Redis for
+                      multi-replica HA quotas, and requires OpenFGA for authz. Several
+                      LiteLLM-only fields on this CRD have no Wäg equivalent yet — they are
+                      reported on the GatewayFeaturesSupported condition rather than silently
+                      ignored. See spec.waeg.
+                enum:
+                - litellm
+                - waeg
+                type: string
+              waeg:
+                description: |-
+                  Waeg carries the Wäg-specific wiring that has no LiteLLM analogue
+                  (topology, ClickHouse/Redis planes, OpenFGA). Required when type=waeg.
+                properties:
+                  artifacts:
+                    description: Artifacts is the volume Wäg uses for job/media artifacts.
+                    properties:
+                      emptyDirSizeLimit:
+                        description: EmptyDirSizeLimit e.g. "5Gi".
+                        type: string
+                      pvcName:
+                        description: |-
+                          PVCName is an EXISTING claim when type=pvc — the waeg-operator does not
+                          provision PVCs.
+                        type: string
+                      type:
+                        default: emptyDir
+                        enum:
+                        - emptyDir
+                        - pvc
+                        - none
+                        type: string
+                    type: object
+                  autoscaling:
+                    description: |-
+                      Autoscaling turns on an HPA for the API Deployment. Wäg Phase 1 scales on
+                      CPU (and optionally memory) only; queue-depth autoscaling needs KEDA and is
+                      not wired here.
+                    properties:
+                      enabled:
+                        type: boolean
+                      maxReplicas:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      minReplicas:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      targetCPUUtilizationPercentage:
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      targetMemoryUtilizationPercentage:
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    required:
+                    - enabled
+                    type: object
+                  bootstrapAdmin:
+                    description: |-
+                      BootstrapAdmin seeds the first Wäg console admin. Both keys are read from
+                      one same-namespace Secret (default keys bootstrap-admin-email /
+                      bootstrap-admin-password). Unset leaves the gateway's own default.
+                    properties:
+                      emailKey:
+                        default: bootstrap-admin-email
+                        type: string
+                      passwordKey:
+                        default: bootstrap-admin-password
+                        type: string
+                      secretRef:
+                        description: LocalRef references an object in the same namespace
+                          only.
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - secretRef
+                    type: object
+                  brandingConfigMapRef:
+                    description: |-
+                      BrandingConfigMapRef points at a ConfigMap key holding an Enterprise theme
+                      pack (JSON). The waeg-operator POSTs it to the Admin API once Ready.
+
+                      Leave it unset to get the built-in Navique theme pack, which the operator
+                      materializes into an owned ConfigMap whenever the gateway carries an
+                      Enterprise licence (spec.instance.licenseSecretRef) — setting this field
+                      replaces it with your own pack (white-label; licensed feature
+                      `custom-branding` — without it the Navique theme is used and the
+                      CustomBranding condition says why). See DefaultBranding to opt out entirely.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  clickhouse:
+                    description: |-
+                      ClickHouse selects the analytics plane for storageMode=split. Point it at a
+                      ClickHouseCluster (mode=ref) or an external connection Secret
+                      (mode=external) carrying a WAEG_CLICKHOUSE_URL. Ignored — and not required —
+                      when storageMode is "single".
+                    properties:
+                      connectionSecretRef:
+                        description: ConnectionSecretRef supplies an external connection
+                          string.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      databaseName:
+                        description: |-
+                          DatabaseName selects a logical database inside the shared datastore.
+
+                          Postgres: required for a ref to a managed/adopted PostgresCluster (its
+                          per-database credentials are looked up by this name).
+
+                          ClickHouse: optional; Langfuse writes to ClickHouse's built-in `default`
+                          database when unset. Langfuse creates only its tables, never the database:
+                          on a managed or adopted ClickHouseCluster list the name in the cluster's
+                          spec.databases (a Stack does this for you) and Langfuse waits until it
+                          exists; with an external ClickHouse it must already exist. Changing it on a
+                          running Langfuse starts it on an EMPTY database — earlier traces stay in the
+                          old one.
+                        type: string
+                      mode:
+                        enum:
+                        - ref
+                        - external
+                        type: string
+                      ref:
+                        description: Ref points at a PostgresCluster / ClickHouseCluster
+                          / RedisInstance.
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - mode
+                    type: object
+                  clickhouseDatabase:
+                    description: |-
+                      ClickHouseDatabase overrides the ClickHouse database analytics are written
+                      to (default "waeg"). The operator creates it on a managed or adopted
+                      ClickHouseCluster; Wäg itself creates only its tables.
+                    pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                    type: string
+                  configYAML:
+                    description: |-
+                      ConfigYAML overrides the waeg.yaml bootstrap seed. NON-SECRET ONLY — it is
+                      rendered into a ConfigMap. Leave unset to use the operator's seed.
+                    type: string
+                  dataEncryptionKeySecretRef:
+                    description: |-
+                      DataEncryptionKeySecretRef references the platform data-encryption key Wäg
+                      uses to seal config revisions at rest (default key data-encryption-key).
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  defaultBranding:
+                    default: true
+                    description: |-
+                      DefaultBranding applies the built-in Navique theme pack to the gateway
+                      console when the gateway is Enterprise-licensed and no
+                      brandingConfigMapRef of your own is set (default true).
+
+                      Set it false to leave the console in Wäg's own livery. It has no effect
+                      without an Enterprise licence: Wäg refuses branding unconditionally without
+                      one, so the operator does not create the ConfigMap at all in that case.
+                    type: boolean
+                  jobWorkers:
+                    description: |-
+                      JobWorkers is the in-process durable-job worker count for the API pods
+                      (topology=AllInOne). Ignored on Split, where the API runs with zero job
+                      workers and the worker Deployment does the work.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  jwt:
+                    description: |-
+                      JWT carries the Wäg-only knobs for data-plane JWT authentication. Turning
+                      JWT auth ON is spec.instance.jwtAuth (shared with LiteLLM: issuer, audience,
+                      JWKS URL, subject claim); this block adds what only Wäg has — application
+                      and tenant claims, and the two hardening switches that disable the master
+                      key / virtual keys on the data plane.
+
+                      Licensed feature: the gateway's own Enterprise licence (entitlement
+                      jwt_api) — without it the module answers 402.
+                    properties:
+                      allowMasterKey:
+                        description: |-
+                          AllowMasterKey keeps the master key working on the data plane (default
+                          true). Setting it false locks the data plane to JWTs only.
+                        type: boolean
+                      allowVirtualKeys:
+                        description: |-
+                          AllowVirtualKeys keeps virtual keys working on the data plane (default
+                          true). Setting it false locks the data plane to JWTs only — every ChatUI
+                          and application key stops working, so change it deliberately.
+                        type: boolean
+                      appClaim:
+                        description: AppClaim identifies the calling application (default
+                          "azp").
+                        type: string
+                      appClaimFallbacks:
+                        description: |-
+                          AppClaimFallbacks are tried in order when AppClaim is absent. Whole-list
+                          replacement: an empty list clears Wäg's own defaults (appid, client_id).
+                        items:
+                          type: string
+                        type: array
+                      insecureSkipVerify:
+                        description: |-
+                          InsecureSkipVerify accepts unverified token signatures. Wäg refuses it in a
+                          production environment and alongside any hardening flag. Development only.
+                        type: boolean
+                      requireRegisteredApplication:
+                        description: |-
+                          RequireRegisteredApplication rejects tokens whose application is not a
+                          registered WaegApplication.
+                        type: boolean
+                      tenantClaim:
+                        description: TenantClaim carries the org/tenant (falls back
+                          to tenant_id, then tid).
+                        type: string
+                    type: object
+                  modelAccess:
+                    description: |-
+                      ModelAccess declares the org-rooted model ACL (who may call which model
+                      alias). Requires spec.organization — Wäg model-access grants are always
+                      org-rooted.
+                    properties:
+                      fallbackMode:
+                        description: FallbackMode governs behaviour when no grant
+                          matches.
+                        enum:
+                        - deny
+                        - allow
+                        type: string
+                      grants:
+                        description: Grants are the individual allow lists.
+                        items:
+                          description: |-
+                            WaegModelAccessGrant is one entry of the org model ACL. Exactly one subject
+                            (teamId / userId / applicationId) identifies who the grant applies to; leaving
+                            all three empty makes it the org-wide default.
+                          properties:
+                            applicationId:
+                              type: string
+                            enabled:
+                              type: boolean
+                            id:
+                              type: string
+                            models:
+                              description: Models are the allowed client-facing aliases.
+                              items:
+                                type: string
+                              type: array
+                            teamId:
+                              type: string
+                            userId:
+                              type: string
+                          required:
+                          - models
+                          type: object
+                        type: array
+                      openByDefault:
+                        description: OpenByDefault allows every model alias unless
+                          a grant narrows it.
+                        type: boolean
+                    type: object
+                  openfga:
+                    description: |-
+                      OpenFGA configures the mandatory authorization store. Leave unset to have
+                      the waeg-operator deploy a Postgres-backed OpenFGA for this instance
+                      (datastore defaults to spec.database).
+                    properties:
+                      apiUrl:
+                        description: APIURL is an external OpenFGA endpoint, e.g.
+                          http://openfga.authz.svc:8080.
+                        type: string
+                      apiUrlSecretRef:
+                        description: APIURLSecretRef reads that URL from a Secret
+                          instead.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      image:
+                        description: Image overrides the managed OpenFGA image.
+                        type: string
+                      modelId:
+                        type: string
+                      replicas:
+                        description: Replicas of the managed OpenFGA Deployment.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      resources:
+                        description: Resources for the managed OpenFGA container.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This field depends on the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                      storeId:
+                        description: StoreID / ModelID pin an existing OpenFGA store
+                          + authorization model.
+                        type: string
+                    type: object
+                  redis:
+                    description: |-
+                      Redis backs HA request quotas. REQUIRED whenever the API serves more than
+                      one replica (instance.replicas > 1 or autoscaling.minReplicas > 1) —
+                      without it the Wäg instance never becomes Ready (reason RedisRequired).
+                    properties:
+                      connectionSecretRef:
+                        description: ConnectionSecretRef supplies an external connection
+                          string.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      databaseName:
+                        description: |-
+                          DatabaseName selects a logical database inside the shared datastore.
+
+                          Postgres: required for a ref to a managed/adopted PostgresCluster (its
+                          per-database credentials are looked up by this name).
+
+                          ClickHouse: optional; Langfuse writes to ClickHouse's built-in `default`
+                          database when unset. Langfuse creates only its tables, never the database:
+                          on a managed or adopted ClickHouseCluster list the name in the cluster's
+                          spec.databases (a Stack does this for you) and Langfuse waits until it
+                          exists; with an external ClickHouse it must already exist. Changing it on a
+                          running Langfuse starts it on an EMPTY database — earlier traces stay in the
+                          old one.
+                        type: string
+                      mode:
+                        enum:
+                        - ref
+                        - external
+                        type: string
+                      ref:
+                        description: Ref points at a PostgresCluster / ClickHouseCluster
+                          / RedisInstance.
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - mode
+                    type: object
+                  scim:
+                    description: |-
+                      SCIM turns on Wäg's SCIM v2 provisioning endpoints so an IdP can create,
+                      update and deprovision console users directly. It is gated on the GATEWAY's
+                      own Enterprise licence (spec.instance.licenseSecretRef) — without it the
+                      module answers 402 — and on nothing else.
+
+                      Not to be confused with the platform's own `sso-scim` license feature: that
+                      is a separate, not-yet-implemented capability of this operator, unrelated to
+                      the gateway module wired here.
+
+                      SCIM is independent of spec.sso: an IdP can provision users over SCIM
+                      whether or not interactive login is wired.
+                    properties:
+                      defaultOrgID:
+                        description: |-
+                          DefaultOrgID is the Wäg organization provisioned users land in. Defaults to
+                          the Gateway's own organization when spec.organization is set.
+                        type: string
+                      defaultRole:
+                        description: DefaultRole is the console role a newly provisioned
+                          user receives.
+                        enum:
+                        - viewer
+                        - operator
+                        - admin
+                        type: string
+                      enabled:
+                        default: true
+                        description: Enabled turns the SCIM endpoints on. They answer
+                          404 while off.
+                        type: boolean
+                      orgMap:
+                        additionalProperties:
+                          type: string
+                        description: OrgMap maps an IdP value to a Wäg organization
+                          id. Whole-map replacement.
+                        type: object
+                      orgSource:
+                        description: |-
+                          OrgSource selects where a provisioned user's organization comes from:
+                          "waeg" (the gateway decides), "enterprise" (the IdP payload) or "none".
+                        enum:
+                        - waeg
+                        - enterprise
+                        - none
+                        type: string
+                      roleMap:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          RoleMap maps an IdP group name to a Wäg console role. Sent as a WHOLE-MAP
+                          replacement, so it always reflects exactly what is declared here.
+                        type: object
+                      tokenSecretRef:
+                        description: |-
+                          TokenSecretRef holds the bearer token the IdP presents to the SCIM
+                          endpoints. Required: Wäg will not serve SCIM without one, and the operator
+                          projects it onto the gateway pods as WAEG_EE_SCIM_TOKEN rather than writing
+                          it into the gateway's config store.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - tokenSecretRef
+                    type: object
+                  storageMode:
+                    default: split
+                    description: |-
+                      StorageMode selects the analytics plane.
+
+                        - "split" (default): analytics live in ClickHouse, which spec.waeg.clickhouse
+                          must then point at. The right choice at volume, and what this operator has
+                          always emitted.
+                        - "single": analytics live in the same Postgres as the control plane, so no
+                          ClickHouse is needed at all and spec.waeg.clickhouse is ignored. Upstream's
+                          own default and its recommended starting point; markedly cheaper to run.
+
+                      Switching an existing gateway between the two does NOT migrate analytics
+                      history — the planes are separate stores.
+                    enum:
+                    - split
+                    - single
+                    type: string
+                  topology:
+                    default: AllInOne
+                    description: |-
+                      Topology selects the process model:
+
+                        - AllInOne (default) — one Deployment serving the API with in-process job
+                          workers.
+                        - Split — a *-api Deployment plus an optional *-worker Deployment; the
+                          Service selects API pods only. Required to enable worker.
+
+                      Note this is unrelated to the Wäg dual-plane "storage split".
+                    enum:
+                    - AllInOne
+                    - Split
+                    type: string
+                  worker:
+                    description: |-
+                      Worker configures the dedicated job-worker Deployment. Requires
+                      topology=Split.
+                    properties:
+                      enabled:
+                        type: boolean
+                      jobWorkers:
+                        description: JobWorkers is the per-pod concurrent durable-job
+                          worker count.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      replicas:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      resources:
+                        description: ResourceRequirements describes the compute resource
+                          requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This field depends on the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                type: object
+            required:
+            - database
+            - instance
+            type: object
+          status:
+            description: GatewayStatus reports gateway readiness.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              databaseReady:
+                type: boolean
+              modelCount:
+                type: integer
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              serviceURL:
+                description: ServiceURL is the in-cluster LiteLLM endpoint (always
+                  set).
+                type: string
+              storePromptsInLogs:
+                description: |-
+                  StorePromptsInLogs is the last value the operator applied to the LiteLLM
+                  proxy's store_prompts_in_spend_logs setting (drives apply-on-diff).
+                type: boolean
+              teamCount:
+                type: integer
+              unsupportedFeatures:
+                description: |-
+                  UnsupportedFeatures lists spec fields that the SELECTED gateway type cannot
+                  honour, so they are visibly skipped rather than silently ignored. Mirrored
+                  by the FeaturesSupported condition. Always empty for type=litellm.
+                items:
+                  type: string
+                type: array
+              url:
+                description: |-
+                  URL is the public gateway URL when ingress is enabled, else the in-cluster
+                  endpoint (mirrors Langfuse/ChatUI status.url).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

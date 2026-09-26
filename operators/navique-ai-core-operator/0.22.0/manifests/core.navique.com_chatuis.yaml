@@ -1,0 +1,561 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: chatuis.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: ChatUI
+    listKind: ChatUIList
+    plural: chatuis
+    shortNames:
+    - ui
+    singular: chatui
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.ingressHost
+      name: Host
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ChatUI is a LibreChat web UI wired to a Gateway.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ChatUISpec defines a LibreChat UI wired to a Gateway.
+            properties:
+              agents:
+                description: |-
+                  Agents enables LibreChat's Agents endpoint. It is **disabled by default**:
+                  the operator renders `interface.agents: false` unless this is explicitly set
+                  to true. (LibreChat itself defaults Agents on.)
+                type: boolean
+              gateway:
+                description: Gateway is the manual endpoint fallback when auto-wiring
+                  is unlicensed.
+                properties:
+                  apiKeySecretRef:
+                    description: |-
+                      APIKeySecretRef references a Secret holding the gateway API key. `key`
+                      names the entry (default "LITELLM_API_KEY") — any name works; the operator
+                      hands only that one value to LibreChat, not the rest of the Secret.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  url:
+                    type: string
+                required:
+                - apiKeySecretRef
+                - url
+                type: object
+              gatewayRef:
+                description: GatewayRef cross-references a Gateway (auto-wired when
+                  licensed).
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
+              host:
+                description: Host is the public hostname of the UI.
+                type: string
+              image:
+                description: ImageSpec is a container image reference.
+                properties:
+                  pullPolicy:
+                    enum:
+                    - Always
+                    - IfNotPresent
+                    - Never
+                    type: string
+                  repository:
+                    type: string
+                  tag:
+                    type: string
+                type: object
+              imageVolume:
+                description: PVCSpec describes a persistent volume claim for a workload.
+                properties:
+                  accessMode:
+                    enum:
+                    - ReadWriteOnce
+                    - ReadWriteMany
+                    - ReadOnlyMany
+                    type: string
+                  enabled:
+                    type: boolean
+                  size:
+                    type: string
+                  storageClass:
+                    type: string
+                type: object
+              ingress:
+                description: |-
+                  IngressSpec configures an optional ingress for a workload. When TLS is enabled
+                  the owning controller ensures cert-manager via platformdeps.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  api:
+                    description: |-
+                      API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                      THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                      a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                      a Gateway API HTTPRoute.
+                    enum:
+                    - Ingress
+                    - Gateway
+                    type: string
+                  basicAuthSecret:
+                    description: |-
+                      BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                      basic-auth annotations.
+                    type: string
+                  className:
+                    type: string
+                  clusterIssuer:
+                    description: ClusterIssuer is the cert-manager ClusterIssuer to
+                      use when TLS is true.
+                    type: string
+                  enabled:
+                    type: boolean
+                  host:
+                    type: string
+                  tls:
+                    description: TLS enables a cert-manager-issued certificate for
+                      Host.
+                    type: boolean
+                type: object
+              mcpRefs:
+                description: |-
+                  MCPRefs cross-references MCPServer CRs (catalog or external) to wire into
+                  LibreChat's Agents endpoint. Each referenced MCPServer must be Ready.
+                  Referencing any MCP server auto-enables Agents. Cross-namespace refs are
+                  allowed (the server's resolved endpoint is what gets wired).
+                items:
+                  description: |-
+                    ObjectRef references another namespaced object. Namespace is optional and
+                    defaults to the referring object's namespace. Cross-namespace references are
+                    allowed for datastore/gateway/langfuse references; Secret references must stay
+                    in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              meilisearch:
+                description: |-
+                  Meilisearch wires LibreChat's search backend (optional). mode "ref" → a
+                  MeilisearchInstance; "external" → a host + master key; "disabled" → no
+                  search. The bundled subchart is always disabled. Omitting this block is
+                  equivalent to mode "ref" with no ref — i.e. search stays off until wired.
+                properties:
+                  host:
+                    description: Host is the external Meilisearch base URL (mode=external).
+                    type: string
+                  masterKeySecretRef:
+                    description: |-
+                      MasterKeySecretRef references the master key (mode=external), under the key
+                      "MEILI_MASTER_KEY" (or the ref's Key).
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  mode:
+                    default: ref
+                    enum:
+                    - ref
+                    - external
+                    - disabled
+                    type: string
+                  ref:
+                    description: Ref points at a MeilisearchInstance (mode=ref).
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              mesh:
+                description: |-
+                  Mesh opts this workload's namespace into the cluster ServiceMesh (mTLS +
+                  isolation). Defaults to mode=auto.
+                properties:
+                  mode:
+                    default: auto
+                    enum:
+                    - auto
+                    - enabled
+                    - disabled
+                    type: string
+                type: object
+              models:
+                description: Models is the client-facing model list shown in the UI.
+                items:
+                  type: string
+                type: array
+              mongo:
+                description: |-
+                  Mongo wires LibreChat's MongoDB store. mode "ref" → a MongoCluster (select a
+                  logical database with databaseName, default "LibreChat"); mode "external" →
+                  a connection secret holding MONGO_URI. The bundled LibreChat MongoDB subchart
+                  is always disabled.
+                properties:
+                  connectionSecretRef:
+                    description: ConnectionSecretRef supplies an external connection
+                      string.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  databaseName:
+                    description: |-
+                      DatabaseName selects a logical database inside the shared datastore.
+
+                      Postgres: required for a ref to a managed/adopted PostgresCluster (its
+                      per-database credentials are looked up by this name).
+
+                      ClickHouse: optional; Langfuse writes to ClickHouse's built-in `default`
+                      database when unset. Langfuse creates only its tables, never the database:
+                      on a managed or adopted ClickHouseCluster list the name in the cluster's
+                      spec.databases (a Stack does this for you) and Langfuse waits until it
+                      exists; with an external ClickHouse it must already exist. Changing it on a
+                      running Langfuse starts it on an EMPTY database — earlier traces stay in the
+                      old one.
+                    type: string
+                  mode:
+                    enum:
+                    - ref
+                    - external
+                    type: string
+                  ref:
+                    description: Ref points at a PostgresCluster / ClickHouseCluster
+                      / RedisInstance.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - mode
+                type: object
+              observability:
+                description: |-
+                  Langfuse is the manual Langfuse tracing fallback (community editions): a
+                  user-created project's keys. Takes precedence over ObservabilityRef when set.
+                properties:
+                  callbackSecretRef:
+                    description: |-
+                      CallbackSecretRef references a Secret with the Langfuse project keys under
+                      keys "publicKey" and "secretKey".
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  host:
+                    description: Host is the Langfuse base URL (LibreChat's LANGFUSE_BASE_URL).
+                    type: string
+                required:
+                - callbackSecretRef
+                type: object
+              observabilityRef:
+                description: |-
+                  ObservabilityRef cross-references a Langfuse for LibreChat trace export. With the
+                  auto-wiring feature licensed AND Langfuse Enterprise (Admin API), the
+                  operator provisions a project and wires the keys automatically; otherwise
+                  set the manual Langfuse fallback.
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
+              rotation:
+                description: |-
+                  Rotation re-mints the auto-wired LiteLLM virtual key on an interval
+                  (licensed). Ignored without a gatewayRef / the credential-rotation feature.
+                properties:
+                  enabled:
+                    type: boolean
+                  interval:
+                    description: Interval between rotations (default 2160h = 90d when
+                      enabled).
+                    type: string
+                type: object
+              secretsRef:
+                description: |-
+                  SecretsRef optionally binds a same-namespace SecretsManagement; the
+                  workload then waits until it is Ready (its ExternalSecrets / SealedSecrets
+                  have produced the Secrets this workload references). Leave it unset to use
+                  plain Kubernetes Secrets you manage yourself — every credential is already
+                  referenced directly, so no ESO or SealedSecrets is needed.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              sso:
+                description: |-
+                  SSO enables OIDC/SSO login on LibreChat (its OPENID_* provider). Translated
+                  to ALLOW_SOCIAL_LOGIN + OPENID_* env on the librechat release. The operator
+                  mints an owned OPENID_SESSION_SECRET. The Provider/TenantID/endpoint fields
+                  of OIDCConfig are Gateway-only and ignored here.
+                properties:
+                  authorizationEndpoint:
+                    description: |-
+                      AuthorizationEndpoint overrides the OIDC authorization endpoint. The LiteLLM
+                      Gateway's generic-oidc provider requires the three explicit endpoints below
+                      (it does not perform discovery); ChatUI and Langfuse derive them from
+                      IssuerURL and ignore these.
+                    type: string
+                  clientSecretRef:
+                    description: |-
+                      ClientSecretRef references a same-namespace Secret holding this workload's
+                      OAuth client credentials. The Secret must carry the client ID and client
+                      secret under ClientIDKey / ClientSecretKey (defaulting to client-id /
+                      client-secret). Supply it via SecretsManagement (ESO/SealedSecrets).
+                    properties:
+                      clientIDKey:
+                        default: client-id
+                        description: ClientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        type: string
+                      clientSecretKey:
+                        default: client-secret
+                        description: ClientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        type: string
+                      name:
+                        description: Name is the Secret name (same namespace as the
+                          workload).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  issuerURL:
+                    description: |-
+                      IssuerURL is the OIDC issuer / discovery base URL, e.g.
+                      "https://login.microsoftonline.com/<tenant>/v2.0" or
+                      "https://accounts.google.com". Used directly by ChatUI (OPENID_ISSUER) and
+                      Langfuse (AUTH_CUSTOM_ISSUER); for the Gateway it is informational unless the
+                      explicit generic endpoints below are also set.
+                    type: string
+                  provider:
+                    description: |-
+                      Provider selects the LiteLLM Gateway provider flavor. Ignored by ChatUI and
+                      Langfuse (both always use their generic OIDC path). Defaults to generic-oidc.
+                    enum:
+                    - generic-oidc
+                    - azure-entra
+                    - google
+                    - okta
+                    type: string
+                  providerName:
+                    description: |-
+                      ProviderName is the display name / login-button label shown to users
+                      (LibreChat OPENID_BUTTON_LABEL, Langfuse AUTH_CUSTOM_NAME). Defaults to "SSO".
+                    type: string
+                  scopes:
+                    description: Scopes requested from the IdP. Defaults to ["openid","email","profile"].
+                    items:
+                      type: string
+                    type: array
+                  tenantID:
+                    description: |-
+                      TenantID is the directory/tenant ID, required by the Gateway for
+                      provider=azure-entra.
+                    type: string
+                  tokenEndpoint:
+                    description: TokenEndpoint overrides the OIDC token endpoint (Gateway
+                      generic-oidc).
+                    type: string
+                  userinfoEndpoint:
+                    description: UserinfoEndpoint overrides the OIDC userinfo endpoint
+                      (Gateway generic-oidc).
+                    type: string
+                required:
+                - clientSecretRef
+                - issuerURL
+                type: object
+              subcharts:
+                description: |-
+                  LibreChatSubcharts toggles the bundled LibreChat dependencies that the
+                  operator does NOT manage externally. MongoDB and Meilisearch are wired via
+                  dedicated CRDs (see ChatUISpec.mongo / .meilisearch → MongoCluster /
+                  MeilisearchInstance), so they are not here.
+                properties:
+                  ragApi:
+                    default: false
+                    type: boolean
+                  redis:
+                    default: false
+                    type: boolean
+                type: object
+              values:
+                description: |-
+                  Values is a free-form overlay of Helm values merged into the librechat
+                  workload chart, for chart options the CRD does not model. Keys the operator
+                  manages — datastore wiring, secret references, bundled-subchart toggles, and
+                  tracing/SSO env — take precedence and cannot be overridden here.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            required:
+            - mongo
+            type: object
+          status:
+            description: ChatUIStatus reports deployment availability.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              ingressHost:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              url:
+                type: string
+              virtualKeySecret:
+                description: VirtualKeySecret names the operator-minted virtual key
+                  Secret (auto-wiring).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

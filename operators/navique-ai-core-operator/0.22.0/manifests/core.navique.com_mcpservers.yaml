@@ -1,0 +1,323 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: mcpservers.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: MCPServer
+    listKind: MCPServerList
+    plural: mcpservers
+    shortNames:
+    - mcp
+    singular: mcpserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MCPServer is a Model Context Protocol server referenced by ChatUIs.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              MCPServerSpec defines a single Model Context Protocol (MCP) server that a
+              ChatUI can reference (spec.mcpRefs). It is either a bundled "catalog" server —
+              deployed and managed by the operator as a shared, ref-counted release (a
+              licensed feature) — or an "external" endpoint the user runs themselves.
+            properties:
+              catalog:
+                description: Catalog is the bundled server key (mode=catalog), e.g.
+                  "websearch".
+                type: string
+              displayName:
+                description: |-
+                  DisplayName is the server name shown in LibreChat (the key under
+                  mcpServers). Defaults to the catalog display name or the CR name.
+                type: string
+              external:
+                description: External describes a user-managed MCP endpoint (mode=external).
+                properties:
+                  headersSecretRef:
+                    description: |-
+                      HeadersSecretRef injects HTTP headers from a same-namespace Secret: each key
+                      in the Secret becomes a header (name=key), with the value sourced via an
+                      env-var reference so the secret value is never written into the rendered
+                      config. If Key is set, only that single header is injected.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  inCluster:
+                    description: |-
+                      InCluster forces SSRF-allowlist treatment (LibreChat mcpSettings) for this
+                      endpoint. nil ⇒ auto-detect from the host (in-cluster service DNS / private
+                      IP). Set true when targeting an in-cluster service that auto-detection would
+                      miss; set false to opt a private-looking host out.
+                    type: boolean
+                  oauth:
+                    description: |-
+                      OAuth configures OAuth 2.0 authentication to a protected MCP endpoint.
+                      Choose exactly one mechanism (interactive OR onBehalfOf). This is a licensed
+                      feature (mcp-oauth); without it the MCPServer is Refused (graceful — a ChatUI
+                      referencing it stays unwired). Only valid for HTTP transports (the Type enum
+                      already restricts to streamable-http|sse). Static header auth
+                      (headersSecretRef) and OAuth are independent and may both be set (headers are
+                      then sent on every request in addition to the OAuth bearer token).
+                    properties:
+                      interactive:
+                        description: |-
+                          Interactive enables the per-user authorization-code + PKCE flow against an
+                          arbitrary IdP.
+                        properties:
+                          authorizationURL:
+                            description: |-
+                              AuthorizationURL is the IdP authorization endpoint. Optional: when omitted
+                              (with tokenURL), LibreChat auto-discovers the endpoints from the MCP server's
+                              OAuth protected-resource metadata. Set both explicitly for providers that do
+                              not support discovery / dynamic client registration.
+                            type: string
+                          clientSecretRef:
+                            description: |-
+                              ClientSecretRef references a same-namespace Secret holding the OAuth client
+                              credentials: the client ID under ClientIDKey (default client-id) and, for a
+                              confidential client, the client secret under ClientSecretKey (default
+                              client-secret). Both values are injected as pod env and referenced via ${VAR}
+                              in the rendered config — never inlined. Omit entirely for a public/PKCE-only
+                              client that relies on dynamic client registration.
+                            properties:
+                              clientIDKey:
+                                default: client-id
+                                description: ClientIDKey is the Secret key holding
+                                  the OAuth client ID.
+                                type: string
+                              clientSecretKey:
+                                default: client-secret
+                                description: ClientSecretKey is the Secret key holding
+                                  the OAuth client secret.
+                                type: string
+                              name:
+                                description: Name is the Secret name (same namespace
+                                  as the workload).
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          scopes:
+                            description: Scopes requested from the IdP (space-joined
+                              into LibreChat's oauth.scope).
+                            items:
+                              type: string
+                            type: array
+                          tokenExchangeMethod:
+                            description: |-
+                              TokenExchangeMethod controls how the token request authenticates the client:
+                              default_post sends client_secret in the POST body; basic_auth uses HTTP Basic.
+                              Defaults to LibreChat's default (default_post) when unset.
+                            enum:
+                            - default_post
+                            - basic_auth
+                            type: string
+                          tokenURL:
+                            description: TokenURL is the IdP token endpoint. Optional
+                              (see AuthorizationURL).
+                            type: string
+                        type: object
+                      onBehalfOf:
+                        description: |-
+                          OnBehalfOf enables the silent on-behalf-of token exchange of the user's SSO
+                          session (best for Entra/OpenID-backed MCP servers).
+                        properties:
+                          scopes:
+                            description: |-
+                              Scopes are the downstream scopes to request in the on-behalf-of exchange
+                              (space-joined into LibreChat's obo.scopes), e.g.
+                              "api://<client-id>/<permission>". Required and non-empty.
+                            items:
+                              type: string
+                            minItems: 1
+                            type: array
+                        required:
+                        - scopes
+                        type: object
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .onBehalfOf
+                      message: set at most one of interactive or onBehalfOf
+                      reason: FieldValueForbidden
+                      rule: '!(has(self.interactive) && has(self.onBehalfOf))'
+                    - message: set one of interactive or onBehalfOf
+                      reason: FieldValueRequired
+                      rule: has(self.interactive) || has(self.onBehalfOf)
+                  timeoutMs:
+                    description: TimeoutMs is the per-request timeout (default 60000).
+                    type: integer
+                  type:
+                    default: streamable-http
+                    description: Type is the MCP transport.
+                    enum:
+                    - streamable-http
+                    - sse
+                    type: string
+                  url:
+                    description: URL is the MCP endpoint (e.g. http://host:8080/mcp).
+                    type: string
+                required:
+                - url
+                type: object
+              mode:
+                description: |-
+                  Mode selects the server source. "catalog" deploys/uses a bundled MCP server
+                  (licensed: bundled-mcp-catalog). "external" wires a user-managed endpoint
+                  (no operator workload; community).
+                enum:
+                - catalog
+                - external
+                type: string
+              serverInstructions:
+                description: |-
+                  ServerInstructions overrides the natural-language tool guidance LibreChat
+                  passes to the model for this server.
+                type: string
+            required:
+            - mode
+            type: object
+          status:
+            description: |-
+              MCPServerStatus reports the resolved, consumable connection info for the
+              server. A ChatUI reads this (requiring Ready) to render its LibreChat config.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              inCluster:
+                description: |-
+                  InCluster reports whether this endpoint requires SSRF-allowlist treatment.
+                  Not omitempty: a meaningful false must serialize (consumers and tests read
+                  the explicit true/false, not "absent").
+                type: boolean
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              serverName:
+                description: ServerName is the key the ChatUI uses under LibreChat's
+                  mcpServers.
+                type: string
+              transport:
+                description: Transport is the resolved MCP transport (streamable-http
+                  | sse).
+                type: string
+              url:
+                description: URL is the resolved MCP endpoint a ChatUI wires into
+                  LibreChat.
+                type: string
+            required:
+            - inCluster
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,3074 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: stacks.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: Stack
+    listKind: StackList
+    plural: stacks
+    shortNames:
+    - stk
+    singular: stack
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.readyComponents
+      name: Ready
+      type: integer
+    - jsonPath: .status.totalComponents
+      name: Total
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Available
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Stack is a curated, owned bundle of platform components (ARM-deployment
+          style).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              StackSpec is a curated, opinionated bundle. Each component block is opt-in
+              (`enabled: true`); the controller creates + owns the corresponding per-component
+              CRs (in the Stack's namespace), fills sensible defaults, and AUTO-WIRES the
+              cross-references between them (database/secretsRef/langfuseRef/gatewayRef/
+              datastore refs) — so you don't set any refs by hand. Power users who need the
+              full surface use the standalone CRDs directly; both models coexist.
+
+              Licensed feature: managed-deployment (+ counted against the "stacks" limit).
+
+              A managed Postgres datastore MUST configure an enabled backup — applying a Stack
+              that enables a managed Postgres without datastores.postgres.backup.enabled is
+              rejected at admission. This guards non-technical users from running a database
+              with no backups.
+            properties:
+              chatUI:
+                description: ChatUI provisions a LibreChat UI.
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  host:
+                    type: string
+                  imageVolume:
+                    description: PVCSpec describes a persistent volume claim for a
+                      workload.
+                    properties:
+                      accessMode:
+                        enum:
+                        - ReadWriteOnce
+                        - ReadWriteMany
+                        - ReadOnlyMany
+                        type: string
+                      enabled:
+                        type: boolean
+                      size:
+                        type: string
+                      storageClass:
+                        type: string
+                    type: object
+                  ingress:
+                    description: |-
+                      IngressSpec configures an optional ingress for a workload. When TLS is enabled
+                      the owning controller ensures cert-manager via platformdeps.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      api:
+                        description: |-
+                          API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                          THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                          a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                          a Gateway API HTTPRoute.
+                        enum:
+                        - Ingress
+                        - Gateway
+                        type: string
+                      basicAuthSecret:
+                        description: |-
+                          BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                          basic-auth annotations.
+                        type: string
+                      className:
+                        type: string
+                      clusterIssuer:
+                        description: ClusterIssuer is the cert-manager ClusterIssuer
+                          to use when TLS is true.
+                        type: string
+                      enabled:
+                        type: boolean
+                      host:
+                        type: string
+                      tls:
+                        description: TLS enables a cert-manager-issued certificate
+                          for Host.
+                        type: boolean
+                    type: object
+                  mcp:
+                    description: |-
+                      MCP wires Model Context Protocol servers into the ChatUI. `catalog` keys are
+                      bundled servers the Stack provisions as owned MCPServer children (licensed
+                      `bundled-mcp-catalog`); `refs` point at MCPServer CRs you create yourself
+                      (catalog or external). Both are wired into the ChatUI's mcpRefs.
+                    properties:
+                      catalog:
+                        description: |-
+                          Catalog selects bundled MCP servers (e.g. "websearch"). The Stack
+                          creates an owned MCPServer child (mode=catalog) per key and wires it in.
+                          Requires the bundled-mcp-catalog license; an unlicensed entry is Refused and
+                          skipped (the ChatUI still comes up).
+                        items:
+                          type: string
+                        type: array
+                      refs:
+                        description: |-
+                          Refs wire pre-existing MCPServer CRs (catalog or external, in any namespace)
+                          into the ChatUI without the Stack owning their lifecycle.
+                        items:
+                          description: |-
+                            ObjectRef references another namespaced object. Namespace is optional and
+                            defaults to the referring object's namespace. Cross-namespace references are
+                            allowed for datastore/gateway/langfuse references; Secret references must stay
+                            in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                    type: object
+                  models:
+                    description: Models is the client-facing model list shown in the
+                      UI.
+                    items:
+                      type: string
+                    type: array
+                  namespace:
+                    description: |-
+                      Namespace optionally places this component (and its managed MongoDB +
+                      Meilisearch) in its own namespace (created if missing). Defaults to the
+                      Stack's namespace.
+                    type: string
+                type: object
+              datastores:
+                description: Datastores provisions Postgres/ClickHouse/Redis.
+                properties:
+                  clickhouse:
+                    description: |-
+                      StackDatastore is the curated knob set for one datastore. In `mode: managed`
+                      (default) the operator provisions and owns the datastore CR. In `mode:
+                      external` the operator provisions nothing and wires the workloads to a
+                      user-managed instance via ConnectionSecretRef; the managed-only knobs
+                      (Enabled/StorageSize/StorageClass/Resources) are ignored.
+                    properties:
+                      backup:
+                        description: |-
+                          Backup configures scheduled backups to object storage (S3/Azure/GCS).
+                          Supported for **Postgres** (CNPG-native), **ClickHouse** (clickhouse-backup
+                          CronJob), and **MongoDB** (mongodump+rclone CronJob); ignored for Redis
+                          (cache) and Meilisearch (rebuildable index). It is **required** when Postgres
+                          is managed — admission rejects a managed-Postgres Stack that omits an enabled
+                          backup, so non-technical users can't stand up a database with no backup.
+                          Managed mode only.
+                        properties:
+                          azure:
+                            description: Azure configures Azure Blob Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "connection-string" key.
+                                  Omit when using inheritFromAzureAD.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                                type: string
+                              inheritFromAzureAD:
+                                description: InheritFromAzureAD uses Azure Workload
+                                  Identity instead of static credentials.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          enabled:
+                            description: Enabled turns on scheduled backups + continuous
+                              WAL archiving (PITR).
+                            type: boolean
+                          gcs:
+                            description: GCS configures Google Cloud Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "credentials" key with the
+                                  service-account JSON. Omit when using gkeEnvironment.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "gs://my-bucket/path".
+                                type: string
+                              gkeEnvironment:
+                                description: GKEEnvironment uses GKE Workload Identity
+                                  instead of a service-account key.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          provider:
+                            default: s3
+                            description: Provider selects the object-storage backend.
+                            enum:
+                            - s3
+                            - azure
+                            - gcs
+                            type: string
+                          retentionPolicy:
+                            default: 30d
+                            description: |-
+                              RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                              Defaults to "30d".
+                            type: string
+                          s3:
+                            description: S3 configures AWS S3 or any S3-compatible
+                              store (MinIO, Cloudflare R2, …).
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                                  "secret-access-key". Omit when using inheritFromIAMRole.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath is the bucket URL, e.g.
+                                  "s3://my-bucket/path".
+                                type: string
+                              endpointURL:
+                                description: EndpointURL overrides the S3 endpoint
+                                  for S3-compatible stores (MinIO, R2).
+                                type: string
+                              inheritFromIAMRole:
+                                description: InheritFromIAMRole uses the pod's IAM
+                                  role (IRSA) instead of static keys.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          schedule:
+                            default: 0 0 2 * * *
+                            description: |-
+                              Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                              (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                              (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .s3
+                          message: backup.provider 's3' requires backup.s3
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                        - fieldPath: .azure
+                          message: backup.provider 'azure' requires backup.azure
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                        - fieldPath: .gcs
+                          message: backup.provider 'gcs' requires backup.gcs
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points at the Secret carrying the external instance's
+                          connection details. Required when mode=external; ignored when managed. The
+                          Secret must carry these keys (already consumed by the component controllers):
+                            - Postgres:   "DATABASE_URL" (the SQLAlchemy/libpq URL). Override the key
+                                          via connectionSecretRef.key; defaults to "DATABASE_URL".
+                            - ClickHouse: "username", "password", "host" (the operator derives the
+                                          HTTP/native URLs; port defaults to 8123/9000).
+                            - Redis:      "host", "password" (port defaults to 6379).
+                            - Mongo:      "MONGO_URI" (the full connection string; override via .key).
+                            - Meilisearch:"MEILI_MASTER_KEY" (the master key; pair with .host).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        description: Enabled turns the managed datastore on (default
+                          true). Ignored for external.
+                        type: boolean
+                      host:
+                        description: |-
+                          Host is the external instance's base URL. Used only by an external
+                          Meilisearch (e.g. "https://search.example.com"); ignored by the other
+                          datastores, which derive their host from the connection Secret.
+                        type: string
+                      mode:
+                        default: managed
+                        description: |-
+                          Mode selects how the datastore is provided: "managed" (the operator
+                          provisions and owns it) or "external" (wire the workloads to a user-managed
+                          instance via connectionSecretRef). Defaults to "managed".
+                        enum:
+                        - managed
+                        - external
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace optionally places this datastore in its own namespace (created if
+                          missing). Defaults to the Stack's namespace.
+                        type: string
+                      resources:
+                        description: |-
+                          Resources optionally sizes the managed datastore's container CPU/memory
+                          (requests + an optional memory limit). Honored for the Postgres, ClickHouse,
+                          and Redis datastores. Managed mode only.
+                        properties:
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+                          memoryLimit:
+                            type: string
+                        type: object
+                      storageClass:
+                        description: StorageClass overrides the managed datastore's
+                          storage class. Managed only.
+                        type: string
+                      storageSize:
+                        description: StorageSize sizes the managed datastore's PVC.
+                          Managed mode only.
+                        type: string
+                    type: object
+                  meilisearch:
+                    description: Meilisearch backs the ChatUI search. Managed or external.
+                    properties:
+                      backup:
+                        description: |-
+                          Backup configures scheduled backups to object storage (S3/Azure/GCS).
+                          Supported for **Postgres** (CNPG-native), **ClickHouse** (clickhouse-backup
+                          CronJob), and **MongoDB** (mongodump+rclone CronJob); ignored for Redis
+                          (cache) and Meilisearch (rebuildable index). It is **required** when Postgres
+                          is managed — admission rejects a managed-Postgres Stack that omits an enabled
+                          backup, so non-technical users can't stand up a database with no backup.
+                          Managed mode only.
+                        properties:
+                          azure:
+                            description: Azure configures Azure Blob Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "connection-string" key.
+                                  Omit when using inheritFromAzureAD.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                                type: string
+                              inheritFromAzureAD:
+                                description: InheritFromAzureAD uses Azure Workload
+                                  Identity instead of static credentials.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          enabled:
+                            description: Enabled turns on scheduled backups + continuous
+                              WAL archiving (PITR).
+                            type: boolean
+                          gcs:
+                            description: GCS configures Google Cloud Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "credentials" key with the
+                                  service-account JSON. Omit when using gkeEnvironment.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "gs://my-bucket/path".
+                                type: string
+                              gkeEnvironment:
+                                description: GKEEnvironment uses GKE Workload Identity
+                                  instead of a service-account key.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          provider:
+                            default: s3
+                            description: Provider selects the object-storage backend.
+                            enum:
+                            - s3
+                            - azure
+                            - gcs
+                            type: string
+                          retentionPolicy:
+                            default: 30d
+                            description: |-
+                              RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                              Defaults to "30d".
+                            type: string
+                          s3:
+                            description: S3 configures AWS S3 or any S3-compatible
+                              store (MinIO, Cloudflare R2, …).
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                                  "secret-access-key". Omit when using inheritFromIAMRole.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath is the bucket URL, e.g.
+                                  "s3://my-bucket/path".
+                                type: string
+                              endpointURL:
+                                description: EndpointURL overrides the S3 endpoint
+                                  for S3-compatible stores (MinIO, R2).
+                                type: string
+                              inheritFromIAMRole:
+                                description: InheritFromIAMRole uses the pod's IAM
+                                  role (IRSA) instead of static keys.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          schedule:
+                            default: 0 0 2 * * *
+                            description: |-
+                              Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                              (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                              (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .s3
+                          message: backup.provider 's3' requires backup.s3
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                        - fieldPath: .azure
+                          message: backup.provider 'azure' requires backup.azure
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                        - fieldPath: .gcs
+                          message: backup.provider 'gcs' requires backup.gcs
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points at the Secret carrying the external instance's
+                          connection details. Required when mode=external; ignored when managed. The
+                          Secret must carry these keys (already consumed by the component controllers):
+                            - Postgres:   "DATABASE_URL" (the SQLAlchemy/libpq URL). Override the key
+                                          via connectionSecretRef.key; defaults to "DATABASE_URL".
+                            - ClickHouse: "username", "password", "host" (the operator derives the
+                                          HTTP/native URLs; port defaults to 8123/9000).
+                            - Redis:      "host", "password" (port defaults to 6379).
+                            - Mongo:      "MONGO_URI" (the full connection string; override via .key).
+                            - Meilisearch:"MEILI_MASTER_KEY" (the master key; pair with .host).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        description: Enabled turns the managed datastore on (default
+                          true). Ignored for external.
+                        type: boolean
+                      host:
+                        description: |-
+                          Host is the external instance's base URL. Used only by an external
+                          Meilisearch (e.g. "https://search.example.com"); ignored by the other
+                          datastores, which derive their host from the connection Secret.
+                        type: string
+                      mode:
+                        default: managed
+                        description: |-
+                          Mode selects how the datastore is provided: "managed" (the operator
+                          provisions and owns it) or "external" (wire the workloads to a user-managed
+                          instance via connectionSecretRef). Defaults to "managed".
+                        enum:
+                        - managed
+                        - external
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace optionally places this datastore in its own namespace (created if
+                          missing). Defaults to the Stack's namespace.
+                        type: string
+                      resources:
+                        description: |-
+                          Resources optionally sizes the managed datastore's container CPU/memory
+                          (requests + an optional memory limit). Honored for the Postgres, ClickHouse,
+                          and Redis datastores. Managed mode only.
+                        properties:
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+                          memoryLimit:
+                            type: string
+                        type: object
+                      storageClass:
+                        description: StorageClass overrides the managed datastore's
+                          storage class. Managed only.
+                        type: string
+                      storageSize:
+                        description: StorageSize sizes the managed datastore's PVC.
+                          Managed mode only.
+                        type: string
+                    type: object
+                  mongo:
+                    description: Mongo backs the ChatUI (LibreChat) conversation store.
+                      Managed or external.
+                    properties:
+                      backup:
+                        description: |-
+                          Backup configures scheduled backups to object storage (S3/Azure/GCS).
+                          Supported for **Postgres** (CNPG-native), **ClickHouse** (clickhouse-backup
+                          CronJob), and **MongoDB** (mongodump+rclone CronJob); ignored for Redis
+                          (cache) and Meilisearch (rebuildable index). It is **required** when Postgres
+                          is managed — admission rejects a managed-Postgres Stack that omits an enabled
+                          backup, so non-technical users can't stand up a database with no backup.
+                          Managed mode only.
+                        properties:
+                          azure:
+                            description: Azure configures Azure Blob Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "connection-string" key.
+                                  Omit when using inheritFromAzureAD.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                                type: string
+                              inheritFromAzureAD:
+                                description: InheritFromAzureAD uses Azure Workload
+                                  Identity instead of static credentials.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          enabled:
+                            description: Enabled turns on scheduled backups + continuous
+                              WAL archiving (PITR).
+                            type: boolean
+                          gcs:
+                            description: GCS configures Google Cloud Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "credentials" key with the
+                                  service-account JSON. Omit when using gkeEnvironment.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "gs://my-bucket/path".
+                                type: string
+                              gkeEnvironment:
+                                description: GKEEnvironment uses GKE Workload Identity
+                                  instead of a service-account key.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          provider:
+                            default: s3
+                            description: Provider selects the object-storage backend.
+                            enum:
+                            - s3
+                            - azure
+                            - gcs
+                            type: string
+                          retentionPolicy:
+                            default: 30d
+                            description: |-
+                              RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                              Defaults to "30d".
+                            type: string
+                          s3:
+                            description: S3 configures AWS S3 or any S3-compatible
+                              store (MinIO, Cloudflare R2, …).
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                                  "secret-access-key". Omit when using inheritFromIAMRole.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath is the bucket URL, e.g.
+                                  "s3://my-bucket/path".
+                                type: string
+                              endpointURL:
+                                description: EndpointURL overrides the S3 endpoint
+                                  for S3-compatible stores (MinIO, R2).
+                                type: string
+                              inheritFromIAMRole:
+                                description: InheritFromIAMRole uses the pod's IAM
+                                  role (IRSA) instead of static keys.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          schedule:
+                            default: 0 0 2 * * *
+                            description: |-
+                              Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                              (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                              (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .s3
+                          message: backup.provider 's3' requires backup.s3
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                        - fieldPath: .azure
+                          message: backup.provider 'azure' requires backup.azure
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                        - fieldPath: .gcs
+                          message: backup.provider 'gcs' requires backup.gcs
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points at the Secret carrying the external instance's
+                          connection details. Required when mode=external; ignored when managed. The
+                          Secret must carry these keys (already consumed by the component controllers):
+                            - Postgres:   "DATABASE_URL" (the SQLAlchemy/libpq URL). Override the key
+                                          via connectionSecretRef.key; defaults to "DATABASE_URL".
+                            - ClickHouse: "username", "password", "host" (the operator derives the
+                                          HTTP/native URLs; port defaults to 8123/9000).
+                            - Redis:      "host", "password" (port defaults to 6379).
+                            - Mongo:      "MONGO_URI" (the full connection string; override via .key).
+                            - Meilisearch:"MEILI_MASTER_KEY" (the master key; pair with .host).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        description: Enabled turns the managed datastore on (default
+                          true). Ignored for external.
+                        type: boolean
+                      host:
+                        description: |-
+                          Host is the external instance's base URL. Used only by an external
+                          Meilisearch (e.g. "https://search.example.com"); ignored by the other
+                          datastores, which derive their host from the connection Secret.
+                        type: string
+                      mode:
+                        default: managed
+                        description: |-
+                          Mode selects how the datastore is provided: "managed" (the operator
+                          provisions and owns it) or "external" (wire the workloads to a user-managed
+                          instance via connectionSecretRef). Defaults to "managed".
+                        enum:
+                        - managed
+                        - external
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace optionally places this datastore in its own namespace (created if
+                          missing). Defaults to the Stack's namespace.
+                        type: string
+                      resources:
+                        description: |-
+                          Resources optionally sizes the managed datastore's container CPU/memory
+                          (requests + an optional memory limit). Honored for the Postgres, ClickHouse,
+                          and Redis datastores. Managed mode only.
+                        properties:
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+                          memoryLimit:
+                            type: string
+                        type: object
+                      storageClass:
+                        description: StorageClass overrides the managed datastore's
+                          storage class. Managed only.
+                        type: string
+                      storageSize:
+                        description: StorageSize sizes the managed datastore's PVC.
+                          Managed mode only.
+                        type: string
+                    type: object
+                  postgres:
+                    description: |-
+                      StackDatastore is the curated knob set for one datastore. In `mode: managed`
+                      (default) the operator provisions and owns the datastore CR. In `mode:
+                      external` the operator provisions nothing and wires the workloads to a
+                      user-managed instance via ConnectionSecretRef; the managed-only knobs
+                      (Enabled/StorageSize/StorageClass/Resources) are ignored.
+                    properties:
+                      backup:
+                        description: |-
+                          Backup configures scheduled backups to object storage (S3/Azure/GCS).
+                          Supported for **Postgres** (CNPG-native), **ClickHouse** (clickhouse-backup
+                          CronJob), and **MongoDB** (mongodump+rclone CronJob); ignored for Redis
+                          (cache) and Meilisearch (rebuildable index). It is **required** when Postgres
+                          is managed — admission rejects a managed-Postgres Stack that omits an enabled
+                          backup, so non-technical users can't stand up a database with no backup.
+                          Managed mode only.
+                        properties:
+                          azure:
+                            description: Azure configures Azure Blob Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "connection-string" key.
+                                  Omit when using inheritFromAzureAD.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                                type: string
+                              inheritFromAzureAD:
+                                description: InheritFromAzureAD uses Azure Workload
+                                  Identity instead of static credentials.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          enabled:
+                            description: Enabled turns on scheduled backups + continuous
+                              WAL archiving (PITR).
+                            type: boolean
+                          gcs:
+                            description: GCS configures Google Cloud Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "credentials" key with the
+                                  service-account JSON. Omit when using gkeEnvironment.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "gs://my-bucket/path".
+                                type: string
+                              gkeEnvironment:
+                                description: GKEEnvironment uses GKE Workload Identity
+                                  instead of a service-account key.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          provider:
+                            default: s3
+                            description: Provider selects the object-storage backend.
+                            enum:
+                            - s3
+                            - azure
+                            - gcs
+                            type: string
+                          retentionPolicy:
+                            default: 30d
+                            description: |-
+                              RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                              Defaults to "30d".
+                            type: string
+                          s3:
+                            description: S3 configures AWS S3 or any S3-compatible
+                              store (MinIO, Cloudflare R2, …).
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                                  "secret-access-key". Omit when using inheritFromIAMRole.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath is the bucket URL, e.g.
+                                  "s3://my-bucket/path".
+                                type: string
+                              endpointURL:
+                                description: EndpointURL overrides the S3 endpoint
+                                  for S3-compatible stores (MinIO, R2).
+                                type: string
+                              inheritFromIAMRole:
+                                description: InheritFromIAMRole uses the pod's IAM
+                                  role (IRSA) instead of static keys.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          schedule:
+                            default: 0 0 2 * * *
+                            description: |-
+                              Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                              (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                              (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .s3
+                          message: backup.provider 's3' requires backup.s3
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                        - fieldPath: .azure
+                          message: backup.provider 'azure' requires backup.azure
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                        - fieldPath: .gcs
+                          message: backup.provider 'gcs' requires backup.gcs
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points at the Secret carrying the external instance's
+                          connection details. Required when mode=external; ignored when managed. The
+                          Secret must carry these keys (already consumed by the component controllers):
+                            - Postgres:   "DATABASE_URL" (the SQLAlchemy/libpq URL). Override the key
+                                          via connectionSecretRef.key; defaults to "DATABASE_URL".
+                            - ClickHouse: "username", "password", "host" (the operator derives the
+                                          HTTP/native URLs; port defaults to 8123/9000).
+                            - Redis:      "host", "password" (port defaults to 6379).
+                            - Mongo:      "MONGO_URI" (the full connection string; override via .key).
+                            - Meilisearch:"MEILI_MASTER_KEY" (the master key; pair with .host).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        description: Enabled turns the managed datastore on (default
+                          true). Ignored for external.
+                        type: boolean
+                      host:
+                        description: |-
+                          Host is the external instance's base URL. Used only by an external
+                          Meilisearch (e.g. "https://search.example.com"); ignored by the other
+                          datastores, which derive their host from the connection Secret.
+                        type: string
+                      mode:
+                        default: managed
+                        description: |-
+                          Mode selects how the datastore is provided: "managed" (the operator
+                          provisions and owns it) or "external" (wire the workloads to a user-managed
+                          instance via connectionSecretRef). Defaults to "managed".
+                        enum:
+                        - managed
+                        - external
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace optionally places this datastore in its own namespace (created if
+                          missing). Defaults to the Stack's namespace.
+                        type: string
+                      resources:
+                        description: |-
+                          Resources optionally sizes the managed datastore's container CPU/memory
+                          (requests + an optional memory limit). Honored for the Postgres, ClickHouse,
+                          and Redis datastores. Managed mode only.
+                        properties:
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+                          memoryLimit:
+                            type: string
+                        type: object
+                      storageClass:
+                        description: StorageClass overrides the managed datastore's
+                          storage class. Managed only.
+                        type: string
+                      storageSize:
+                        description: StorageSize sizes the managed datastore's PVC.
+                          Managed mode only.
+                        type: string
+                    type: object
+                  protectData:
+                    default: true
+                    description: |-
+                      ProtectData controls accidental-deletion protection for the Stack's managed
+                      stateful datastores. When true (default), the Stack creates a Lock on each
+                      managed PostgresCluster, ClickHouseCluster, and MongoCluster it provisions, so
+                      they cannot be deleted by mistake — deleting the Stack stays blocked until you
+                      manually remove those Locks. Redis (cache) and Meilisearch (a rebuildable
+                      search index) are never locked. The Stack creates each Lock once and never
+                      recreates one you remove. Set false to skip creating them (existing Locks are
+                      left untouched).
+                    type: boolean
+                  redis:
+                    description: |-
+                      StackDatastore is the curated knob set for one datastore. In `mode: managed`
+                      (default) the operator provisions and owns the datastore CR. In `mode:
+                      external` the operator provisions nothing and wires the workloads to a
+                      user-managed instance via ConnectionSecretRef; the managed-only knobs
+                      (Enabled/StorageSize/StorageClass/Resources) are ignored.
+                    properties:
+                      backup:
+                        description: |-
+                          Backup configures scheduled backups to object storage (S3/Azure/GCS).
+                          Supported for **Postgres** (CNPG-native), **ClickHouse** (clickhouse-backup
+                          CronJob), and **MongoDB** (mongodump+rclone CronJob); ignored for Redis
+                          (cache) and Meilisearch (rebuildable index). It is **required** when Postgres
+                          is managed — admission rejects a managed-Postgres Stack that omits an enabled
+                          backup, so non-technical users can't stand up a database with no backup.
+                          Managed mode only.
+                        properties:
+                          azure:
+                            description: Azure configures Azure Blob Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "connection-string" key.
+                                  Omit when using inheritFromAzureAD.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                                type: string
+                              inheritFromAzureAD:
+                                description: InheritFromAzureAD uses Azure Workload
+                                  Identity instead of static credentials.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          enabled:
+                            description: Enabled turns on scheduled backups + continuous
+                              WAL archiving (PITR).
+                            type: boolean
+                          gcs:
+                            description: GCS configures Google Cloud Storage.
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding a "credentials" key with the
+                                  service-account JSON. Omit when using gkeEnvironment.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath, e.g. "gs://my-bucket/path".
+                                type: string
+                              gkeEnvironment:
+                                description: GKEEnvironment uses GKE Workload Identity
+                                  instead of a service-account key.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          provider:
+                            default: s3
+                            description: Provider selects the object-storage backend.
+                            enum:
+                            - s3
+                            - azure
+                            - gcs
+                            type: string
+                          retentionPolicy:
+                            default: 30d
+                            description: |-
+                              RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                              Defaults to "30d".
+                            type: string
+                          s3:
+                            description: S3 configures AWS S3 or any S3-compatible
+                              store (MinIO, Cloudflare R2, …).
+                            properties:
+                              credentialsSecretRef:
+                                description: |-
+                                  CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                                  "secret-access-key". Omit when using inheritFromIAMRole.
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              destinationPath:
+                                description: DestinationPath is the bucket URL, e.g.
+                                  "s3://my-bucket/path".
+                                type: string
+                              endpointURL:
+                                description: EndpointURL overrides the S3 endpoint
+                                  for S3-compatible stores (MinIO, R2).
+                                type: string
+                              inheritFromIAMRole:
+                                description: InheritFromIAMRole uses the pod's IAM
+                                  role (IRSA) instead of static keys.
+                                type: boolean
+                            required:
+                            - destinationPath
+                            type: object
+                          schedule:
+                            default: 0 0 2 * * *
+                            description: |-
+                              Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                              (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                              (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .s3
+                          message: backup.provider 's3' requires backup.s3
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                        - fieldPath: .azure
+                          message: backup.provider 'azure' requires backup.azure
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                        - fieldPath: .gcs
+                          message: backup.provider 'gcs' requires backup.gcs
+                          reason: FieldValueRequired
+                          rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points at the Secret carrying the external instance's
+                          connection details. Required when mode=external; ignored when managed. The
+                          Secret must carry these keys (already consumed by the component controllers):
+                            - Postgres:   "DATABASE_URL" (the SQLAlchemy/libpq URL). Override the key
+                                          via connectionSecretRef.key; defaults to "DATABASE_URL".
+                            - ClickHouse: "username", "password", "host" (the operator derives the
+                                          HTTP/native URLs; port defaults to 8123/9000).
+                            - Redis:      "host", "password" (port defaults to 6379).
+                            - Mongo:      "MONGO_URI" (the full connection string; override via .key).
+                            - Meilisearch:"MEILI_MASTER_KEY" (the master key; pair with .host).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        description: Enabled turns the managed datastore on (default
+                          true). Ignored for external.
+                        type: boolean
+                      host:
+                        description: |-
+                          Host is the external instance's base URL. Used only by an external
+                          Meilisearch (e.g. "https://search.example.com"); ignored by the other
+                          datastores, which derive their host from the connection Secret.
+                        type: string
+                      mode:
+                        default: managed
+                        description: |-
+                          Mode selects how the datastore is provided: "managed" (the operator
+                          provisions and owns it) or "external" (wire the workloads to a user-managed
+                          instance via connectionSecretRef). Defaults to "managed".
+                        enum:
+                        - managed
+                        - external
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace optionally places this datastore in its own namespace (created if
+                          missing). Defaults to the Stack's namespace.
+                        type: string
+                      resources:
+                        description: |-
+                          Resources optionally sizes the managed datastore's container CPU/memory
+                          (requests + an optional memory limit). Honored for the Postgres, ClickHouse,
+                          and Redis datastores. Managed mode only.
+                        properties:
+                          cpu:
+                            type: string
+                          memory:
+                            type: string
+                          memoryLimit:
+                            type: string
+                        type: object
+                      storageClass:
+                        description: StorageClass overrides the managed datastore's
+                          storage class. Managed only.
+                        type: string
+                      storageSize:
+                        description: StorageSize sizes the managed datastore's PVC.
+                          Managed mode only.
+                        type: string
+                    type: object
+                  requireBackup:
+                    default: true
+                    description: |-
+                      RequireBackup makes a configured (enabled) backup mandatory for every managed
+                      stateful datastore the Stack provisions — Postgres, ClickHouse, and MongoDB —
+                      so a non-technical user can't stand one up with no backup. Redis (cache) and
+                      Meilisearch (a rebuildable index) are exempt. Defaults to true; set false to
+                      skip the requirement (advanced users / CI). Mirrors protectData.
+                    type: boolean
+                type: object
+              driftPolicy:
+                default: Enforce
+                description: |-
+                  DriftPolicy controls whether the Stack keeps overwriting its children's
+                  specs after they are created.
+
+                    - "Enforce" (default): the curated spec is reasserted on every reconcile,
+                      so any manual edit to a child CR is reverted — full drift correction.
+                    - "Adopt": the curated spec is applied only when the Stack's own spec
+                      changes (a generation bump — an ARM-style "redeploy"). Between Stack
+                      edits, manual per-child changes are preserved. Editing the Stack still
+                      reasserts every child, overwriting drift.
+
+                  The controller owner reference is kept under both policies, so deleting the
+                  Stack always cascades to (and tears down) its children.
+                enum:
+                - Enforce
+                - Adopt
+                type: string
+              gateway:
+                description: Gateway provisions a LiteLLM Gateway.
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  guardrails:
+                    description: |-
+                      Guardrails wires data-path guardrails into the Gateway. `catalog` keys are
+                      bundled engines the Stack provisions as owned Guardrail children (licensed
+                      `guardrail`); `refs` point at Guardrail CRs you create yourself (catalog or
+                      external). Both are wired into the Gateway's guardrailRefs.
+                    properties:
+                      blockedReason:
+                        description: |-
+                          BlockedReason overrides the message the license-gate proxy returns when it
+                          blocks a request for want of a license, on the catalog children the Stack
+                          owns. Same rationale as LogLevel for living on the Stack.
+                        type: string
+                      catalog:
+                        description: |-
+                          Catalog selects bundled guardrail engines (e.g. "pseudonymizer"). The Stack
+                          creates an owned Guardrail child (mode=catalog) per key and wires it in.
+                          Requires the guardrail license; an unlicensed entry is Refused and skipped
+                          (the Gateway still comes up, unguarded).
+                        items:
+                          type: string
+                        type: array
+                      logLevel:
+                        description: |-
+                          LogLevel sets spec.logLevel on the catalog Guardrail children the Stack
+                          owns (it does not touch `refs`, whose lifecycle is yours). "debug" turns on
+                          the license-gate proxy's one-record-per-request logging.
+
+                          This belongs HERE, not on the child: under the default
+                          driftPolicy=Enforce the Stack reasserts each child's curated spec on every
+                          reconcile, so a `kubectl patch` of the child's logLevel is reverted — and
+                          because the Stack watches its Guardrail children, the patch triggers the
+                          very reconcile that undoes it. Setting it on the Stack survives both drift
+                          policies.
+                        enum:
+                        - debug
+                        - info
+                        - warn
+                        - error
+                        type: string
+                      refs:
+                        description: |-
+                          Refs wire pre-existing Guardrail CRs (catalog or external, in any namespace)
+                          into the Gateway without the Stack owning their lifecycle.
+                        items:
+                          description: |-
+                            ObjectRef references another namespaced object. Namespace is optional and
+                            defaults to the referring object's namespace. Cross-namespace references are
+                            allowed for datastore/gateway/langfuse references; Secret references must stay
+                            in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                    type: object
+                  healthCheck:
+                    description: |-
+                      HealthCheck tunes LiteLLM's background model health checks. Disabled by
+                      default; enable + optionally set the interval to have the proxy cache health
+                      results instead of probing on demand.
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled turns on background model health checks. Default false (disabled):
+                          health is probed on demand at GET /health instead of a background loop.
+                        type: boolean
+                      intervalSeconds:
+                        description: |-
+                          IntervalSeconds is the delay between background health checks (LiteLLM
+                          default 300). Only applies when Enabled is true.
+                        minimum: 1
+                        type: integer
+                    type: object
+                  image:
+                    description: |-
+                      Image pins the LiteLLM proxy image the Gateway runs (repository/tag/
+                      pullPolicy), passed through to the Gateway's instance.image. Leave it UNSET
+                      unless you specifically need a given proxy build: the litellm-operator
+                      otherwise applies its own default tag, which is the one validated against its
+                      database-migration entrypoint — pinning an arbitrary tag can break the
+                      migration and leave the gateway down. Use it to qualify a specific upstream
+                      build (e.g. a `-dev` tag) before adopting it.
+                    properties:
+                      pullPolicy:
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        - Never
+                        type: string
+                      repository:
+                        type: string
+                      tag:
+                        type: string
+                    type: object
+                  ingress:
+                    description: |-
+                      IngressSpec configures an optional ingress for a workload. When TLS is enabled
+                      the owning controller ensures cert-manager via platformdeps.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      api:
+                        description: |-
+                          API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                          THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                          a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                          a Gateway API HTTPRoute.
+                        enum:
+                        - Ingress
+                        - Gateway
+                        type: string
+                      basicAuthSecret:
+                        description: |-
+                          BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                          basic-auth annotations.
+                        type: string
+                      className:
+                        type: string
+                      clusterIssuer:
+                        description: ClusterIssuer is the cert-manager ClusterIssuer
+                          to use when TLS is true.
+                        type: string
+                      enabled:
+                        type: boolean
+                      host:
+                        type: string
+                      tls:
+                        description: TLS enables a cert-manager-issued certificate
+                          for Host.
+                        type: boolean
+                    type: object
+                  jwtAuth:
+                    description: |-
+                      JWTAuth enables JWT-based API authentication on the Gateway (validate a bearer
+                      JWT from your IdP and map its claims to roles/teams). Passed through to the
+                      Gateway's instance.jwtAuth. Requires a LiteLLM Enterprise license.
+                    properties:
+                      adminJWTScope:
+                        description: |-
+                          AdminJWTScope is the scope value that grants proxy-admin access
+                          (litellm_jwtauth.admin_jwt_scope).
+                        type: string
+                      audience:
+                        description: |-
+                          Audience is the expected token audience (`aud`) the proxy validates against
+                          (JWT_AUDIENCE) — typically your app/client ID.
+                        type: string
+                      enabled:
+                        description: Enabled turns on JWT authentication (enable_jwt_auth).
+                        type: boolean
+                      enforceRBAC:
+                        description: |-
+                          EnforceRBAC, when true, denies callers whose roles are not in UserAllowedRoles
+                          (litellm_jwtauth.enforce_rbac).
+                        type: boolean
+                      issuer:
+                        description: |-
+                          Issuer is the expected token issuer (`iss`) the proxy validates against
+                          (JWT_ISSUER), e.g. "https://login.microsoftonline.com/<tenant>/v2.0".
+                        type: string
+                      publicKeyURL:
+                        description: |-
+                          PublicKeyURL is the JWKS endpoint the proxy fetches token-signing keys from
+                          (JWT_PUBLIC_KEY_URL), e.g.
+                          "https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys". Required in
+                          practice: without it LiteLLM cannot validate any token and JWT auth fails even
+                          when the claim mappings below are fully configured.
+                        type: string
+                      teamIDsJWTField:
+                        description: |-
+                          TeamIDsJWTField is the JWT claim holding the caller's team IDs
+                          (litellm_jwtauth.team_ids_jwt_field).
+                        type: string
+                      userAllowedRoles:
+                        description: |-
+                          UserAllowedRoles are the role values (read from UserRolesJWTField) that map to
+                          an 'internal_user' on LiteLLM (litellm_jwtauth.user_allowed_roles).
+                        items:
+                          type: string
+                        type: array
+                      userIDJWTField:
+                        description: |-
+                          UserIDJWTField is the JWT claim used as the LiteLLM user id
+                          (litellm_jwtauth.user_id_jwt_field), e.g. "sub", "oid", or
+                          "preferred_username". Required for JWT auth to resolve a stable user identity.
+                        type: string
+                      userIDUpsert:
+                        description: |-
+                          UserIDUpsert auto-creates (upserts) a LiteLLM internal-user record the first
+                          time a JWT for a new user id is seen (litellm_jwtauth.user_id_upsert). Without
+                          it, callers whose user id has no pre-existing LiteLLM user are rejected.
+                        type: boolean
+                      userRoleJWTField:
+                        description: |-
+                          UserRoleJWTField is the JWT claim holding a SINGLE user role
+                          (litellm_jwtauth.user_role_jwt_field). Use UserRolesJWTField for a list.
+                        type: string
+                      userRolesJWTField:
+                        description: |-
+                          UserRolesJWTField is the JWT claim holding the LIST of the caller's roles
+                          (litellm_jwtauth.user_roles_jwt_field), e.g. "roles".
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                  licenseSecretRef:
+                    description: |-
+                      LicenseSecretRef supplies the gateway's own Enterprise licence, passed
+                      through to the Gateway's instance.licenseSecretRef.
+
+                      Required to reach ANY Wäg Enterprise module — SSO, SCIM, audit, CMEK, FIPS
+                      and branding are all gated on it, and enforcement is unconditional: an
+                      EE-linked gateway with no licence answers 402 license_required. (For a
+                      LiteLLM gateway this is the LiteLLM Enterprise key instead.)
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  models:
+                    description: Models is the client-facing model list (passed through
+                      to LiteLLM).
+                    items:
+                      description: ModelConfig mirrors helm/gateway values.models
+                        entries.
+                      properties:
+                        credentials:
+                          description: Credentials, when set, emits a dedicated LiteLLMCredential
+                            (apiBase, etc.).
+                          properties:
+                            apiBase:
+                              type: string
+                            apiVersion:
+                              type: string
+                          type: object
+                        fallbacks:
+                          description: |-
+                            Fallbacks are model aliases to try when this one fails (type=waeg only;
+                            LiteLLM fallbacks are configured on the proxy, not per model CR).
+                          items:
+                            type: string
+                          type: array
+                        maxTokens:
+                          default: 200000
+                          type: integer
+                        model:
+                          type: string
+                        modelId:
+                          description: |-
+                            ModelID is the provider-side model identifier for type=waeg (the
+                            deployment's modelId). Defaults to Model with its provider prefix stripped
+                            ("azure/gpt-4o" → "gpt-4o"). Ignored for type=litellm.
+                          type: string
+                        modelName:
+                          type: string
+                        name:
+                          type: string
+                        provider:
+                          description: |-
+                            Provider is the upstream provider DRIVER (openai, azure, anthropic, …).
+                            Only used when the Gateway is type=waeg, where the catalog splits into a
+                            provider (connection + credential) and a model alias pointing at it —
+                            LiteLLM instead encodes the driver in the Model string. Defaults to the
+                            prefix of Model ("azure/gpt-4o" → "azure", a bare "gpt-4o" → "openai").
+                          type: string
+                        providerName:
+                          description: |-
+                            ProviderName names the Wäg provider-catalog entry this model resolves
+                            against, letting several models share one connection + credential. Defaults
+                            to "<gateway>-<provider driver>". Ignored for type=litellm.
+                          type: string
+                        refSecretKey:
+                          description: RefSecretKey is the key in the model-credentials
+                            Secret holding the API key.
+                          type: string
+                        rpm:
+                          type: integer
+                        timeout:
+                          type: integer
+                        tpm:
+                          type: integer
+                        weight:
+                          description: |-
+                            Weight balances this deployment against others sharing the alias
+                            (type=waeg only).
+                          type: integer
+                      required:
+                      - model
+                      - modelName
+                      - name
+                      - refSecretKey
+                      type: object
+                    type: array
+                  namespace:
+                    description: |-
+                      Namespace optionally places this component in its own namespace (created if
+                      missing). Defaults to the Stack's namespace.
+                    type: string
+                  organization:
+                    description: |-
+                      Organization creates the Gateway's top-level organization (budget + rate
+                      caps roll up to it).
+
+                      It is REQUIRED to auto-wire a ChatUI to a `type: waeg` gateway: a Wäg
+                      virtual key belongs to an application and applications are org-rooted, so
+                      without an organization the ChatUI is refused with no way to satisfy it from
+                      a Stack. It is also what `waeg.modelAccess` grants hang off.
+                    properties:
+                      budgetDuration:
+                        type: string
+                      maxBudget:
+                        type: integer
+                      name:
+                        type: string
+                      rpmLimit:
+                        type: integer
+                      tpmLimit:
+                        type: integer
+                    required:
+                    - name
+                    type: object
+                  replicas:
+                    format: int32
+                    type: integer
+                  resources:
+                    description: |-
+                      Resources sizes the Gateway (LiteLLM) proxy container — CPU/memory requests
+                      and limits. Passed through to the LiteLLMInstance's spec.resources; unset
+                      leaves the litellm-operator's own default.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  rolePermissions:
+                    additionalProperties:
+                      description: |-
+                        RolePermission restricts what a single LiteLLM role may access — the value of a
+                        role_permissions entry.
+                      properties:
+                        models:
+                          description: Models this role may call.
+                          items:
+                            type: string
+                          type: array
+                        routes:
+                          description: Routes are the API routes this role may access.
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    description: |-
+                      RolePermissions restricts which models (and routes) each LiteLLM role may use,
+                      keyed by role name. Passed through to the Gateway's instance.rolePermissions;
+                      setting any entry turns on RBAC enforcement. Requires a LiteLLM Enterprise license.
+                    type: object
+                  storePromptsInLogs:
+                    description: StorePromptsInLogs surfaces request/response payloads
+                      in the LiteLLM UI logs.
+                    type: boolean
+                  type:
+                    default: litellm
+                    description: |-
+                      Type selects the gateway implementation, passed through to the Gateway's
+                      spec.type. With type=waeg the Stack REQUIRES datastores.clickhouse.enabled
+                      (Wäg has no embedded analytics store) and several LiteLLM-only fields below
+                      are reported as unsupported on the Gateway rather than applied — see the
+                      Gateway's FeaturesSupported condition.
+                    enum:
+                    - litellm
+                    - waeg
+                    type: string
+                  waeg:
+                    description: |-
+                      Waeg carries the Wäg-only knobs (topology, workers, OpenFGA, autoscaling).
+                      The ClickHouse/Redis planes are wired from the Stack's own datastores, so
+                      they are not repeated here.
+                    properties:
+                      autoscaling:
+                        description: Autoscaling turns on the API HPA (CPU/memory).
+                        properties:
+                          enabled:
+                            type: boolean
+                          maxReplicas:
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          minReplicas:
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          targetCPUUtilizationPercentage:
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                          targetMemoryUtilizationPercentage:
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                        required:
+                        - enabled
+                        type: object
+                      bootstrapAdmin:
+                        description: BootstrapAdmin seeds the first Wäg console admin
+                          from a Secret.
+                        properties:
+                          emailKey:
+                            default: bootstrap-admin-email
+                            type: string
+                          passwordKey:
+                            default: bootstrap-admin-password
+                            type: string
+                          secretRef:
+                            description: LocalRef references an object in the same
+                              namespace only.
+                            properties:
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretRef
+                        type: object
+                      brandingConfigMapRef:
+                        description: |-
+                          BrandingConfigMapRef replaces the Navique theme with your own theme pack
+                          (a ConfigMap key holding the JSON); licensed feature `custom-branding`.
+                          Passed through to the Gateway's spec.waeg.brandingConfigMapRef.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      dataEncryptionKeySecretRef:
+                        description: DataEncryptionKeySecretRef supplies the key Wäg
+                          seals config revisions with.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      defaultBranding:
+                        description: |-
+                          DefaultBranding applies the Navique theme when no pack of your own is set
+                          (default true); false leaves the gateway in Wäg's own livery.
+                        type: boolean
+                      jobWorkers:
+                        description: JobWorkers is the in-process durable-job worker
+                          count (AllInOne only).
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      jwt:
+                        description: |-
+                          JWT carries the Wäg-only data-plane JWT knobs. JWT auth is turned ON by
+                          spec.gateway.jwtAuth; this block adds the application/tenant claims and the
+                          master-key / virtual-key hardening switches.
+                        properties:
+                          allowMasterKey:
+                            description: |-
+                              AllowMasterKey keeps the master key working on the data plane (default
+                              true). Setting it false locks the data plane to JWTs only.
+                            type: boolean
+                          allowVirtualKeys:
+                            description: |-
+                              AllowVirtualKeys keeps virtual keys working on the data plane (default
+                              true). Setting it false locks the data plane to JWTs only — every ChatUI
+                              and application key stops working, so change it deliberately.
+                            type: boolean
+                          appClaim:
+                            description: AppClaim identifies the calling application
+                              (default "azp").
+                            type: string
+                          appClaimFallbacks:
+                            description: |-
+                              AppClaimFallbacks are tried in order when AppClaim is absent. Whole-list
+                              replacement: an empty list clears Wäg's own defaults (appid, client_id).
+                            items:
+                              type: string
+                            type: array
+                          insecureSkipVerify:
+                            description: |-
+                              InsecureSkipVerify accepts unverified token signatures. Wäg refuses it in a
+                              production environment and alongside any hardening flag. Development only.
+                            type: boolean
+                          requireRegisteredApplication:
+                            description: |-
+                              RequireRegisteredApplication rejects tokens whose application is not a
+                              registered WaegApplication.
+                            type: boolean
+                          tenantClaim:
+                            description: TenantClaim carries the org/tenant (falls
+                              back to tenant_id, then tid).
+                            type: string
+                        type: object
+                      modelAccess:
+                        description: |-
+                          ModelAccess declares the org-rooted model ACL (requires spec.organization
+                          on the resulting Gateway).
+                        properties:
+                          fallbackMode:
+                            description: FallbackMode governs behaviour when no grant
+                              matches.
+                            enum:
+                            - deny
+                            - allow
+                            type: string
+                          grants:
+                            description: Grants are the individual allow lists.
+                            items:
+                              description: |-
+                                WaegModelAccessGrant is one entry of the org model ACL. Exactly one subject
+                                (teamId / userId / applicationId) identifies who the grant applies to; leaving
+                                all three empty makes it the org-wide default.
+                              properties:
+                                applicationId:
+                                  type: string
+                                enabled:
+                                  type: boolean
+                                id:
+                                  type: string
+                                models:
+                                  description: Models are the allowed client-facing
+                                    aliases.
+                                  items:
+                                    type: string
+                                  type: array
+                                teamId:
+                                  type: string
+                                userId:
+                                  type: string
+                              required:
+                              - models
+                              type: object
+                            type: array
+                          openByDefault:
+                            description: OpenByDefault allows every model alias unless
+                              a grant narrows it.
+                            type: boolean
+                        type: object
+                      openfga:
+                        description: |-
+                          OpenFGA points at an external authorization store; unset lets the
+                          waeg-operator deploy a Postgres-backed one for this instance.
+                        properties:
+                          apiUrl:
+                            description: APIURL is an external OpenFGA endpoint, e.g.
+                              http://openfga.authz.svc:8080.
+                            type: string
+                          apiUrlSecretRef:
+                            description: APIURLSecretRef reads that URL from a Secret
+                              instead.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          image:
+                            description: Image overrides the managed OpenFGA image.
+                            type: string
+                          modelId:
+                            type: string
+                          replicas:
+                            description: Replicas of the managed OpenFGA Deployment.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          resources:
+                            description: Resources for the managed OpenFGA container.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                          storeId:
+                            description: StoreID / ModelID pin an existing OpenFGA
+                              store + authorization model.
+                            type: string
+                        type: object
+                      scim:
+                        description: |-
+                          SCIM turns on Wäg's SCIM v2 provisioning endpoints so an IdP can create and
+                          deprovision console users. Needs the gateway Enterprise licence
+                          (spec.gateway.licenseSecretRef).
+                        properties:
+                          defaultOrgID:
+                            description: |-
+                              DefaultOrgID is the Wäg organization provisioned users land in. Defaults to
+                              the Gateway's own organization when spec.organization is set.
+                            type: string
+                          defaultRole:
+                            description: DefaultRole is the console role a newly provisioned
+                              user receives.
+                            enum:
+                            - viewer
+                            - operator
+                            - admin
+                            type: string
+                          enabled:
+                            default: true
+                            description: Enabled turns the SCIM endpoints on. They
+                              answer 404 while off.
+                            type: boolean
+                          orgMap:
+                            additionalProperties:
+                              type: string
+                            description: OrgMap maps an IdP value to a Wäg organization
+                              id. Whole-map replacement.
+                            type: object
+                          orgSource:
+                            description: |-
+                              OrgSource selects where a provisioned user's organization comes from:
+                              "waeg" (the gateway decides), "enterprise" (the IdP payload) or "none".
+                            enum:
+                            - waeg
+                            - enterprise
+                            - none
+                            type: string
+                          roleMap:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              RoleMap maps an IdP group name to a Wäg console role. Sent as a WHOLE-MAP
+                              replacement, so it always reflects exactly what is declared here.
+                            type: object
+                          tokenSecretRef:
+                            description: |-
+                              TokenSecretRef holds the bearer token the IdP presents to the SCIM
+                              endpoints. Required: Wäg will not serve SCIM without one, and the operator
+                              projects it onto the gateway pods as WAEG_EE_SCIM_TOKEN rather than writing
+                              it into the gateway's config store.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - tokenSecretRef
+                        type: object
+                      storageMode:
+                        default: split
+                        description: |-
+                          StorageMode selects the analytics plane for the Stack's Wäg gateway:
+                          "split" (default) keeps analytics in the Stack's ClickHouse, "single" keeps
+                          them in the Stack's Postgres and needs no ClickHouse at all — with
+                          storageMode: single the Stack stops requiring datastores.clickhouse.enabled
+                          and provisions no ClickHouse for the gateway.
+
+                          Switching an existing Stack between the two does NOT migrate analytics
+                          history.
+                        enum:
+                        - split
+                        - single
+                        type: string
+                      topology:
+                        description: Topology selects AllInOne (default) or Split
+                          (api + optional worker).
+                        enum:
+                        - AllInOne
+                        - Split
+                        type: string
+                      worker:
+                        description: Worker configures the dedicated job-worker Deployment
+                          (topology=Split).
+                        properties:
+                          enabled:
+                            type: boolean
+                          jobWorkers:
+                            description: JobWorkers is the per-pod concurrent durable-job
+                              worker count.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          replicas:
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          resources:
+                            description: ResourceRequirements describes the compute
+                              resource requirements.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                        required:
+                        - enabled
+                        type: object
+                    type: object
+                type: object
+              mesh:
+                description: |-
+                  Mesh opts the Stack's component namespaces into the cluster ServiceMesh
+                  (mTLS + isolation). Defaults to mode=auto: join when a Ready ServiceMesh
+                  exists, no-op otherwise. The Stack labels each component namespace; the
+                  ServiceMesh (a separate admin-owned singleton) does the enrollment.
+                properties:
+                  mode:
+                    default: auto
+                    enum:
+                    - auto
+                    - enabled
+                    - disabled
+                    type: string
+                type: object
+              observability:
+                description: Langfuse provisions a Langfuse instance.
+                properties:
+                  blob:
+                    description: |-
+                      Blob is the object storage (S3-compatible / Azure Blob / GCS) Langfuse
+                      requires.
+                    properties:
+                      azure:
+                        description: Azure configures Azure Blob Storage.
+                        properties:
+                          containerName:
+                            description: ContainerName is the blob container (Langfuse's
+                              upload "bucket").
+                            type: string
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding the storage account key
+                              under the canonical key account-key. Omit to use ambient credentials
+                              (AKS Workload Identity).
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          endpoint:
+                            description: |-
+                              Endpoint overrides the blob service endpoint. Defaults to
+                              https://<storageAccountName>.blob.core.windows.net. Set for Azure
+                              Government, sovereign clouds, or an Azurite emulator.
+                            type: string
+                          storageAccountName:
+                            description: StorageAccountName is the Azure storage account.
+                            type: string
+                        required:
+                        - containerName
+                        - storageAccountName
+                        type: object
+                      gcs:
+                        description: GCS configures Google Cloud Storage.
+                        properties:
+                          bucket:
+                            description: Bucket is the GCS bucket name.
+                            type: string
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding the service-account JSON
+                              under the canonical key credentials. Omit to use Workload Identity /
+                              Application Default Credentials on GKE.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          projectId:
+                            description: ProjectID is the GCP project ID (optional;
+                              inferred from credentials).
+                            type: string
+                        required:
+                        - bucket
+                        type: object
+                      provider:
+                        default: s3
+                        description: Provider selects the object storage backend.
+                        enum:
+                        - s3
+                        - azure
+                        - gcs
+                        type: string
+                      s3:
+                        description: S3 configures AWS S3 or any S3-compatible store
+                          (MinIO, Cloudflare R2, …).
+                        properties:
+                          bucket:
+                            description: Bucket is the S3 bucket Langfuse uploads
+                              events/media to.
+                            type: string
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding the access key id and
+                              secret access key under the canonical keys access-key-id /
+                              secret-access-key. Omit to use ambient credentials (EKS IRSA / Pod Identity).
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          endpoint:
+                            description: |-
+                              Endpoint overrides the S3 endpoint for S3-compatible stores (MinIO, R2,
+                              on-prem). Leave empty for AWS S3.
+                            type: string
+                          forcePathStyle:
+                            description: |-
+                              ForcePathStyle enables path-style addressing, required by MinIO and most
+                              S3-compatible stores.
+                            type: boolean
+                          region:
+                            description: |-
+                              Region is the S3 region. Optional: the operator defaults it to us-east-1
+                              when unset, because the AWS SDK requires a region even for S3-compatible
+                              stores (MinIO, R2) and a missing one silently breaks event ingestion. Set
+                              it explicitly for real AWS S3 buckets.
+                            type: string
+                        required:
+                        - bucket
+                        type: object
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .s3
+                      message: blob.provider 's3' requires blob.s3
+                      reason: FieldValueRequired
+                      rule: self.provider != 's3' || has(self.s3)
+                    - fieldPath: .azure
+                      message: blob.provider 'azure' requires blob.azure
+                      reason: FieldValueRequired
+                      rule: self.provider != 'azure' || has(self.azure)
+                    - fieldPath: .gcs
+                      message: blob.provider 'gcs' requires blob.gcs
+                      reason: FieldValueRequired
+                      rule: self.provider != 'gcs' || has(self.gcs)
+                  bootstrap:
+                    description: Bootstrap headless-seeds an org/project/key (community
+                      tracing without EE).
+                    properties:
+                      adminSecretRef:
+                        description: |-
+                          AdminSecretRef references a Secret with the initial admin user under keys
+                          "email" and "password".
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        default: true
+                        type: boolean
+                      keysSecretRef:
+                        description: |-
+                          KeysSecretRef references a Secret with the project API keys under keys
+                          "publicKey" and "secretKey".
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      orgId:
+                        description: OrgID / ProjectID are stable identifiers (so
+                          re-seeding is idempotent).
+                        type: string
+                      orgName:
+                        type: string
+                      projectId:
+                        type: string
+                      projectName:
+                        type: string
+                    required:
+                    - adminSecretRef
+                    - keysSecretRef
+                    type: object
+                  defaultAccess:
+                    description: |-
+                      DefaultAccess gives everyone who signs in a role automatically — see
+                      Observability spec.langfuse.defaultAccess. Requires bootstrap.
+                    properties:
+                      orgRole:
+                        default: VIEWER
+                        description: |-
+                          OrgRole in the bootstrap organization. Without a Langfuse Enterprise
+                          licence this is the role that counts: it applies to every project in the
+                          organization.
+                        enum:
+                        - OWNER
+                        - ADMIN
+                        - MEMBER
+                        - VIEWER
+                        - NONE
+                        type: string
+                      projectRole:
+                        default: VIEWER
+                        description: |-
+                          ProjectRole in the bootstrap project. Project-level roles are a Langfuse
+                          Enterprise feature: without licenseSecretRef Langfuse ignores it and the
+                          person gets OrgRole on every project.
+                        enum:
+                        - OWNER
+                        - ADMIN
+                        - MEMBER
+                        - VIEWER
+                        type: string
+                    type: object
+                  enabled:
+                    default: true
+                    type: boolean
+                  image:
+                    description: ImageSpec is a container image reference.
+                    properties:
+                      pullPolicy:
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        - Never
+                        type: string
+                      repository:
+                        type: string
+                      tag:
+                        type: string
+                    type: object
+                  ingress:
+                    description: |-
+                      IngressSpec configures an optional ingress for a workload. When TLS is enabled
+                      the owning controller ensures cert-manager via platformdeps.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      api:
+                        description: |-
+                          API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                          THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                          a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                          a Gateway API HTTPRoute.
+                        enum:
+                        - Ingress
+                        - Gateway
+                        type: string
+                      basicAuthSecret:
+                        description: |-
+                          BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                          basic-auth annotations.
+                        type: string
+                      className:
+                        type: string
+                      clusterIssuer:
+                        description: ClusterIssuer is the cert-manager ClusterIssuer
+                          to use when TLS is true.
+                        type: string
+                      enabled:
+                        type: boolean
+                      host:
+                        type: string
+                      tls:
+                        description: TLS enables a cert-manager-issued certificate
+                          for Host.
+                        type: boolean
+                    type: object
+                  licenseSecretRef:
+                    description: |-
+                      LicenseSecretRef is the Langfuse Enterprise licence — see Observability
+                      spec.langfuse.licenseSecretRef (per-person Langfuse access).
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  namespace:
+                    description: |-
+                      Namespace optionally places this component in its own namespace (created if
+                      missing). Defaults to the Stack's namespace.
+                    type: string
+                  type:
+                    default: langfuse
+                    description: Type selects the observability backend. Only "langfuse"
+                      is implemented.
+                    enum:
+                    - langfuse
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - fieldPath: .bootstrap
+                  message: 'observability.defaultAccess needs observability.bootstrap:
+                    new users are added to the bootstrap organization and project'
+                  reason: FieldValueRequired
+                  rule: '!has(self.defaultAccess) || (has(self.bootstrap) && self.bootstrap.enabled)'
+              secrets:
+                description: |-
+                  Secrets provisions a SecretsManagement (required by the workloads). With
+                  namespace separation, one is created in every namespace that hosts a
+                  workload, so each component's secretsRef resolves locally.
+                properties:
+                  backend:
+                    description: Backend selects the credential source.
+                    enum:
+                    - eso
+                    - sealedSecrets
+                    type: string
+                  enabled:
+                    default: true
+                    type: boolean
+                  eso:
+                    description: |-
+                      ESO configures the External Secrets Operator backend (Azure Key Vault via
+                      Workload Identity). Required when backend=eso.
+                    properties:
+                      authSecretRef:
+                        description: AuthSecretRef references the client id/secret
+                          for ServicePrincipal auth.
+                        properties:
+                          clientID:
+                            description: SecretKeyRef references a Secret (optionally
+                              a specific key within it).
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          clientSecret:
+                            description: SecretKeyRef references a Secret (optionally
+                              a specific key within it).
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - clientID
+                        - clientSecret
+                        type: object
+                      authType:
+                        default: WorkloadIdentity
+                        description: |-
+                          AuthType selects how the Azure SecretStore authenticates.
+                          WorkloadIdentity is the production default (AKS + federated identity);
+                          ServicePrincipal works anywhere (incl. Kind) using a client id/secret.
+                        enum:
+                        - WorkloadIdentity
+                        - ServicePrincipal
+                        type: string
+                      clientID:
+                        description: |-
+                          ClientID is the client (application) ID of the Azure user-assigned managed
+                          identity the workload-identity ServiceAccount federates to. Stamped onto the
+                          operator-created ServiceAccount as `azure.workload.identity/client-id`, which
+                          ESO reads to know which identity to exchange the SA token for. Required for
+                          WorkloadIdentity unless you pre-create the ServiceAccount with that annotation.
+                        type: string
+                      externalSecrets:
+                        description: ExternalSecrets to materialize as in-namespace
+                          K8s Secrets.
+                        items:
+                          description: |-
+                            ExternalSecretSpec maps provider secrets to a target K8s Secret. Use one of:
+                              - Keys: the simple shortcut (k8sKey -> remote key/path). For Azure the value
+                                is the KV secret name; for HashiCorp Vault KV-v2 the value is the path and
+                                the K8s key is used as the property.
+                              - Data: explicit per-key remoteRef (key/property/version) — provider-agnostic,
+                                needed for AWS/GCP/etc. where property or version matter.
+                              - FindRegexp: bulk dataFrom.find by name.
+                          properties:
+                            data:
+                              description: Data is the explicit remoteRef form for
+                                full control on any provider.
+                              items:
+                                description: ExternalSecretRemote is one explicit
+                                  remoteRef mapping (ESO data[] entry).
+                                properties:
+                                  property:
+                                    description: Property is the field within the
+                                      remote secret (remoteRef.property).
+                                    type: string
+                                  remoteKey:
+                                    description: RemoteKey is the provider's secret
+                                      key/path (remoteRef.key).
+                                    type: string
+                                  secretKey:
+                                    description: SecretKey is the target key in the
+                                      K8s Secret.
+                                    type: string
+                                  version:
+                                    description: Version is the remote secret version
+                                      (remoteRef.version).
+                                    type: string
+                                required:
+                                - remoteKey
+                                - secretKey
+                                type: object
+                              type: array
+                            findRegexp:
+                              description: FindRegexp pulls every matching secret
+                                (dataFrom.find).
+                              type: string
+                            keys:
+                              additionalProperties:
+                                type: string
+                              description: Keys maps target Secret keys to provider
+                                remote keys/paths.
+                              type: object
+                            name:
+                              description: Name is the target K8s Secret name.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      hashicorpVault:
+                        description: HashiCorpVault configures the Vault provider
+                          (provider=hashicorpVault).
+                        properties:
+                          auth:
+                            description: |-
+                              VaultAuth selects a Vault auth method: exactly one of kubernetes
+                              (recommended in-cluster), appRole (common on-prem) or tokenSecretRef.
+                            properties:
+                              appRole:
+                                description: |-
+                                  AppRole configures Vault AppRole auth: a role ID plus a secret ID kept in
+                                  a Secret.
+                                properties:
+                                  path:
+                                    default: approle
+                                    description: Path is where the AppRole auth method
+                                      is mounted in Vault.
+                                    type: string
+                                  roleId:
+                                    description: RoleID is the AppRole role ID (not
+                                      a secret).
+                                    minLength: 1
+                                    type: string
+                                  secretIdSecretRef:
+                                    description: |-
+                                      SecretIDSecretRef names the Secret holding the AppRole secret ID. Key
+                                      defaults to "secret-id".
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        type: string
+                                      namespace:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                required:
+                                - roleId
+                                - secretIdSecretRef
+                                type: object
+                              kubernetes:
+                                description: Kubernetes configures Vault Kubernetes
+                                  auth (production-sane).
+                                properties:
+                                  mountPath:
+                                    default: kubernetes
+                                    type: string
+                                  role:
+                                    type: string
+                                  serviceAccountName:
+                                    description: |-
+                                      ServiceAccountName is the SA whose token authenticates to Vault — the one
+                                      the Vault role is bound to. The operator creates it if it does not exist
+                                      (an existing one is used untouched). Empty = ESO's own ServiceAccount.
+                                    type: string
+                                required:
+                                - role
+                                type: object
+                              tokenSecretRef:
+                                description: TokenSecretRef references a Secret holding
+                                  a Vault token (dev/e2e).
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            type: object
+                            x-kubernetes-validations:
+                            - message: 'set exactly one Vault auth method: kubernetes,
+                                appRole or tokenSecretRef'
+                              reason: FieldValueInvalid
+                              rule: '[has(self.tokenSecretRef), has(self.kubernetes),
+                                has(self.appRole)].filter(x, x).size() == 1'
+                          caSecretRef:
+                            description: |-
+                              CASecretRef names a same-namespace Secret holding the PEM certificate of
+                              the CA that signed the Vault server's TLS certificate — needed when Vault
+                              uses a private CA (common on-prem). Key defaults to "ca.crt".
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          namespace:
+                            description: |-
+                              Namespace is the Vault Enterprise namespace to read from (e.g. "team-a").
+                              Leave empty for open-source Vault.
+                            type: string
+                          path:
+                            default: secret
+                            description: Path is the KV mount path (e.g. "secret").
+                            type: string
+                          server:
+                            description: Server is the Vault address, e.g. http://vault.vault.svc:8200.
+                            type: string
+                          version:
+                            default: v2
+                            description: Version is the KV engine version.
+                            enum:
+                            - v1
+                            - v2
+                            type: string
+                        required:
+                        - auth
+                        - server
+                        type: object
+                      provider:
+                        default: azureKeyVault
+                        description: |-
+                          Provider selects the ESO SecretStore provider. azureKeyVault and
+                          hashicorpVault have typed convenience config; "raw" + providerConfig support
+                          ANY ESO provider (AWS, GCP, IBM, Akeyless, 1Password, Kubernetes, Fake, …)
+                          by passing the ESO spec.provider block through verbatim.
+                        enum:
+                        - azureKeyVault
+                        - hashicorpVault
+                        - raw
+                        type: string
+                      providerConfig:
+                        description: |-
+                          ProviderConfig is the raw ESO SecretStore `spec.provider` block, used when
+                          provider=raw. It is injected verbatim, so every ESO provider is supported
+                          without per-provider code. Example: {"aws":{"service":"SecretsManager", …}}.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      refreshInterval:
+                        description: RefreshInterval defaults to 1h when unset.
+                        type: string
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccountName is the workload-identity ServiceAccount ESO authenticates
+                          as (provider=azureKeyVault, authType=WorkloadIdentity). The operator creates
+                          this ServiceAccount if it does not already exist (annotated with the
+                          azure.workload.identity client-id/tenant-id below so ESO can request a token);
+                          a pre-existing ServiceAccount is adopted untouched. Required for
+                          WorkloadIdentity.
+                        type: string
+                      tenantID:
+                        description: |-
+                          TenantID is the Azure AD tenant. Required when authType=ServicePrincipal; for
+                          WorkloadIdentity it is stamped onto the operator-created ServiceAccount as
+                          `azure.workload.identity/tenant-id` (optional — ESO defaults to the cluster's).
+                        type: string
+                      vaultURL:
+                        description: |-
+                          VaultURL is the Azure Key Vault URL (provider=azureKeyVault),
+                          e.g. https://kv.vault.azure.net/.
+                        type: string
+                    type: object
+                  sealedSecrets:
+                    description: |-
+                      SealedSecrets configures the Sealed Secrets backend. Required when
+                      backend=sealedSecrets.
+                    properties:
+                      controllerNamespace:
+                        description: |-
+                          ControllerNamespace optionally overrides where the controller is expected;
+                          the platformdeps default is used otherwise.
+                        type: string
+                    type: object
+                required:
+                - backend
+                type: object
+              sso:
+                description: |-
+                  SSO enables OIDC/SSO login across the Stack's components from a single shared
+                  identity provider. The shared issuer/provider/scopes apply to every enabled
+                  component, but each component needs its own OAuth client (callback URLs
+                  differ), supplied via the per-component client refs (gateway/chatUI/langfuse).
+                  A component receives SSO only when it is enabled AND its client ref is set.
+                properties:
+                  authorizationEndpoint:
+                    description: |-
+                      AuthorizationEndpoint / TokenEndpoint / UserinfoEndpoint override the OIDC
+                      endpoints for the Gateway's generic-oidc provider (it does not do discovery).
+                    type: string
+                  chatUI:
+                    description: |-
+                      ChatUI, when set and the ChatUI is enabled, enables SSO on LibreChat with
+                      this OAuth client.
+                    properties:
+                      clientIDKey:
+                        default: client-id
+                        description: ClientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        type: string
+                      clientSecretKey:
+                        default: client-secret
+                        description: ClientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        type: string
+                      name:
+                        description: Name is the Secret name (same namespace as the
+                          workload).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  gateway:
+                    description: |-
+                      Gateway, when set and the Gateway is enabled, enables SSO on the Gateway with
+                      this OAuth client.
+                    properties:
+                      clientIDKey:
+                        default: client-id
+                        description: ClientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        type: string
+                      clientSecretKey:
+                        default: client-secret
+                        description: ClientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        type: string
+                      name:
+                        description: Name is the Secret name (same namespace as the
+                          workload).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  issuerURL:
+                    description: IssuerURL is the shared OIDC issuer / discovery base
+                      URL.
+                    type: string
+                  observability:
+                    description: |-
+                      Langfuse, when set and Langfuse is enabled, enables SSO on Langfuse with this
+                      OAuth client.
+                    properties:
+                      clientIDKey:
+                        default: client-id
+                        description: ClientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        type: string
+                      clientSecretKey:
+                        default: client-secret
+                        description: ClientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        type: string
+                      name:
+                        description: Name is the Secret name (same namespace as the
+                          workload).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  provider:
+                    description: Provider selects the LiteLLM Gateway provider flavor
+                      (Gateway only).
+                    enum:
+                    - generic-oidc
+                    - azure-entra
+                    - google
+                    - okta
+                    type: string
+                  providerName:
+                    description: ProviderName is the shared display name / login-button
+                      label (default "SSO").
+                    type: string
+                  scopes:
+                    description: Scopes requested from the IdP (default ["openid","email","profile"]).
+                    items:
+                      type: string
+                    type: array
+                  tenantID:
+                    description: TenantID for the Gateway when provider=azure-entra.
+                    type: string
+                  tokenEndpoint:
+                    type: string
+                  userinfoEndpoint:
+                    type: string
+                required:
+                - issuerURL
+                type: object
+            type: object
+            x-kubernetes-validations:
+            - fieldPath: .datastores.postgres.backup
+              message: 'datastores.postgres.backup must be enabled for a managed Postgres
+                (set datastores.requireBackup: false to skip)'
+              reason: FieldValueRequired
+              rule: '!has(self.datastores) || (has(self.datastores.requireBackup)
+                && !self.datastores.requireBackup) || !has(self.datastores.postgres)
+                || self.datastores.postgres.mode == ''external'' || !self.datastores.postgres.enabled
+                || (has(self.datastores.postgres.backup) && self.datastores.postgres.backup.enabled)'
+            - fieldPath: .datastores.clickhouse.enabled
+              message: 'gateway.type=waeg with the default storageMode ''split'' requires
+                datastores.clickhouse.enabled; set gateway.waeg.storageMode: single
+                to keep analytics in Postgres instead'
+              reason: FieldValueRequired
+              rule: '!has(self.gateway) || !has(self.gateway.type) || self.gateway.type
+                != ''waeg'' || (has(self.gateway.waeg) && has(self.gateway.waeg.storageMode)
+                && self.gateway.waeg.storageMode == ''single'') || (has(self.datastores)
+                && has(self.datastores.clickhouse) && self.datastores.clickhouse.enabled)'
+          status:
+            description: StackStatus aggregates the children into an ARM-deployment-style
+              progress view.
+            properties:
+              components:
+                description: Components is the per-child status list (the provisioning
+                  tree).
+                items:
+                  description: StackComponentStatus is one child's roll-up entry.
+                  properties:
+                    blocked:
+                      description: |-
+                        Blocked is true when this child cannot make progress on its own and needs
+                        human action (Reason=InfrastructureBlocked or Refused). The Stack wizard uses
+                        it to stop showing a spinner and surface the fault instead.
+                      type: boolean
+                    kind:
+                      type: string
+                    message:
+                      description: |-
+                        Message is the child's Ready-condition message while it is not ready — the
+                        human-readable provisioning state or fault (e.g. the failing pod and its
+                        reason, as reported by the upstream operator).
+                      type: string
+                    name:
+                      type: string
+                    phase:
+                      type: string
+                    ready:
+                      type: boolean
+                    reason:
+                      description: |-
+                        Reason is the child's Ready-condition reason (Waiting, InfrastructureBlocked,
+                        Refused, Error, …). Carried alongside Message so a UI can tell "still
+                        provisioning" apart from "blocked, needs human action" WITHOUT parsing the
+                        message text — see Blocked.
+                      type: string
+                    url:
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoints:
+                additionalProperties:
+                  type: string
+                description: Endpoints surfaces the public URLs of the provisioned
+                  workloads (outputs).
+                type: object
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase is the roll-up lifecycle: Pending|Provisioning|Ready|Degraded|Failed|Deleting.'
+                type: string
+              provisionedLocks:
+                description: |-
+                  ProvisionedLocks records the deletion-protection Locks the Stack has already
+                  created (by name). The Stack creates each Lock at most once and consults this
+                  list so it never recreates a Lock you have manually removed — otherwise the
+                  Stack could never be deleted. See spec.datastores.protectData.
+                items:
+                  type: string
+                type: array
+              readyComponents:
+                description: ReadyComponents / TotalComponents drive the progress
+                  indicator.
+                type: integer
+              totalComponents:
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

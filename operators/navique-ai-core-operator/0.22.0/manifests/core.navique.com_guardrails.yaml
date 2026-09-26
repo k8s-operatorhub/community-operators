@@ -1,0 +1,317 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: guardrails.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: Guardrail
+    listKind: GuardrailList
+    plural: guardrails
+    shortNames:
+    - gr
+    singular: guardrail
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Guardrail is a licensed, proxied data-path guardrail referenced
+          by Gateways.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              GuardrailSpec defines a data-path guardrail wired into a LiteLLM Gateway. It is
+              either a bundled "catalog" engine the operator deploys (e.g. the PII
+              pseudonymizer) or an "external" HTTP endpoint the user runs themselves — but
+              BOTH require the licensed `guardrail` feature, and BOTH are routed through an
+              operator-injected, per-Guardrail license-gate proxy that fails closed (returns
+              a guardrail block) if the license lapses. A Gateway references Guardrails via
+              spec.guardrailRefs; the resolved proxy endpoint is published to status for the
+              Gateway to wire as a LiteLLMGuardrail's apiBase.
+            properties:
+              blockedReason:
+                description: |-
+                  BlockedReason overrides the message the license-gate proxy returns when it
+                  blocks a request because the `guardrail` feature is not licensed. Making it
+                  distinctive is what lets an operator spot a license-gate block in gateway
+                  logs, where it otherwise looks like a genuine guardrail block.
+                type: string
+              catalog:
+                description: Catalog is the bundled engine key (mode=catalog), e.g.
+                  "pseudonymizer".
+                type: string
+              defaultOn:
+                description: |-
+                  DefaultOn runs this guardrail on every request even when a key/team does not
+                  explicitly opt in (LiteLLM litellm_params.default_on). nil ⇒ engine default.
+                type: boolean
+              external:
+                description: |-
+                  External describes a user-managed HTTP guardrail (mode=external). LiteLLM's
+                  generic_guardrail_api contract applies: the endpoint receives POSTs at
+                  {apiBase}/beta/litellm_basic_guardrail_api.
+                properties:
+                  apiBase:
+                    description: |-
+                      APIBase is the guardrail HTTP endpoint (e.g. https://guardrail.example.com).
+                      The operator points the license-gate proxy at this as its upstream.
+                    type: string
+                  apiKeySecretRef:
+                    description: |-
+                      APIKeySecretRef supplies a Bearer/api-key credential the proxy forwards to
+                      the upstream endpoint. Same-namespace Secret.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  unreachableFallback:
+                    description: |-
+                      UnreachableFallback controls LiteLLM's behavior when the guardrail (i.e. the
+                      proxy) is unreachable: "fail_closed" (reject; default) or "fail_open".
+                    enum:
+                    - fail_closed
+                    - fail_open
+                    type: string
+                required:
+                - apiBase
+                type: object
+              guardrailName:
+                description: |-
+                  GuardrailName overrides the LiteLLM guardrail_name (the identifier a
+                  team/key references). Defaults to the catalog key or the CR name.
+                type: string
+              logLevel:
+                description: |-
+                  LogLevel sets the verbosity of the per-Guardrail license-gate proxy. At
+                  "debug" the proxy logs one structured record per guardrail request — the
+                  proxy's own decision (forwarded / blocked_unlicensed / upstream_error) AND
+                  the engine's verdict — which is the only way to tell a license-gate block
+                  apart from a genuine guardrail block, and both apart from a gateway that
+                  never called the guardrail at all. Changing this restarts the proxy pod.
+
+                  Counters on the proxy's metrics port answer the same questions without
+                  debug logging; raise this only while investigating, since debug records may
+                  quote the content the engine matched on.
+                enum:
+                - debug
+                - info
+                - warn
+                - error
+                type: string
+              mode:
+                description: |-
+                  Mode selects the guardrail source. "catalog" deploys/uses a bundled engine
+                  (e.g. pseudonymizer). "external" wires a user-managed HTTP endpoint. Both are
+                  licensed (feature: guardrail) and proxied.
+                enum:
+                - catalog
+                - external
+                type: string
+              modes:
+                description: |-
+                  Modes are the LiteLLM execution modes to activate for this guardrail. One
+                  LiteLLMGuardrail CR is emitted per mode (they share the same endpoint).
+                  Defaults to the catalog engine's modes (the pseudonymizer needs both
+                  pre_call and post_call) or, for external, ["pre_call"].
+                items:
+                  enum:
+                  - pre_call
+                  - post_call
+                  - during_call
+                  - logging_only
+                  type: string
+                type: array
+              params:
+                additionalProperties:
+                  x-kubernetes-preserve-unknown-fields: true
+                description: |-
+                  Params are provider-specific parameters forwarded verbatim to LiteLLM under
+                  additional_provider_specific_params (generic_guardrail_api). Merged on top of
+                  the catalog engine's defaults (e.g. streaming_transform_mode).
+                type: object
+              waeg:
+                description: |-
+                  Waeg carries the extra wiring a type=waeg Gateway needs. The two gateways
+                  reach a guardrail differently: LiteLLM appends its own
+                  /beta/litellm_basic_guardrail_api to the endpoint, whereas Wäg POSTs to a
+                  URL given in full — so one endpoint can serve both at different paths.
+                  Catalog engines supply these from the catalog; an external guardrail must
+                  set path here to be wirable into a Wäg gateway.
+                properties:
+                  forwardIdentity:
+                    description: |-
+                      ForwardIdentity / ForwardSessionID add the caller's identity (and an opaque
+                      session fingerprint) to each scan request. Both default off in Wäg. An
+                      engine that keeps per-session state — the pseudonymizer's name mappings,
+                      for instance — needs them to stay consistent across turns; without one it
+                      falls back to the request id, which only stitches a single request
+                      together.
+                    type: boolean
+                  forwardSessionId:
+                    type: boolean
+                  path:
+                    description: |-
+                      Path is appended to the license-gate proxy endpoint to form the URL Wäg
+                      POSTs to (e.g. "/v1/waeg/check"). Must be the path that speaks Wäg's
+                      allow/mask/block protocol — not the LiteLLM one. Defaults to the catalog
+                      engine's path in mode=catalog; REQUIRED in mode=external, since the
+                      operator cannot know where a user-managed endpoint serves it.
+                    type: string
+                  role:
+                    description: |-
+                      Role tells Wäg whether the guardrail decides (policy) or rewrites content
+                      (transform). This is load-bearing: a transform engine configured as a
+                      policy item has its rewrite treated as a redact decision, so mid-stream
+                      substitution silently does not happen. Defaults to the catalog engine's
+                      role, else "policy" (Wäg's own default).
+                    enum:
+                    - policy
+                    - transform
+                    type: string
+                  timeoutMs:
+                    description: TimeoutMs bounds each scan call. Wäg applies its
+                      own default when unset.
+                    minimum: 1
+                    type: integer
+                type: object
+            required:
+            - mode
+            type: object
+          status:
+            description: |-
+              GuardrailStatus reports the resolved, consumable wiring for the guardrail. A
+              Gateway reads this (requiring Ready) to emit the LiteLLMGuardrail CR(s).
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                description: |-
+                  Endpoint is the license-gate proxy URL the Gateway must use as the
+                  LiteLLMGuardrail apiBase (never the raw engine/external endpoint).
+                type: string
+              guardrailNames:
+                description: |-
+                  GuardrailNames are the resolved LiteLLM guardrail_name values emitted for
+                  this Guardrail (one per mode).
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              unreachableFallback:
+                description: |-
+                  UnreachableFallback is the resolved fallback the Gateway should apply on the
+                  emitted LiteLLMGuardrail (defaults to fail_closed).
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

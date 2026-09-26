@@ -1,0 +1,1706 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "ChatUI",
+          "metadata": {
+            "name": "forge-ui",
+            "namespace": "forge-ui"
+          },
+          "spec": {
+            "gatewayRef": {
+              "name": "gateway",
+              "namespace": "forge-gateway"
+            },
+            "host": "chat.forge.example.com",
+            "imageVolume": {
+              "accessMode": "ReadWriteOnce",
+              "enabled": true,
+              "size": "10Gi"
+            },
+            "ingress": {
+              "basicAuthSecret": "forge-ui-basic-auth",
+              "className": "nginx",
+              "enabled": true,
+              "host": "chat.forge.example.com"
+            },
+            "meilisearch": {
+              "mode": "ref",
+              "ref": {
+                "name": "forge-meili"
+              }
+            },
+            "models": [
+              "azure_ai/gpt-5.4"
+            ],
+            "mongo": {
+              "databaseName": "LibreChat",
+              "mode": "ref",
+              "ref": {
+                "name": "forge-mongo"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "ClickHouseCluster",
+          "metadata": {
+            "name": "forge-ch",
+            "namespace": "forge-data"
+          },
+          "spec": {
+            "managed": {
+              "replicas": 1,
+              "shards": 1,
+              "storageSize": "20Gi"
+            },
+            "mode": "managed",
+            "type": "clickhouse"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Gateway",
+          "metadata": {
+            "name": "gateway",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "database": {
+              "databaseName": "litellm",
+              "mode": "postgresCluster",
+              "postgresClusterRef": {
+                "name": "forge-pg",
+                "namespace": "forge-data"
+              }
+            },
+            "instance": {
+              "masterKey": {
+                "autoGenerate": true
+              },
+              "replicas": 1,
+              "saltKey": {
+                "autoGenerate": true
+              }
+            },
+            "models": [
+              {
+                "credentials": {
+                  "apiBase": "https://my-resource.openai.azure.com/openai/v1?api-version=2025-01-01-preview"
+                },
+                "model": "azure_ai/gpt-5.4",
+                "modelName": "azure_ai/gpt-5.4",
+                "name": "gpt-5.4",
+                "refSecretKey": "OPENAI_API_KEY",
+                "rpm": 300,
+                "timeout": 120,
+                "tpm": 80000
+              }
+            ],
+            "observabilityRef": {
+              "name": "observability",
+              "namespace": "forge-langfuse"
+            },
+            "organization": {
+              "budgetDuration": "30d",
+              "maxBudget": 2000,
+              "name": "navique-ag",
+              "rpmLimit": 1000,
+              "tpmLimit": 200000
+            },
+            "secretsRef": {
+              "name": "forge-secrets"
+            },
+            "teams": [
+              {
+                "budgetDuration": "30d",
+                "maxBudgetMonthly": 1000,
+                "name": "data-engineering"
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Gateway",
+          "metadata": {
+            "name": "waeg-gateway",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "database": {
+              "databaseName": "waeg",
+              "mode": "postgresCluster",
+              "postgresClusterRef": {
+                "name": "forge-pg",
+                "namespace": "forge-data"
+              }
+            },
+            "instance": {
+              "masterKey": {
+                "autoGenerate": true
+              },
+              "replicas": 2
+            },
+            "models": [
+              {
+                "credentials": {
+                  "apiBase": "https://my-resource.openai.azure.com/openai/v1?api-version=2025-01-01-preview"
+                },
+                "fallbacks": [
+                  "economy"
+                ],
+                "model": "azure/gpt-5.4",
+                "modelName": "premium",
+                "name": "gpt-5-4",
+                "refSecretKey": "OPENAI_API_KEY"
+              },
+              {
+                "credentials": {
+                  "apiBase": "https://my-resource.openai.azure.com/openai/v1?api-version=2025-01-01-preview"
+                },
+                "model": "azure/gpt-5.4-mini",
+                "modelName": "economy",
+                "name": "gpt-5-4-mini",
+                "refSecretKey": "OPENAI_API_KEY"
+              }
+            ],
+            "organization": {
+              "maxBudget": 2000,
+              "name": "navique-ag",
+              "rpmLimit": 1000,
+              "tpmLimit": 200000
+            },
+            "secretsRef": {
+              "name": "forge-secrets"
+            },
+            "teams": [
+              {
+                "name": "data-engineering"
+              }
+            ],
+            "type": "waeg",
+            "waeg": {
+              "artifacts": {
+                "emptyDirSizeLimit": "5Gi",
+                "type": "emptyDir"
+              },
+              "clickhouse": {
+                "mode": "ref",
+                "ref": {
+                  "name": "forge-ch",
+                  "namespace": "forge-data"
+                }
+              },
+              "modelAccess": {
+                "fallbackMode": "deny",
+                "grants": [
+                  {
+                    "models": [
+                      "premium",
+                      "economy"
+                    ]
+                  }
+                ],
+                "openByDefault": false
+              },
+              "redis": {
+                "mode": "ref",
+                "ref": {
+                  "name": "forge-redis",
+                  "namespace": "forge-data"
+                }
+              },
+              "topology": "Split",
+              "worker": {
+                "enabled": true,
+                "jobWorkers": 4,
+                "replicas": 2
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Guardrail",
+          "metadata": {
+            "name": "byo-guardrail",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "external": {
+              "apiBase": "https://guardrail.example.com",
+              "unreachableFallback": "fail_closed"
+            },
+            "mode": "external",
+            "modes": [
+              "pre_call"
+            ]
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Guardrail",
+          "metadata": {
+            "name": "pii-pseudonymizer",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "catalog": "pseudonymizer",
+            "mode": "catalog"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Identity",
+          "metadata": {
+            "name": "demo-litellm",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "budget": {
+              "budgetDuration": "30d",
+              "maxBudget": 25
+            },
+            "gatewayRef": {
+              "name": "gateway"
+            },
+            "role": "internal_user",
+            "teamRefs": [
+              {
+                "name": "platform"
+              }
+            ],
+            "type": "litellm",
+            "userRef": {
+              "name": "demo-user"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "License",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "secretRef": {
+              "key": "license",
+              "name": "navique-license",
+              "namespace": "navique-system"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Lock",
+          "metadata": {
+            "name": "protect-forge-stack",
+            "namespace": "forge"
+          },
+          "spec": {
+            "reason": "Production environment — remove this Lock deliberately before deleting.",
+            "targetRef": {
+              "apiVersion": "core.navique.com/v1alpha1",
+              "kind": "Stack",
+              "name": "forge"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "ManagementPlane",
+          "metadata": {
+            "name": "management-plane",
+            "namespace": "navique-system"
+          },
+          "spec": {
+            "auth": {
+              "localAdmin": {
+                "credentialsSecretRef": {
+                  "name": "mp-local-admin"
+                },
+                "enabled": true
+              },
+              "oidc": {
+                "clientID": "\u003capp-id\u003e",
+                "clientSecretRef": {
+                  "key": "client-secret",
+                  "name": "mp-oidc"
+                },
+                "enabled": true,
+                "issuerURL": "https://login.microsoftonline.com/\u003ctenant\u003e/v2.0"
+              }
+            },
+            "ingress": {
+              "className": "nginx",
+              "enabled": true,
+              "host": "console.forge.example.com",
+              "tls": true
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "MeilisearchInstance",
+          "metadata": {
+            "name": "forge-meili",
+            "namespace": "forge-ui"
+          },
+          "spec": {
+            "managed": {
+              "storageSize": "5Gi"
+            },
+            "mode": "managed",
+            "type": "meilisearch"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "MongoCluster",
+          "metadata": {
+            "name": "forge-mongo",
+            "namespace": "forge-ui"
+          },
+          "spec": {
+            "databases": [
+              {
+                "name": "LibreChat"
+              }
+            ],
+            "managed": {
+              "members": 1,
+              "storageSize": "5Gi",
+              "version": "8.0.4"
+            },
+            "mode": "managed",
+            "type": "mck"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Observability",
+          "metadata": {
+            "name": "observability",
+            "namespace": "forge-langfuse"
+          },
+          "spec": {
+            "ingress": {
+              "className": "nginx",
+              "enabled": true,
+              "host": "langfuse.forge.example.com",
+              "tls": true
+            },
+            "langfuse": {
+              "blob": {
+                "provider": "s3",
+                "s3": {
+                  "bucket": "langfuse",
+                  "credentialsSecretRef": {
+                    "name": "langfuse-s3"
+                  },
+                  "region": "us-east-1"
+                }
+              },
+              "clickhouse": {
+                "mode": "ref",
+                "ref": {
+                  "name": "forge-ch",
+                  "namespace": "forge-data"
+                }
+              },
+              "postgres": {
+                "databaseName": "langfuse",
+                "mode": "ref",
+                "ref": {
+                  "name": "forge-pg",
+                  "namespace": "forge-data"
+                }
+              },
+              "redis": {
+                "mode": "ref",
+                "ref": {
+                  "name": "forge-redis",
+                  "namespace": "forge-data"
+                }
+              }
+            },
+            "type": "langfuse"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Organization",
+          "metadata": {
+            "name": "acme",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "budget": {
+              "budgetDuration": "30d",
+              "maxBudget": 1000
+            },
+            "displayName": "ACME Corp",
+            "gatewayRef": {
+              "name": "gateway"
+            },
+            "type": "litellm"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "PlatformConfig",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "defaults": {
+              "clusterDomain": "cluster.local",
+              "commonAnnotations": {
+                "owner": "ai-platform"
+              },
+              "commonLabels": {
+                "team": "platform"
+              },
+              "imagePullPolicy": "IfNotPresent",
+              "proxy": {
+                "httpProxy": "http://proxy.example.com:3128",
+                "httpsProxy": "http://proxy.example.com:3128",
+                "noProxy": ".svc,.cluster.local,10.0.0.0/8"
+              },
+              "scheduling": {
+                "nodeSelector": {
+                  "workload": "platform"
+                },
+                "priorityClassName": "system-cluster-critical",
+                "tolerations": [
+                  {
+                    "key": "platform",
+                    "operator": "Exists"
+                  }
+                ]
+              },
+              "securityContext": {
+                "runAsNonRoot": true,
+                "seccompProfile": {
+                  "type": "RuntimeDefault"
+                }
+              },
+              "storageClass": "fast-ssd"
+            },
+            "lifecycle": {
+              "pauseUpgrades": false,
+              "retainOnUninstall": false
+            },
+            "operators": {
+              "namespace": "navique-operators",
+              "namespaces": {
+                "cloudnative-pg": "data-system"
+              }
+            },
+            "registry": {
+              "auth": {
+                "secretRef": {
+                  "name": "registry-pull-secret",
+                  "namespace": "navique-system"
+                }
+              },
+              "host": "registry.example.com/mirror",
+              "operandImages": {
+                "clickhouse": "clickhouse/clickhouse-server:25.3",
+                "postgres": "ghcr.io/cloudnative-pg/postgresql:17.2"
+              }
+            },
+            "routing": {
+              "gateway": {
+                "clusterIssuer": "letsencrypt-prod",
+                "mode": "managed",
+                "name": "navique",
+                "namespace": "navique-system"
+              },
+              "gatewayClassName": "istio",
+              "mode": "Ingress"
+            },
+            "runtime": {
+              "logLevel": "info"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "PostgresCluster",
+          "metadata": {
+            "name": "forge-pg",
+            "namespace": "forge-data"
+          },
+          "spec": {
+            "databases": [
+              {
+                "credentialsSecretName": "litellm-db-credentials",
+                "name": "litellm"
+              },
+              {
+                "credentialsSecretName": "langfuse-db-credentials",
+                "name": "langfuse"
+              }
+            ],
+            "managed": {
+              "instances": 3,
+              "storageSize": "20Gi"
+            },
+            "mode": "managed",
+            "type": "cnpg"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "RedisInstance",
+          "metadata": {
+            "name": "forge-redis",
+            "namespace": "forge-data"
+          },
+          "spec": {
+            "managed": {
+              "storageSize": "5Gi",
+              "topology": "standalone"
+            },
+            "mode": "managed",
+            "type": "ot-container-kit"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "SecretsManagement",
+          "metadata": {
+            "name": "forge-secrets",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "backend": "eso",
+            "eso": {
+              "externalSecrets": [
+                {
+                  "keys": {
+                    "OPENAI_API_KEY": "navique/models"
+                  },
+                  "name": "model-credentials"
+                }
+              ],
+              "hashicorpVault": {
+                "auth": {
+                  "kubernetes": {
+                    "role": "navique",
+                    "serviceAccountName": "navique-vault"
+                  }
+                },
+                "caSecretRef": {
+                  "name": "vault-ca"
+                },
+                "path": "secret",
+                "server": "https://vault.example.internal:8200",
+                "version": "v2"
+              },
+              "provider": "hashicorpVault",
+              "refreshInterval": "1h"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "SecretsManagement",
+          "metadata": {
+            "name": "forge-secrets-azure",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "backend": "eso",
+            "eso": {
+              "clientID": "00000000-0000-0000-0000-000000000000",
+              "externalSecrets": [
+                {
+                  "keys": {
+                    "OPENAI_API_KEY": "gateway-openai-api-key"
+                  },
+                  "name": "model-credentials-azure"
+                }
+              ],
+              "provider": "azureKeyVault",
+              "refreshInterval": "1h",
+              "serviceAccountName": "forge-sa",
+              "vaultURL": "https://kv-example.vault.azure.net/"
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "ServiceMesh",
+          "metadata": {
+            "name": "cluster"
+          },
+          "spec": {
+            "dataPlane": "ambient",
+            "enrollNamespaces": [],
+            "isolation": "namespace",
+            "mode": "managed",
+            "mtls": {
+              "mode": "strict"
+            },
+            "provider": "auto",
+            "version": "1.30"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Stack",
+          "metadata": {
+            "name": "forge",
+            "namespace": "forge"
+          },
+          "spec": {
+            "chatUI": {
+              "host": "chat.forge.example.com",
+              "ingress": {
+                "className": "nginx",
+                "enabled": true,
+                "host": "chat.forge.example.com",
+                "tls": true
+              },
+              "models": [
+                "gpt-4o"
+              ]
+            },
+            "datastores": {
+              "clickhouse": {
+                "backup": {
+                  "enabled": true,
+                  "provider": "s3",
+                  "s3": {
+                    "credentialsSecretRef": {
+                      "name": "forge-backup-s3"
+                    },
+                    "destinationPath": "s3://forge-backups/clickhouse"
+                  }
+                },
+                "resources": {
+                  "memory": "1Gi",
+                  "memoryLimit": "3Gi"
+                },
+                "storageSize": "20Gi"
+              },
+              "mongo": {
+                "backup": {
+                  "enabled": true,
+                  "provider": "s3",
+                  "s3": {
+                    "credentialsSecretRef": {
+                      "name": "forge-backup-s3"
+                    },
+                    "destinationPath": "s3://forge-backups/mongo"
+                  }
+                }
+              },
+              "postgres": {
+                "backup": {
+                  "enabled": true,
+                  "provider": "s3",
+                  "s3": {
+                    "credentialsSecretRef": {
+                      "name": "forge-backup-s3"
+                    },
+                    "destinationPath": "s3://forge-backups/postgres"
+                  }
+                },
+                "storageSize": "5Gi"
+              },
+              "redis": {
+                "storageSize": "5Gi"
+              }
+            },
+            "gateway": {
+              "ingress": {
+                "className": "nginx",
+                "enabled": true,
+                "host": "gw.forge.example.com",
+                "tls": true
+              },
+              "models": [
+                {
+                  "model": "openai/gpt-4o",
+                  "modelName": "gpt-4o",
+                  "name": "gpt-4o",
+                  "refSecretKey": "OPENAI_API_KEY"
+                }
+              ],
+              "storePromptsInLogs": true
+            },
+            "observability": {
+              "blob": {
+                "provider": "s3",
+                "s3": {
+                  "bucket": "langfuse",
+                  "credentialsSecretRef": {
+                    "name": "langfuse-s3"
+                  },
+                  "endpoint": "http://minio.forge.svc:9000",
+                  "forcePathStyle": true
+                }
+              },
+              "ingress": {
+                "className": "nginx",
+                "enabled": true,
+                "host": "lf.forge.example.com",
+                "tls": true
+              }
+            },
+            "secrets": {
+              "backend": "eso",
+              "eso": {
+                "externalSecrets": [
+                  {
+                    "keys": {
+                      "OPENAI_API_KEY": "model-credentials"
+                    },
+                    "name": "model-credentials"
+                  }
+                ],
+                "hashicorpVault": {
+                  "auth": {
+                    "kubernetes": {
+                      "role": "navique",
+                      "serviceAccountName": "navique-vault"
+                    }
+                  },
+                  "caSecretRef": {
+                    "name": "vault-ca"
+                  },
+                  "server": "https://vault.example.internal:8200"
+                },
+                "provider": "hashicorpVault"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Stack",
+          "metadata": {
+            "name": "forge-byo-db",
+            "namespace": "forge"
+          },
+          "spec": {
+            "datastores": {
+              "clickhouse": {
+                "resources": {
+                  "memory": "1Gi",
+                  "memoryLimit": "3Gi"
+                },
+                "storageSize": "20Gi"
+              },
+              "postgres": {
+                "connectionSecretRef": {
+                  "key": "DATABASE_URL",
+                  "name": "forge-postgres-conn"
+                },
+                "mode": "external"
+              },
+              "redis": {
+                "storageSize": "5Gi"
+              }
+            },
+            "gateway": {
+              "models": [
+                {
+                  "model": "openai/gpt-4o",
+                  "modelName": "gpt-4o",
+                  "name": "gpt-4o",
+                  "refSecretKey": "OPENAI_API_KEY"
+                }
+              ]
+            },
+            "observability": {
+              "blob": {
+                "provider": "s3",
+                "s3": {
+                  "bucket": "langfuse",
+                  "credentialsSecretRef": {
+                    "name": "langfuse-s3"
+                  },
+                  "endpoint": "http://minio.forge.svc:9000",
+                  "forcePathStyle": true
+                }
+              }
+            },
+            "secrets": {
+              "backend": "eso",
+              "eso": {
+                "externalSecrets": [
+                  {
+                    "keys": {
+                      "OPENAI_API_KEY": "model-credentials"
+                    },
+                    "name": "model-credentials"
+                  }
+                ],
+                "hashicorpVault": {
+                  "auth": {
+                    "kubernetes": {
+                      "role": "navique",
+                      "serviceAccountName": "navique-vault"
+                    }
+                  },
+                  "caSecretRef": {
+                    "name": "vault-ca"
+                  },
+                  "server": "https://vault.example.internal:8200"
+                },
+                "provider": "hashicorpVault"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "Team",
+          "metadata": {
+            "name": "platform",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "budget": {
+              "budgetDuration": "30d",
+              "maxBudget": 300,
+              "rpmLimit": 200
+            },
+            "displayName": "Platform Team",
+            "gatewayRef": {
+              "name": "gateway"
+            },
+            "organizationRef": {
+              "name": "acme"
+            },
+            "type": "litellm"
+          }
+        },
+        {
+          "apiVersion": "core.navique.com/v1alpha1",
+          "kind": "User",
+          "metadata": {
+            "name": "demo-user",
+            "namespace": "forge-gateway"
+          },
+          "spec": {
+            "displayName": "Demo User",
+            "email": "demo@forge.local"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: AI/Machine Learning
+    containerImage: ghcr.io/scigility/navique-ai-core-operator:v0.22.0
+    createdAt: "2026-09-26T08:47:36Z"
+    description: Deploys and manages the Navique FORGE AI platform (LiteLLM gateway,
+      Langfuse observability, LibreChat UI and their datastores) on Kubernetes
+    operators.operatorframework.io/builder: operator-sdk-v1.42.1
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    support: Navique
+  name: navique-ai-core-operator.v0.22.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: ChatUI is a LibreChat web UI wired to a Gateway.
+      displayName: Chat UI
+      kind: ChatUI
+      name: chatuis.core.navique.com
+      version: v1alpha1
+    - description: ClickHouseCluster is a shared ClickHouse cluster.
+      displayName: Click House Cluster
+      kind: ClickHouseCluster
+      name: clickhouseclusters.core.navique.com
+      version: v1alpha1
+    - description: |-
+        Gateway is an AI gateway (LiteLLM or Wäg) with models, teams, and an
+        organization.
+      displayName: Gateway
+      kind: Gateway
+      name: gateways.core.navique.com
+      version: v1alpha1
+    - kind: Guardrail
+      name: guardrails.core.navique.com
+      version: v1alpha1
+    - description: |-
+        Identity is a per-backend account (LiteLLM / Observability / LibreChat)
+        linked to a User seat via userRef.
+      displayName: Identity
+      kind: Identity
+      name: identities.core.navique.com
+      version: v1alpha1
+    - description: |-
+        License is the cluster-scoped, singleton signed offline license. It gates
+        licensed features and enforces per-type instance caps.
+      displayName: License
+      kind: License
+      name: licenses.core.navique.com
+      version: v1alpha1
+    - kind: Lock
+      name: locks.core.navique.com
+      version: v1alpha1
+    - description: |-
+        ManagementPlane configures the admin console (the console is deployed by
+        default; this CR only overrides defaults).
+      displayName: Management Plane
+      kind: ManagementPlane
+      name: managementplanes.core.navique.com
+      version: v1alpha1
+    - kind: MCPServer
+      name: mcpservers.core.navique.com
+      version: v1alpha1
+    - kind: MeilisearchInstance
+      name: meilisearchinstances.core.navique.com
+      version: v1alpha1
+    - kind: MongoCluster
+      name: mongoclusters.core.navique.com
+      version: v1alpha1
+    - description: |-
+        Observability is an LLM observability instance. type=langfuse drives a
+        Langfuse v3 deployment; other backends are scaffolded.
+      displayName: Observability
+      kind: Observability
+      name: observabilities.core.navique.com
+      version: v1alpha1
+    - kind: Organization
+      name: organizations.core.navique.com
+      version: v1alpha1
+    - kind: PlatformConfig
+      name: platformconfigs.core.navique.com
+      version: v1alpha1
+    - description: PostgresCluster is a shared Postgres cluster with per-consumer
+        databases.
+      displayName: Postgres Cluster
+      kind: PostgresCluster
+      name: postgresclusters.core.navique.com
+      version: v1alpha1
+    - description: RedisInstance is a shared Redis instance.
+      displayName: Redis Instance
+      kind: RedisInstance
+      name: redisinstances.core.navique.com
+      version: v1alpha1
+    - description: SecretsManagement selects and reconciles a credential backend for
+        a namespace.
+      displayName: Secrets Management
+      kind: SecretsManagement
+      name: secretsmanagements.core.navique.com
+      version: v1alpha1
+    - kind: ServiceMesh
+      name: servicemeshes.core.navique.com
+      version: v1alpha1
+    - kind: Stack
+      name: stacks.core.navique.com
+      version: v1alpha1
+    - kind: Team
+      name: teams.core.navique.com
+      version: v1alpha1
+    - description: |-
+        User is a person/seat. The license users cap counts these; one User owns
+        many per-backend Identity accounts.
+      displayName: User
+      kind: User
+      name: users.core.navique.com
+      version: v1alpha1
+  description: |-
+    ## About the managed application
+
+    The **Navique FORGE AI Core Operator** deploys and manages a complete, self-hosted
+    AI platform on Kubernetes: the **LiteLLM** AI gateway, the **LibreChat** chat UI,
+    **Langfuse** LLM observability, and the datastores and secrets plumbing behind
+    them. You declare the platform as Kubernetes resources and the operator converges
+    the cluster to match. It installs the upstream operators it needs (CloudNativePG,
+    External Secrets, Sealed Secrets, cert-manager, and the Redis, ClickHouse,
+    MongoDB, LiteLLM and Langfuse operators) from their official Helm charts, which
+    are embedded in the operator.
+
+    The core is open source (AGPL-3.0) and runs without a license as the
+    **Community** edition. Enterprise features (multiple instances, multi-tenancy,
+    automatic wiring between components, SSO/SCIM and the PII guardrail) unlock with
+    a signed, offline license from Navique. There is no license server and no
+    phone-home.
+
+    More information:
+
+    * Documentation: [docs.navique.dev/ai-core](https://docs.navique.dev/ai-core/)
+    * Customer portal (licenses and trials): [portal.navique.dev](https://portal.navique.dev/)
+    * Navique: [www.navique.com](https://www.navique.com/)
+
+    ## Features
+
+    * **One resource per capability:** `Gateway` (LiteLLM, with models, teams and
+      organizations), `Observability` (Langfuse v3), `ChatUI` (LibreChat),
+      `PostgresCluster`, `ClickHouseCluster`, `RedisInstance`, `MongoCluster`,
+      `MeilisearchInstance`, `SecretsManagement`, `License`, `Guardrail`,
+      `MCPServer` and more. An optional `Stack` resource brings up a whole bundle in
+      one go.
+    * **Managed, adopted or external datastores:** each datastore can be run by the
+      operator, adopted from an existing in-cluster resource, or pointed at an
+      external host.
+    * **Provenance-aware installs:** an upstream operator you already installed is
+      adopted, never reinstalled, and the operator only removes what it installed
+      itself.
+    * **Readiness-driven reconciliation:** apply everything at once; each resource
+      becomes `Ready` as soon as the resources it references are, with detailed
+      status conditions along the way.
+    * **No credentials in manifests:** secrets come from Kubernetes Secrets, from
+      External Secrets (Azure Key Vault, HashiCorp Vault, AWS or GCP secret managers,
+      and others) or from Sealed Secrets.
+    * **Management console** deployed by default.
+
+    ## How to use it
+
+    1. Install the operator from OperatorHub.
+    2. Create the namespaces and the Secrets your workloads reference, for example
+       your model provider API key and the object storage credentials for Langfuse.
+    3. Create the platform resources, for example a `PostgresCluster`,
+       `ClickHouseCluster` and `RedisInstance`, then a `Gateway`, an `Observability`
+       and a `ChatUI`. Every resource kind has an example in the operator's
+       "Create instance" forms.
+    4. Watch them become ready: `kubectl get gateways,observabilities,chatuis -A`.
+
+    The [Quick Start](https://docs.navique.dev/ai-core/guide/quickstart) walks through
+    a complete platform step by step.
+
+    ## Prerequisites
+
+    * Kubernetes **1.28 or newer**. Tested on AKS, EKS, GKE, OpenShift, Kind and
+      Minikube.
+    * A **default StorageClass** with dynamic provisioning, if the operator is to run
+      the datastores.
+    * **Object storage** for Langfuse v3 (S3, Azure Blob or GCS; a small MinIO is
+      enough for evaluation).
+    * An **ingress controller** and DNS, to expose the gateway, the chat UI, Langfuse
+      or the management console outside the cluster.
+    * A **secrets backend** for production: an External Secrets provider or Sealed
+      Secrets, configured through a `SecretsManagement` resource. Plain Kubernetes
+      Secrets are enough for evaluation.
+    * Outbound access to public image registries (ghcr.io, quay.io, Docker Hub). For
+      air-gapped clusters, mirror the images into your own registry.
+    * Optional: a license for the Enterprise features. Get a trial or your license
+      from the [customer portal](https://portal.navique.dev/), store it in a Secret
+      and reference it from a `License` resource named `cluster`.
+
+    See [Prerequisites](https://docs.navique.dev/ai-core/guide/prerequisites) for
+    details.
+  displayName: Navique FORGE AI Core Operator
+  icon:
+  - base64data: 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
+    mediatype: image/png
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          - apps
+          - batch
+          - rbac.authorization.k8s.io
+          - apiextensions.k8s.io
+          - admissionregistration.k8s.io
+          - networking.k8s.io
+          - policy
+          - autoscaling
+          - coordination.k8s.io
+          - storage.k8s.io
+          - scheduling.k8s.io
+          - apiregistration.k8s.io
+          - monitoring.coreos.com
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - postgresql.cnpg.io
+          - clickhouse.com
+          - clickhouse-keeper.altinity.com
+          - clickhouse.altinity.com
+          - redis.redis.opstreelabs.in
+          - mongodbcommunity.mongodb.com
+          - mongodb.com
+          - external-secrets.io
+          - generators.external-secrets.io
+          - bitnami.com
+          - cert-manager.io
+          - acme.cert-manager.io
+          - litellm.palena.ai
+          - langfuse.palena.ai
+          - gateway.waeg.ai
+          resources:
+          - '*'
+          verbs:
+          - '*'
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - namespaces
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - delete
+          - get
+          - list
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - cronjobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - bitnami.com
+          resources:
+          - sealedsecrets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          - clusterissuers
+          - issuers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - clickhouse.com
+          resources:
+          - clickhouseclusters
+          - keeperclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - core.navique.com
+          resources:
+          - '*'
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - core.navique.com
+          resources:
+          - chatuis
+          - clickhouseclusters
+          - gateways
+          - guardrails
+          - identities
+          - licenses
+          - locks
+          - managementplanes
+          - mcpservers
+          - meilisearchinstances
+          - mongoclusters
+          - observabilities
+          - organizations
+          - platformconfigs
+          - postgresclusters
+          - redisinstances
+          - secretsmanagements
+          - servicemeshes
+          - stacks
+          - teams
+          - users
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - core.navique.com
+          resources:
+          - chatuis/finalizers
+          - clickhouseclusters/finalizers
+          - gateways/finalizers
+          - guardrails/finalizers
+          - identities/finalizers
+          - licenses/finalizers
+          - locks/finalizers
+          - managementplanes/finalizers
+          - mcpservers/finalizers
+          - meilisearchinstances/finalizers
+          - mongoclusters/finalizers
+          - observabilities/finalizers
+          - organizations/finalizers
+          - platformconfigs/finalizers
+          - postgresclusters/finalizers
+          - redisinstances/finalizers
+          - secretsmanagements/finalizers
+          - servicemeshes/finalizers
+          - stacks/finalizers
+          - teams/finalizers
+          - users/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - core.navique.com
+          resources:
+          - chatuis/status
+          - clickhouseclusters/status
+          - gateways/status
+          - guardrails/status
+          - identities/status
+          - licenses/status
+          - locks/status
+          - managementplanes/status
+          - mcpservers/status
+          - meilisearchinstances/status
+          - mongoclusters/status
+          - observabilities/status
+          - organizations/status
+          - platformconfigs/status
+          - postgresclusters/status
+          - redisinstances/status
+          - secretsmanagements/status
+          - servicemeshes/status
+          - stacks/status
+          - teams/status
+          - users/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - external-secrets.io
+          resources:
+          - externalsecrets
+          - secretstores
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways
+          - httproutes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gateway.waeg.ai
+          resources:
+          - waegapplications
+          - waegbudgets
+          - waegenterpriseconfigs
+          - waegguardrailbindings
+          - waegguardrailchains
+          - waegguardrailitems
+          - waeginstances
+          - waegmodelaccesses
+          - waegmodels
+          - waegorganizations
+          - waegproviders
+          - waegteams
+          - waegusers
+          - waegvirtualkeys
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - langfuse.palena.ai
+          resources:
+          - langfuseinstances
+          - langfuseorganizations
+          - langfuseprojects
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - litellm.palena.ai
+          resources:
+          - litellmcredentials
+          - litellmguardrails
+          - litellminstances
+          - litellmmodels
+          - litellmorganizations
+          - litellmteams
+          - litellmusers
+          - litellmvirtualkeys
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - mongodbcommunity.mongodb.com
+          resources:
+          - mongodbcommunity
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - serviceentries
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - ingresses
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - postgresql.cnpg.io
+          resources:
+          - clusters
+          - databases
+          - scheduledbackups
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - redis.redis.opstreelabs.in
+          resources:
+          - redis
+          - redisreplications
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - sailoperator.io
+          resources:
+          - istiocnis
+          - istiorevisions
+          - istiorevisiontags
+          - istios
+          - ztunnels
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security.istio.io
+          resources:
+          - authorizationpolicies
+          - peerauthentications
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: navique-ai-core-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: navique-ai-core-operator
+          control-plane: controller-manager
+        name: navique-ai-core-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: navique-ai-core-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: navique-ai-core-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: ghcr.io/scigility/navique-ai-core-operator:v0.22.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: 1Gi
+                  requests:
+                    cpu: 100m
+                    memory: 256Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: navique-ai-core-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: navique-ai-core-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - navique
+  - forge
+  - ai
+  - llm
+  - litellm
+  - langfuse
+  - librechat
+  - gateway
+  - platform
+  links:
+  - name: Documentation
+    url: https://docs.navique.dev/ai-core/
+  - name: Customer Portal
+    url: https://portal.navique.dev/
+  - name: Navique
+    url: https://www.navique.com/
+  maintainers:
+  - email: info@navique.com
+    name: Navique
+  maturity: alpha
+  minKubeVersion: 1.28.0
+  provider:
+    name: Navique
+    url: https://www.navique.com/
+  version: 0.22.0

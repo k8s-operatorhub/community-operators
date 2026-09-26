@@ -1,0 +1,320 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: managementplanes.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: ManagementPlane
+    listKind: ManagementPlaneList
+    plural: managementplanes
+    shortNames:
+    - mp
+    singular: managementplane
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ManagementPlane configures the admin console (the console is deployed by
+          default; this CR only overrides defaults).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ManagementPlaneSpec configures the Navique AI Core Management Plane console.
+              The operator deploys the console by default even without this CR; the CR only
+              overrides defaults.
+            properties:
+              auth:
+                description: MPAuth configures management-plane authentication.
+                properties:
+                  localAdmin:
+                    description: MPLocalAdmin bootstraps a local admin for SSO-less/air-gapped
+                      installs.
+                    properties:
+                      credentialsSecretRef:
+                        description: |-
+                          CredentialsSecretRef references an existing Secret holding the local-admin
+                          credentials in its "username" and "password" keys. When localAdmin is
+                          enabled and this is unset, the operator auto-generates an owned Secret with
+                          the configured Username (default "admin") and a random password.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        type: boolean
+                      username:
+                        default: admin
+                        description: Username for the local admin login. Defaults
+                          to "admin" when unset.
+                        type: string
+                    type: object
+                  oidc:
+                    description: MPOIDC configures OIDC/Entra SSO.
+                    properties:
+                      clientID:
+                        type: string
+                      clientSecretRef:
+                        description: SecretKeyRef references a Secret (optionally
+                          a specific key within it).
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      enabled:
+                        type: boolean
+                      issuerURL:
+                        type: string
+                    type: object
+                type: object
+              discovery:
+                description: MPDiscovery overrides auto-discovery of platform endpoints.
+                properties:
+                  langfuseEndpoints:
+                    items:
+                      type: string
+                    type: array
+                  litellmEndpoints:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              image:
+                description: 'Image overrides the management-plane image (default:
+                  operator-pinned).'
+                type: string
+              ingress:
+                description: |-
+                  IngressSpec configures an optional ingress for a workload. When TLS is enabled
+                  the owning controller ensures cert-manager via platformdeps.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  api:
+                    description: |-
+                      API overrides the cluster-wide routing API (PlatformConfig.spec.routing) for
+                      THIS workload. Empty follows the resolved cluster/mesh mode; "Ingress" forces
+                      a classic Ingress even when a mesh is active (escape hatch); "Gateway" forces
+                      a Gateway API HTTPRoute.
+                    enum:
+                    - Ingress
+                    - Gateway
+                    type: string
+                  basicAuthSecret:
+                    description: |-
+                      BasicAuthSecret references a same-namespace Secret (htpasswd) for nginx
+                      basic-auth annotations.
+                    type: string
+                  className:
+                    type: string
+                  clusterIssuer:
+                    description: ClusterIssuer is the cert-manager ClusterIssuer to
+                      use when TLS is true.
+                    type: string
+                  enabled:
+                    type: boolean
+                  host:
+                    type: string
+                  tls:
+                    description: TLS enables a cert-manager-issued certificate for
+                      Host.
+                    type: boolean
+                type: object
+              replicas:
+                default: 1
+                format: int32
+                type: integer
+              resources:
+                description: ResourceRequirements describes the compute resource requirements.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+            type: object
+          status:
+            description: ManagementPlaneStatus reports console readiness.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              image:
+                type: string
+              localAdminSecret:
+                description: |-
+                  LocalAdminSecret names the Secret holding the local-admin credentials
+                  (auto-generated or user-provided) when local admin is enabled.
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              url:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

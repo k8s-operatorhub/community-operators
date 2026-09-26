@@ -1,0 +1,258 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: servicemeshes.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: ServiceMesh
+    listKind: ServiceMeshList
+    plural: servicemeshes
+    shortNames:
+    - mesh
+    singular: servicemesh
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.dataPlane
+      name: DataPlane
+      type: string
+    - jsonPath: .status.mtlsEffective
+      name: mTLS
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ServiceMesh is the cluster-scoped singleton configuring the platform's Istio
+          mesh (mTLS + tenant isolation).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ServiceMeshSpec configures the cluster's Istio mesh for the platform. It is a
+              cluster-scoped singleton (like License). The mesh is an enhancement, never a
+              hard dependency: without this CR the operator does nothing mesh-related and the
+              platform runs plaintext. Licensed feature: service-mesh.
+
+              Control plane is driven via the Sail Operator (the GA successor to the removed
+              in-cluster IstioOperator, and the basis of OpenShift Service Mesh 3) — so the
+              managed (vanilla k8s) and adopt (OpenShift/existing-Istio) paths converge on
+              one API.
+            properties:
+              dataPlane:
+                default: ambient
+                description: |-
+                  DataPlane selects the Istio data plane. "ambient" (default) gives transparent
+                  L4 mTLS via ztunnel with no sidecars/pod restarts; "sidecar" injects proxies.
+                enum:
+                - ambient
+                - sidecar
+                type: string
+              enrollNamespaces:
+                description: |-
+                  EnrollNamespaces explicitly enrolls namespaces into the mesh, in addition to
+                  any namespace carrying the core.navique.com/mesh=enabled label (set by a
+                  Stack/component with mesh.mode != disabled).
+                items:
+                  type: string
+                type: array
+              isolation:
+                default: namespace
+                description: |-
+                  Isolation selects the auto-generated AuthorizationPolicy posture (tenant
+                  isolation). mTLS alone authenticates but does NOT authorize:
+                    - "off": mTLS only — any meshed workload can reach any other.
+                    - "namespace" (default): deny cross-namespace; allow intra-namespace + the
+                      explicitly-wired cross-namespace refs. Isolates Stacks/deployments.
+                    - "strict": per-service least-privilege (only wired edges).
+                  L4 is enforced by ztunnel in ambient with no waypoints; L7 (method/path) is
+                  not yet implemented.
+                enum:
+                - "off"
+                - namespace
+                - strict
+                type: string
+              mode:
+                default: managed
+                description: |-
+                  Mode selects how the mesh control plane is provided:
+                    - "managed": install + own the Sail Operator and an Istio control plane.
+                    - "adopt": a mesh already exists (OpenShift Service Mesh / user Istio) —
+                      reference it, configure only, never manage its lifecycle.
+                    - "external": do not touch the control plane at all; only emit our config.
+                enum:
+                - managed
+                - adopt
+                - external
+                type: string
+              mtls:
+                description: MTLS configures peer authentication for enrolled namespaces.
+                properties:
+                  maintenanceUntil:
+                    description: |-
+                      MaintenanceUntil is a time-boxed break-glass: while it is in the future, the
+                      operator holds enrolled namespaces at PERMISSIVE (so e.g. a non-mesh client
+                      can connect for debugging), then automatically restores STRICT once it
+                      passes. Prefer this (auditable, self-healing) over hand-editing the managed
+                      PeerAuthentication, which the controller would revert.
+                    format: date-time
+                    type: string
+                  mode:
+                    default: strict
+                    description: |-
+                      Mode is the steady-state peer-authentication posture. "strict" (default)
+                      rejects plaintext; "permissive" accepts both (a non-production escape hatch).
+                      The operator manages a safe permissive→strict cutover when enrolling
+                      already-running namespaces regardless of this setting.
+                    enum:
+                    - strict
+                    - permissive
+                    type: string
+                type: object
+              provider:
+                default: auto
+                description: |-
+                  Provider pins/forces the mesh provider; "auto" detects it (Sail/OpenShift,
+                  user-installed Istio, or OSSM 2.x → deferred).
+                enum:
+                - auto
+                - sail
+                - openshift
+                - istio
+                type: string
+              version:
+                description: |-
+                  Version pins the control-plane (Sail/Istio) version in managed mode, e.g.
+                  "1.24". Ignored in adopt/external.
+                type: string
+            type: object
+          status:
+            description: ServiceMeshStatus reports control-plane provenance + enrollment.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              controlPlaneRef:
+                description: ControlPlaneRef names the Sail Istio CR we own or adopted.
+                type: string
+              dataPlane:
+                description: DataPlane in effect.
+                type: string
+              enrolledNamespaces:
+                description: EnrolledNamespaces lists the namespaces currently configured
+                  for the mesh.
+                items:
+                  type: string
+                type: array
+              mtlsEffective:
+                description: |-
+                  MTLSEffective reflects the posture actually applied (strict|permissive),
+                  which differs from spec while a maintenance window is open.
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase: Pending|Installing|Ready|Degraded|Failed|Refused|Deleting.'
+                type: string
+              provider:
+                description: 'Provider observed/selected: sail|openshift|istio (or
+                  "" until detected).'
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,458 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: postgresclusters.core.navique.com
+spec:
+  group: core.navique.com
+  names:
+    kind: PostgresCluster
+    listKind: PostgresClusterList
+    plural: postgresclusters
+    shortNames:
+    - pgc
+    singular: postgrescluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.host
+      name: Host
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PostgresCluster is a shared Postgres cluster with per-consumer
+          databases.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              PostgresClusterSpec defines a shared, multi-database Postgres cluster. The
+              engine is pluggable via Type; provenance via Mode.
+            properties:
+              adopt:
+                description: PostgresAdopt references an existing in-cluster CNPG
+                  Cluster.
+                properties:
+                  clusterRef:
+                    description: |-
+                      ObjectRef references another namespaced object. Namespace is optional and
+                      defaults to the referring object's namespace. Cross-namespace references are
+                      allowed for datastore/gateway/langfuse references; Secret references must stay
+                      in-namespace (use SecretKeyRef without Namespace, or a same-namespace value).
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - clusterRef
+                type: object
+              databases:
+                description: Databases to ensure inside the cluster (one per consuming
+                  workload).
+                items:
+                  description: PostgresDatabase is a logical database to ensure inside
+                    the cluster.
+                  properties:
+                    credentialsSecretName:
+                      description: |-
+                        CredentialsSecretName is the K8s Secret the operator materializes for the
+                        consumer (holds DATABASE_URL + components).
+                      type: string
+                    name:
+                      type: string
+                    owner:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              external:
+                description: PostgresExternal points at a user-hosted Postgres via
+                  a connection secret.
+                properties:
+                  connectionSecretRef:
+                    description: ConnectionSecretRef references a Secret holding a
+                      DATABASE_URL key.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - connectionSecretRef
+                type: object
+              managed:
+                description: PostgresManaged configures an operator-owned CNPG cluster.
+                properties:
+                  backup:
+                    description: |-
+                      PostgresBackup configures scheduled backups of a managed CNPG cluster to object
+                      storage, with continuous WAL archiving (point-in-time recovery). It maps to the
+                      CNPG in-tree Barman object store (spec.backup.barmanObjectStore) plus a
+                      ScheduledBackup CR. Disabled by default. Object-store credentials come from a
+                      Secret supplied via SecretsManagement (ESO/SealedSecrets) — never inline.
+                    properties:
+                      azure:
+                        description: Azure configures Azure Blob Storage.
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding a "connection-string" key.
+                              Omit when using inheritFromAzureAD.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          destinationPath:
+                            description: DestinationPath, e.g. "https://<account>.blob.core.windows.net/<container>/".
+                            type: string
+                          inheritFromAzureAD:
+                            description: InheritFromAzureAD uses Azure Workload Identity
+                              instead of static credentials.
+                            type: boolean
+                        required:
+                        - destinationPath
+                        type: object
+                      enabled:
+                        description: Enabled turns on scheduled backups + continuous
+                          WAL archiving (PITR).
+                        type: boolean
+                      gcs:
+                        description: GCS configures Google Cloud Storage.
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding a "credentials" key with the
+                              service-account JSON. Omit when using gkeEnvironment.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          destinationPath:
+                            description: DestinationPath, e.g. "gs://my-bucket/path".
+                            type: string
+                          gkeEnvironment:
+                            description: GKEEnvironment uses GKE Workload Identity
+                              instead of a service-account key.
+                            type: boolean
+                        required:
+                        - destinationPath
+                        type: object
+                      provider:
+                        default: s3
+                        description: Provider selects the object-storage backend.
+                        enum:
+                        - s3
+                        - azure
+                        - gcs
+                        type: string
+                      retentionPolicy:
+                        default: 30d
+                        description: |-
+                          RetentionPolicy is the recovery-window retention, e.g. "30d", "4w", "6m".
+                          Defaults to "30d".
+                        type: string
+                      s3:
+                        description: S3 configures AWS S3 or any S3-compatible store
+                          (MinIO, Cloudflare R2, …).
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              CredentialsSecretRef references a Secret holding keys "access-key-id" and
+                              "secret-access-key". Omit when using inheritFromIAMRole.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          destinationPath:
+                            description: DestinationPath is the bucket URL, e.g. "s3://my-bucket/path".
+                            type: string
+                          endpointURL:
+                            description: EndpointURL overrides the S3 endpoint for
+                              S3-compatible stores (MinIO, R2).
+                            type: string
+                          inheritFromIAMRole:
+                            description: InheritFromIAMRole uses the pod's IAM role
+                              (IRSA) instead of static keys.
+                            type: boolean
+                        required:
+                        - destinationPath
+                        type: object
+                      schedule:
+                        default: 0 0 2 * * *
+                        description: |-
+                          Schedule is the backup cadence as a 6-field cron WITH SECONDS
+                          (sec min hour dom mon dow) — the format CNPG's ScheduledBackup requires
+                          (NOT the 5-field crontab format). Defaults to "0 0 2 * * *" (daily 02:00).
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .s3
+                      message: backup.provider 's3' requires backup.s3
+                      reason: FieldValueRequired
+                      rule: '!self.enabled || self.provider != ''s3'' || has(self.s3)'
+                    - fieldPath: .azure
+                      message: backup.provider 'azure' requires backup.azure
+                      reason: FieldValueRequired
+                      rule: '!self.enabled || self.provider != ''azure'' || has(self.azure)'
+                    - fieldPath: .gcs
+                      message: backup.provider 'gcs' requires backup.gcs
+                      reason: FieldValueRequired
+                      rule: '!self.enabled || self.provider != ''gcs'' || has(self.gcs)'
+                  instances:
+                    default: 3
+                    description: Instances is the CNPG HA replica count.
+                    format: int32
+                    type: integer
+                  resources:
+                    description: ResourceRequirements describes the compute resource
+                      requirements.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  storageClass:
+                    type: string
+                  storageSize:
+                    type: string
+                type: object
+              mode:
+                description: |-
+                  Mode selects provenance: managed (operator owns it), adopt (reference an
+                  existing in-cluster cluster), external (a user-hosted host via secret).
+                enum:
+                - managed
+                - adopt
+                - external
+                type: string
+              type:
+                default: cnpg
+                description: |-
+                  Type selects the Postgres engine. Only "cnpg" is implemented; "zalando" and
+                  "cockroachdb" are scaffolded and report BackendNotImplemented.
+                enum:
+                - cnpg
+                - zalando
+                - cockroachdb
+                type: string
+            required:
+            - mode
+            - type
+            type: object
+          status:
+            description: PostgresClusterStatus reports connection coordinates + per-database
+              state.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              databases:
+                items:
+                  description: DatabaseStatus reports the per-database provisioning
+                    state.
+                  properties:
+                    claimedBy:
+                      description: |-
+                        ClaimedBy lists the workloads that reference this datastore and use this
+                        database ("Kind namespace/name"). With the auto-wiring licence a claimed
+                        database is created even when spec.databases does not declare it.
+                      items:
+                        type: string
+                      type: array
+                    credentialsSecret:
+                      type: string
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                type: array
+              host:
+                description: Host is the in-cluster read-write service host (managed/adopt).
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              port:
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,175 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: vastvolumereplications.vastdata.com
+spec:
+  group: vastdata.com
+  names:
+    kind: VastVolumeReplication
+    listKind: VastVolumeReplicationList
+    plural: vastvolumereplications
+    shortNames:
+      - vvr
+    singular: vastvolumereplication
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.volumeName
+          name: Volume
+          type: string
+        - jsonPath: .status.storageClassesPreview
+          name: Storage Classes
+          type: string
+        - jsonPath: .spec.primaryStorageClass
+          name: Primary SC
+          type: string
+        - jsonPath: .spec.failoverType
+          name: Failover Type
+          type: string
+        - jsonPath: .status.currentPrimaryStorageClass
+          name: Current Primary
+          type: string
+        - jsonPath: .status.syncStatus
+          name: Sync Status
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: "VastVolumeReplication declares per-PVC replication across StorageClasses."
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: Spec defines the desired state of VastVolumeReplication.
+              properties:
+                destVolReclaimPolicy:
+                  default: Retain
+                  description: |
+                    Whether destination VAST objects (block volumes or file views/quotas) are deleted when the VVR is deleted. Defaults to Retain.
+                  enum:
+                    - Retain
+                    - Delete
+                  type: string
+                failoverType:
+                  default: ungracefulFailover
+                  description: |
+                    Failover to execute when the primary StorageClass changes. ungracefulFailover (default) or gracefulFailover.
+                  enum:
+                    - ungracefulFailover
+                    - gracefulFailover
+                  type: string
+                primaryStorageClass:
+                  description: |
+                    VastStorage (StorageClass) that is currently acting as the active (primary) replica. The StorageClass name matches the VastStorage resource name. The VolumeReplication for this class gets replicationState=primary; all others get replicationState=secondary.
+                  type: string
+                protectionPolicyTemplate:
+                  description: |
+                    Schedule for operator-created NATIVE_REPLICATION protection policies. One policy is created per topology entry side and used as a replication stream on the protected path.
+                  properties:
+                    params:
+                      description: Replication schedule frames. At least one is required.
+                      items:
+                        properties:
+                          every:
+                            default: 15m
+                            description: |
+                              Replication interval. Time units: s/S=seconds, m=minutes (lowercase only; M=months), h/H=hours, d/D=days, w/W=weeks, M=months(30d), y/Y=years. Examples: "30s", "15m", "1h", "1d".
+                            type: string
+                          keepLocal:
+                            default: 1d
+                            description: How long local snapshots are retained (same units as every).
+                            type: string
+                          keepRemote:
+                            default: 7d
+                            description: How long remote snapshots are retained (same units as every).
+                            type: string
+                          startAt:
+                            description: |
+                              Optional time at which the first snapshot is taken. Formats: "YYYY-MM-DD HH:MM:SS", "HH:MM", or RFC-3339.
+                            type: string
+                        required:
+                          - every
+                        type: object
+                      minItems: 1
+                      type: array
+                  required:
+                    - params
+                  type: object
+                protectionTopology:
+                  description: |
+                    Undirected replication mesh. Each entry connects two clusters bidirectionally via a shared PeerName. For n distinct clusters exactly n*(n-1)/2 entries are required (one per unordered cluster pair). Example for 2 clusters: 1 entry (A–B).
+                  items:
+                    properties:
+                      destination:
+                        description: |
+                          VastStorage (StorageClass) of the other cluster in this pair. The StorageClass name matches the VastStorage resource name.
+                        type: string
+                      peerName:
+                        description: |
+                          Optional VAST ReplicationPeer name shared by both clusters. Leave empty to let the operator discover the single shared peer. Set explicitly only when more than one shared peer exists.
+                        type: string
+                      source:
+                        description: |
+                          VastStorage (StorageClass) of one cluster in this replication pair. The StorageClass name matches the VastStorage resource name.
+                        type: string
+                      targetExportedDir:
+                        description: |
+                          Optional absolute path on the Destination StorageClass for subsystem-level block replication only. Ignored for other types.
+                        type: string
+                    required:
+                      - source
+                      - destination
+                    type: object
+                  minItems: 1
+                  type: array
+                pvcRemap:
+                  default: false
+                  description: Whether PVCs are remapped to the new primary on failover.
+                  type: boolean
+                resync:
+                  default: false
+                  description: 'One-shot trigger: set to true to request an immediate resync.'
+                  type: boolean
+                syncIntervalSeconds:
+                  default: 0
+                  description: |
+                    Replication sync interval in seconds. When omitted or zero, the interval is derived from the "every" field of the first protectionPolicyTemplate entry.
+                  format: int64
+                  minimum: 0
+                  type: integer
+                volumeName:
+                  description: |
+                    Name of the PersistentVolumeClaim to replicate. Looked up in Volume Namespace, or in this VastVolumeReplication's namespace when Volume Namespace is empty.
+                  type: string
+                volumeNamespace:
+                  default: ""
+                  description: |
+                    Optional namespace of the PVC. Leave empty to use this VastVolumeReplication's namespace.
+                  type: string
+              required:
+                - destVolReclaimPolicy
+                - failoverType
+                - primaryStorageClass
+                - protectionPolicyTemplate
+                - protectionTopology
+                - pvcRemap
+                - volumeName
+              type: object
+            status:
+              description: Status defines the observed state of VastVolumeReplication
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

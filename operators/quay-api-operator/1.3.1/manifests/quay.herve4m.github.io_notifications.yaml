@@ -1,0 +1,219 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: notifications.quay.herve4m.github.io
+spec:
+  group: quay.herve4m.github.io
+  names:
+    kind: Notification
+    plural: notifications
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Repository in Quay
+      jsonPath: .spec.repository
+      name: Quay repository
+      type: string
+    - description: The status of the resource creation process in Quay
+      jsonPath: .status.conditions[?(@.type == 'Successful')].status
+      name: Success
+      type: string
+    - description: The error message when the resource creation process fails
+      jsonPath: .status.message
+      name: Message
+      type: string
+    - description: The state of the reconciliation process
+      jsonPath: .status.conditions[?(@.type == 'Running')].reason
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Manage Quay Container Registry repository notifications
+        properties:
+          apiVersion:
+            description: |
+              APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |
+              Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of Notification
+            properties:
+              config:
+                description: Configuration parameters for the notification method.
+                properties:
+                  email:
+                    description: Destination email address. Required by the email
+                      notification method.
+                    format: email
+                    type: string
+                  flowApiToken:
+                    description: API token required for the Flowdock notification
+                      method.
+                    type: string
+                  name:
+                    description: Name of the account, team, or organization. Robot
+                      accounts are not allowed. Required by the Quay Notification
+                      method.
+                    type: string
+                  notificationToken:
+                    description: Notification token required for the HipChat notification
+                      method.
+                    type: string
+                  roomId:
+                    description: Chat room ID required for the HipChat notification
+                      method.
+                    type: string
+                  template:
+                    description: JSON data for the body content of the webhook POST
+                      method.
+                    type: string
+                  type:
+                    default: user
+                    description: Specifies the type of the account defined in 'config.name'.
+                      Only applies to the Quay Notification method.
+                    enum:
+                    - user
+                    - team
+                    - org
+                    type: string
+                  url:
+                    description: Webhook URL for the Slack method or POST URL for
+                      the webhook POST method.
+                    type: string
+                type: object
+              connSecretRef:
+                description: |
+                  Reference to the secret resource that stores the connection parameters to the Quay Container Registry API.
+                  The secret must include the 'host', 'token' (or 'username' and 'password'), and optionally the 'validateCerts' keys.
+                properties:
+                  name:
+                    description: Name of the secret resource.
+                    type: string
+                  namespace:
+                    description: |
+                      Namespace of the secret resource. By default, the secret resource is retrieved from the same namespace as the current Notification resource.
+                    type: string
+                required:
+                - name
+                type: object
+              event:
+                description: Event that triggers the notification. Depending of the
+                  activated Quay components, not all events might be available on
+                  your system.
+                enum:
+                - repo_push
+                - build_failure
+                - build_queued
+                - build_start
+                - build_success
+                - build_cancelled
+                - vulnerability_found
+                - repo_mirror_sync_started
+                - repo_mirror_sync_success
+                - repo_mirror_sync_failed
+                - repo_image_expiry
+                type: string
+              imageExpiryDays:
+                default: 7
+                description: Only used when 'event' is 'repo_image_expiry'. The notification
+                  is triggered when the image expires in the specified number of days.
+                type: integer
+              method:
+                description: Notification method. Each method requires a specific
+                  set of options that you define by using the 'config' parameter.
+                  The email notification method is only available on Quay installations
+                  where the mailing capability has been activated ('FEATURE_MAILING'
+                  to 'true' in 'config.yaml').
+                enum:
+                - email
+                - flowdock
+                - hipchat
+                - quay_notification
+                - slack
+                - webhook
+                type: string
+              preserveInQuayOnDeletion:
+                default: false
+                description: |
+                  Whether to preserve the corresponding Quay object when you delete the Notification resource. When set to 'false' (the default), the object is deleted from Quay.
+                type: boolean
+              regexp:
+                description: The regular expression to search in the title of the
+                  existing notifications. This does not have to match the entire title.
+                  The resource uses that regular expression to select the notifications
+                  to process. For 'state=present', the resource resets the failure
+                  counter (if 'resetFailcount' is 'true') or initiates a test (if
+                  'test' is 'true') of all the matching notifications. For 'state=absent',
+                  the resource deletes all the notifications that match. Uses Python
+                  regular expressions. See <https://docs.python.org/3/library/re.html>.
+                  Mutually exclusive with 'searchString'.
+                type: string
+              repository:
+                description: Name of the repository which contains the notifications
+                  to manage. The format for the name is 'namespace'/'shortname'. The
+                  namespace can be an organization or your personal namespace. If
+                  you omit the namespace part in the name, then the resource looks
+                  for the repository in your personal namespace. You can manage notifications
+                  for repositories in your personal namespace, but not in the personal
+                  namespace of other users. The token you use in 'quayToken' determines
+                  the user account you are using.
+                type: string
+              resetFailcount:
+                description: Reset the notification failure counter.
+                type: boolean
+              searchString:
+                description: The literal string to search in the title of the existing
+                  notifications. This does not have to match the entire line. For
+                  'state=present', the resource resets the failure counter (if 'resetFailcount'
+                  is 'true') or initiates a test (if 'test' is 'true') of all the
+                  matching notifications. For 'state=absent', the resource deletes
+                  all the notifications that match. Mutually exclusive with 'regexp'.
+                type: string
+              test:
+                description: Initiate a test of the notification.
+                type: boolean
+              title:
+                description: Notification title.
+                type: string
+              vulnerabilityLevel:
+                description: Only used when 'event' is 'vulnerability_found'. The
+                  notification is triggered when the vulnerability has a level equal
+                  or higher to the level that you define in 'vulnerabilityLevel'.
+                enum:
+                - critical
+                - high
+                - medium
+                - low
+                - negligible
+                - unknown
+                type: string
+            required:
+            - connSecretRef
+            - repository
+            type: object
+          status:
+            description: |
+              Status defines the observed state of Notification
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

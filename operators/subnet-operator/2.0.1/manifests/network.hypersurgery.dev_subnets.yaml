@@ -1,0 +1,572 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: subnets.network.hypersurgery.dev
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: webhook-service
+          namespace: system
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: network.hypersurgery.dev
+  names:
+    categories:
+    - hypersurgery
+    kind: Subnet
+    listKind: SubnetList
+    plural: subnets
+    shortNames:
+    - hssubnet
+    singular: subnet
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.networkID
+      name: Network
+      type: string
+    - jsonPath: .status.cidrBlock
+      name: CIDR
+      type: string
+    - jsonPath: .status.zone
+      name: Zone
+      type: string
+    - jsonPath: .status.availableIPs
+      name: Free IPs
+      type: integer
+    - jsonPath: .status.utilizationPercent
+      name: Used %
+      type: integer
+    - jsonPath: .status.owner
+      name: Owner
+      type: string
+    - jsonPath: .spec.provider
+      name: Provider
+      priority: 1
+      type: string
+    - jsonPath: .status.aws.public
+      name: Public
+      priority: 1
+      type: boolean
+    - jsonPath: .spec.account
+      name: Account
+      priority: 1
+      type: string
+    - jsonPath: .spec.region
+      name: Region
+      priority: 1
+      type: string
+    - jsonPath: .status.name
+      name: Name
+      priority: 1
+      type: string
+    - jsonPath: .status.env
+      name: Env
+      priority: 1
+      type: string
+    - jsonPath: .status.tier
+      name: Tier
+      priority: 1
+      type: string
+    - jsonPath: .status.missingTags
+      name: Missing tags
+      priority: 1
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Subnet is a subnet discovered by a NetworkScope. It is read-only for users. On AWS the
+          object is named after the subnet ID; on GCP, whose subnetwork names repeat across projects
+          and regions, after the subnetwork's name and a hash of its resource name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec identifies the subnet
+            properties:
+              account:
+                description: account is the account that owns the subnet.
+                type: string
+              id:
+                description: |-
+                  id is the provider's ID of the subnet: the subnet ID on AWS, the subnetwork's resource
+                  name (projects/<project>/regions/<region>/subnetworks/<name>) on GCP.
+                type: string
+              networkID:
+                description: networkID is the ID of the network the subnet belongs
+                  to, as the network's spec.id.
+                type: string
+              provider:
+                description: provider is the provider of the scope that discovered
+                  the subnet.
+                enum:
+                - AWS
+                - GCP
+                type: string
+              region:
+                description: region of the subnet.
+                type: string
+            required:
+            - account
+            - id
+            - networkID
+            - provider
+            - region
+            type: object
+          status:
+            description: status is the observed state of the subnet
+            properties:
+              availableIPs:
+                description: |-
+                  availableIPs is the number of free IPv4 addresses. Unset when the provider could not
+                  report it, which is not the same as zero.
+                format: int64
+                type: integer
+              aws:
+                description: aws holds what only an AWS subnet has.
+                properties:
+                  availabilityZoneID:
+                    description: availabilityZoneID is the account-independent AZ
+                      ID, e.g. euc1-az2.
+                    type: string
+                  public:
+                    description: public is true when the subnet's route table has
+                      a default route to an internet gateway.
+                    type: boolean
+                  routeTableID:
+                    description: routeTableID is the explicitly associated route table,
+                      or the VPC main route table.
+                    type: string
+                type: object
+              cidrBlock:
+                description: cidrBlock is the IPv4 CIDR block (on GCP the primary
+                  range).
+                type: string
+              env:
+                description: env is read from the env tag configured in the NetworkScope.
+                type: string
+              gcp:
+                description: gcp holds what only a GCP subnetwork has.
+                properties:
+                  ipv6AccessType:
+                    description: ipv6AccessType is INTERNAL or EXTERNAL for a subnetwork
+                      with IPv6.
+                    type: string
+                  privateIPGoogleAccess:
+                    description: privateIPGoogleAccess is true when VMs without external
+                      addresses can reach Google APIs.
+                    type: boolean
+                  purpose:
+                    description: |-
+                      purpose is what the subnetwork is for: PRIVATE for ordinary subnets, or a special
+                      purpose such as REGIONAL_MANAGED_PROXY or PRIVATE_SERVICE_CONNECT, whose addresses are
+                      not for VMs.
+                    type: string
+                  role:
+                    description: role is ACTIVE or BACKUP for a proxy-only subnetwork,
+                      empty otherwise.
+                    type: string
+                  secondaryRanges:
+                    description: |-
+                      secondaryRanges are the subnetwork's secondary IPv4 ranges with their usage. Their
+                      addresses are not counted in the subnet's totalIPs and availableIPs.
+                    items:
+                      description: |-
+                        GCPSecondaryRange is a secondary IPv4 range of a GCP subnetwork, such as the Pod and
+                        Service ranges of a GKE cluster.
+                      properties:
+                        availableIPs:
+                          description: availableIPs is the number of free addresses
+                            in the range. Unset when unknown.
+                          format: int64
+                          type: integer
+                        cidrBlock:
+                          description: cidrBlock is the range.
+                          type: string
+                        name:
+                          description: name is the range's name within the subnetwork.
+                          type: string
+                        totalIPs:
+                          description: totalIPs is the number of addresses in the
+                            range (a secondary range reserves none).
+                          format: int64
+                          type: integer
+                      required:
+                      - cidrBlock
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  stackType:
+                    description: stackType is IPV4_ONLY, IPV4_IPV6 or IPV6_ONLY.
+                    type: string
+                type: object
+              ipv6CIDRBlocks:
+                description: ipv6CIDRBlocks are the associated IPv6 CIDR blocks.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              missingTags:
+                description: missingTags lists required tag keys that are absent or
+                  empty.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              name:
+                description: 'name is the subnet''s name: the value of the Name tag
+                  on AWS, the resource''s name on GCP.'
+                type: string
+              owner:
+                description: owner is read from the owner tag configured in the NetworkScope.
+                type: string
+              ownershipSource:
+                description: |-
+                  ownershipSource says where owner, env and tier were read from: Subnet (the subnet's own
+                  metadata) or Network (inherited from its network, on providers whose subnets cannot
+                  carry metadata of their own).
+                type: string
+              secondaryCIDRBlocks:
+                description: |-
+                  secondaryCIDRBlocks are further IPv4 ranges of the subnet that are not its primary
+                  block, such as the secondary ranges of a GCP subnetwork. They take addresses of the
+                  network like cidrBlock does, but are not counted in totalIPs and availableIPs.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              state:
+                description: state is the provider's state of the subnet.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: tags are the subnet's tags at the provider.
+                type: object
+              tier:
+                description: tier is read from the tier tag configured in the NetworkScope.
+                type: string
+              totalIPs:
+                description: |-
+                  totalIPs is the number of usable IPv4 addresses, as the provider counts them (AWS
+                  reserves 5 per subnet, GCP 4 in the primary range). Unset when unknown.
+                format: int64
+                type: integer
+              utilizationPercent:
+                description: utilizationPercent is the share of used IPv4 addresses,
+                  0-100. Unset when unknown.
+                format: int32
+                type: integer
+              zone:
+                description: |-
+                  zone is the zone of a zonal subnet, e.g. the AWS availability zone eu-central-1a. Empty
+                  for providers whose subnets are regional.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.networkID
+      name: Network
+      type: string
+    - jsonPath: .status.cidrBlock
+      name: CIDR
+      type: string
+    - jsonPath: .status.zone
+      name: Zone
+      type: string
+    - jsonPath: .status.availableIPs
+      name: Free IPs
+      type: integer
+    - jsonPath: .status.utilizationPercent
+      name: Used %
+      type: integer
+    - jsonPath: .status.owner
+      name: Owner
+      type: string
+    - jsonPath: .spec.provider
+      name: Provider
+      priority: 1
+      type: string
+    - jsonPath: .status.aws.public
+      name: Public
+      priority: 1
+      type: boolean
+    - jsonPath: .spec.account
+      name: Account
+      priority: 1
+      type: string
+    - jsonPath: .spec.region
+      name: Region
+      priority: 1
+      type: string
+    - jsonPath: .status.name
+      name: Name
+      priority: 1
+      type: string
+    - jsonPath: .status.env
+      name: Env
+      priority: 1
+      type: string
+    - jsonPath: .status.tier
+      name: Tier
+      priority: 1
+      type: string
+    - jsonPath: .status.missingTags
+      name: Missing tags
+      priority: 1
+      type: string
+    deprecated: true
+    deprecationWarning: 'network.hypersurgery.dev/v1beta1 is deprecated: use network.hypersurgery.dev/v1,
+      which has the same fields. v1beta1 is served until at least 1.2 and six months
+      after 1.0'
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Subnet is a subnet discovered by a NetworkScope. It is read-only for users. On AWS the
+          object is named after the subnet ID; on GCP, whose subnetwork names repeat across projects
+          and regions, after the subnetwork's name and a hash of its resource name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec identifies the subnet
+            properties:
+              account:
+                description: account is the account that owns the subnet.
+                type: string
+              id:
+                description: |-
+                  id is the provider's ID of the subnet: the subnet ID on AWS, the subnetwork's resource
+                  name (projects/<project>/regions/<region>/subnetworks/<name>) on GCP.
+                type: string
+              networkID:
+                description: networkID is the ID of the network the subnet belongs
+                  to, as the network's spec.id.
+                type: string
+              provider:
+                description: provider is the provider of the scope that discovered
+                  the subnet.
+                enum:
+                - AWS
+                - GCP
+                type: string
+              region:
+                description: region of the subnet.
+                type: string
+            required:
+            - account
+            - id
+            - networkID
+            - provider
+            - region
+            type: object
+          status:
+            description: status is the observed state of the subnet
+            properties:
+              availableIPs:
+                description: |-
+                  availableIPs is the number of free IPv4 addresses. Unset when the provider could not
+                  report it, which is not the same as zero.
+                format: int64
+                type: integer
+              aws:
+                description: aws holds what only an AWS subnet has.
+                properties:
+                  availabilityZoneID:
+                    description: availabilityZoneID is the account-independent AZ
+                      ID, e.g. euc1-az2.
+                    type: string
+                  public:
+                    description: public is true when the subnet's route table has
+                      a default route to an internet gateway.
+                    type: boolean
+                  routeTableID:
+                    description: routeTableID is the explicitly associated route table,
+                      or the VPC main route table.
+                    type: string
+                type: object
+              cidrBlock:
+                description: cidrBlock is the IPv4 CIDR block (on GCP the primary
+                  range).
+                type: string
+              env:
+                description: env is read from the env tag configured in the NetworkScope.
+                type: string
+              gcp:
+                description: gcp holds what only a GCP subnetwork has.
+                properties:
+                  ipv6AccessType:
+                    description: ipv6AccessType is INTERNAL or EXTERNAL for a subnetwork
+                      with IPv6.
+                    type: string
+                  privateIPGoogleAccess:
+                    description: privateIPGoogleAccess is true when VMs without external
+                      addresses can reach Google APIs.
+                    type: boolean
+                  purpose:
+                    description: |-
+                      purpose is what the subnetwork is for: PRIVATE for ordinary subnets, or a special
+                      purpose such as REGIONAL_MANAGED_PROXY or PRIVATE_SERVICE_CONNECT, whose addresses are
+                      not for VMs.
+                    type: string
+                  role:
+                    description: role is ACTIVE or BACKUP for a proxy-only subnetwork,
+                      empty otherwise.
+                    type: string
+                  secondaryRanges:
+                    description: |-
+                      secondaryRanges are the subnetwork's secondary IPv4 ranges with their usage. Their
+                      addresses are not counted in the subnet's totalIPs and availableIPs.
+                    items:
+                      description: |-
+                        GCPSecondaryRange is a secondary IPv4 range of a GCP subnetwork, such as the Pod and
+                        Service ranges of a GKE cluster.
+                      properties:
+                        availableIPs:
+                          description: availableIPs is the number of free addresses
+                            in the range. Unset when unknown.
+                          format: int64
+                          type: integer
+                        cidrBlock:
+                          description: cidrBlock is the range.
+                          type: string
+                        name:
+                          description: name is the range's name within the subnetwork.
+                          type: string
+                        totalIPs:
+                          description: totalIPs is the number of addresses in the
+                            range (a secondary range reserves none).
+                          format: int64
+                          type: integer
+                      required:
+                      - cidrBlock
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  stackType:
+                    description: stackType is IPV4_ONLY, IPV4_IPV6 or IPV6_ONLY.
+                    type: string
+                type: object
+              ipv6CIDRBlocks:
+                description: ipv6CIDRBlocks are the associated IPv6 CIDR blocks.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              missingTags:
+                description: missingTags lists required tag keys that are absent or
+                  empty.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              name:
+                description: 'name is the subnet''s name: the value of the Name tag
+                  on AWS, the resource''s name on GCP.'
+                type: string
+              owner:
+                description: owner is read from the owner tag configured in the NetworkScope.
+                type: string
+              ownershipSource:
+                description: |-
+                  ownershipSource says where owner, env and tier were read from: Subnet (the subnet's own
+                  metadata) or Network (inherited from its network, on providers whose subnets cannot
+                  carry metadata of their own).
+                type: string
+              secondaryCIDRBlocks:
+                description: |-
+                  secondaryCIDRBlocks are further IPv4 ranges of the subnet that are not its primary
+                  block, such as the secondary ranges of a GCP subnetwork. They take addresses of the
+                  network like cidrBlock does, but are not counted in totalIPs and availableIPs.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              state:
+                description: state is the provider's state of the subnet.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: tags are the subnet's tags at the provider.
+                type: object
+              tier:
+                description: tier is read from the tier tag configured in the NetworkScope.
+                type: string
+              totalIPs:
+                description: |-
+                  totalIPs is the number of usable IPv4 addresses, as the provider counts them (AWS
+                  reserves 5 per subnet, GCP 4 in the primary range). Unset when unknown.
+                format: int64
+                type: integer
+              utilizationPercent:
+                description: utilizationPercent is the share of used IPv4 addresses,
+                  0-100. Unset when unknown.
+                format: int32
+                type: integer
+              zone:
+                description: |-
+                  zone is the zone of a zonal subnet, e.g. the AWS availability zone eu-central-1a. Empty
+                  for providers whose subnets are regional.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

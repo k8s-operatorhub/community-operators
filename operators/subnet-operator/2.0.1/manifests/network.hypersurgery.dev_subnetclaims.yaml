@@ -1,0 +1,602 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: subnetclaims.network.hypersurgery.dev
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: webhook-service
+          namespace: system
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: network.hypersurgery.dev
+  names:
+    categories:
+    - hypersurgery
+    kind: SubnetClaim
+    listKind: SubnetClaimList
+    plural: subnetclaims
+    singular: subnetclaim
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.networkID
+      name: Network
+      type: string
+    - jsonPath: .spec.prefixLength
+      name: Prefix
+      type: integer
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Allocated")].status
+      name: Allocated
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.account
+      name: Account
+      priority: 1
+      type: string
+    - jsonPath: .spec.region
+      name: Region
+      priority: 1
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SubnetClaim requests subnets in a network: the operator reserves free CIDRs and, in Create
+          mode, creates the subnets with the organization's tags. Subnets are never deleted by the
+          operator: deleting a claim leaves them in place.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired subnets
+            properties:
+              account:
+                description: |-
+                  account is the account that owns the network, in the provider's format (for AWS the
+                  12-digit account ID).
+                minLength: 1
+                type: string
+              aws:
+                description: |-
+                  aws holds the settings of subnets created on AWS. Only valid when the scope's provider is
+                  AWS.
+                properties:
+                  mapPublicIPOnLaunch:
+                    description: mapPublicIPOnLaunch sets the subnet attribute of
+                      the same name.
+                    type: boolean
+                  routeTableID:
+                    description: routeTableID is associated with every created subnet.
+                      Leave empty for the VPC main table.
+                    pattern: ^rtb-[0-9a-f]+$
+                    type: string
+                type: object
+              env:
+                type: string
+              gcp:
+                description: |-
+                  gcp holds the settings of the subnetwork created on Google Cloud, where poolCIDRs is
+                  required. Only valid when the scope's provider is GCP.
+                properties:
+                  poolCIDRs:
+                    description: |-
+                      poolCIDRs are the IPv4 ranges the claim's subnetwork is carved from. A GCP VPC network
+                      has no address space of its own, so a claim on GCP names where its range comes from;
+                      what the network's subnetworks (primary and secondary ranges, in the scope's regions)
+                      and other claims already use is left out.
+                    items:
+                      pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$
+                      type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: set
+                  privateIPGoogleAccess:
+                    description: |-
+                      privateIPGoogleAccess lets VMs without external addresses in the subnetwork reach Google
+                      APIs.
+                    type: boolean
+                type: object
+              mode:
+                default: Create
+                description: mode is Allocate (reserve CIDRs only) or Create (also
+                  create the subnets).
+                enum:
+                - Allocate
+                - Create
+                type: string
+              namePrefix:
+                description: |-
+                  namePrefix is the Name tag; the zone suffix is appended, e.g. payments-a. On GCP it is
+                  the subnetwork's name itself, without a suffix. Defaults to the claim name.
+                type: string
+              networkID:
+                description: |-
+                  networkID is the network the subnets are carved out of, as its provider ID (for AWS the
+                  VPC ID). It must be discovered by the scope.
+                minLength: 1
+                type: string
+              owner:
+                description: |-
+                  owner, env and tier become the owner, env and tier tags (hs/owner, hs/env and hs/tier on
+                  AWS).
+                type: string
+              prefixLength:
+                description: |-
+                  prefixLength is the size of every subnet, e.g. 24 for a /24. The provider decides the
+                  range; AWS allows 16 to 28.
+                format: int32
+                maximum: 32
+                minimum: 1
+                type: integer
+              region:
+                description: region of the network.
+                type: string
+              scopeRef:
+                description: |-
+                  scopeRef is the NetworkScope whose inventory and credentials are used. The account and
+                  region below must be part of that scope, and the claim's provider is the scope's.
+                maxLength: 253
+                minLength: 1
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: tags are added to every subnet. The owner, env and tier
+                  tags above win on conflict.
+                type: object
+              tier:
+                type: string
+              zones:
+                description: |-
+                  zones lists the zones to create one subnet in each. Required for providers whose
+                  subnets are zonal: on AWS one to six availability zones, e.g. eu-central-1a. A provider
+                  whose subnets are regional (GCP) takes none, and the claim is for one subnet.
+                items:
+                  type: string
+                maxItems: 6
+                type: array
+                x-kubernetes-list-type: set
+            required:
+            - account
+            - networkID
+            - owner
+            - prefixLength
+            - region
+            - scopeRef
+            type: object
+          status:
+            description: status defines the observed state of SubnetClaim
+            properties:
+              allocations:
+                description: allocations, one per subnet. CIDRs stay stable once reserved.
+                items:
+                  description: SubnetAllocation is one reserved CIDR and, once created,
+                    its subnet.
+                  properties:
+                    cidrBlock:
+                      description: cidrBlock reserved for it.
+                      type: string
+                    error:
+                      description: error is the last creation error, empty otherwise.
+                      type: string
+                    name:
+                      description: |-
+                        name of the subnet the allocation is for: namePrefix and the zone suffix (on GCP
+                        namePrefix alone). It is the Name tag the created subnet carries (on GCP its name), and
+                        the key of the list.
+                      minLength: 1
+                      type: string
+                    state:
+                      description: state is Pending, Created or Failed.
+                      type: string
+                    subnetID:
+                      description: subnetID is the provider ID of the subnet once
+                        it exists.
+                      type: string
+                    zone:
+                      description: zone the subnet is for, on providers with zonal
+                        subnets.
+                      type: string
+                  required:
+                  - cidrBlock
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              conditions:
+                description: |-
+                  conditions: Allocated is True when every subnet has a CIDR; Ready is True when the claim
+                  is fulfilled (subnets created, or allocated in Allocate mode).
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the spec generation the status
+                  refers to.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.networkID
+      name: Network
+      type: string
+    - jsonPath: .spec.prefixLength
+      name: Prefix
+      type: integer
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Allocated")].status
+      name: Allocated
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.account
+      name: Account
+      priority: 1
+      type: string
+    - jsonPath: .spec.region
+      name: Region
+      priority: 1
+      type: string
+    deprecated: true
+    deprecationWarning: 'network.hypersurgery.dev/v1beta1 is deprecated: use network.hypersurgery.dev/v1,
+      which has the same fields. v1beta1 is served until at least 1.2 and six months
+      after 1.0'
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SubnetClaim requests subnets in a network: the operator reserves free CIDRs and, in Create
+          mode, creates the subnets with the organization's tags. Subnets are never deleted by the
+          operator: deleting a claim leaves them in place.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired subnets
+            properties:
+              account:
+                description: |-
+                  account is the account that owns the network, in the provider's format (for AWS the
+                  12-digit account ID).
+                minLength: 1
+                type: string
+              aws:
+                description: |-
+                  aws holds the settings of subnets created on AWS. Only valid when the scope's provider is
+                  AWS.
+                properties:
+                  mapPublicIPOnLaunch:
+                    description: mapPublicIPOnLaunch sets the subnet attribute of
+                      the same name.
+                    type: boolean
+                  routeTableID:
+                    description: routeTableID is associated with every created subnet.
+                      Leave empty for the VPC main table.
+                    pattern: ^rtb-[0-9a-f]+$
+                    type: string
+                type: object
+              env:
+                type: string
+              gcp:
+                description: |-
+                  gcp holds the settings of the subnetwork created on Google Cloud, where poolCIDRs is
+                  required. Only valid when the scope's provider is GCP.
+                properties:
+                  poolCIDRs:
+                    description: |-
+                      poolCIDRs are the IPv4 ranges the claim's subnetwork is carved from. A GCP VPC network
+                      has no address space of its own, so a claim on GCP names where its range comes from;
+                      what the network's subnetworks (primary and secondary ranges, in the scope's regions)
+                      and other claims already use is left out.
+                    items:
+                      pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$
+                      type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: set
+                  privateIPGoogleAccess:
+                    description: |-
+                      privateIPGoogleAccess lets VMs without external addresses in the subnetwork reach Google
+                      APIs.
+                    type: boolean
+                type: object
+              mode:
+                default: Create
+                description: mode is Allocate (reserve CIDRs only) or Create (also
+                  create the subnets).
+                enum:
+                - Allocate
+                - Create
+                type: string
+              namePrefix:
+                description: |-
+                  namePrefix is the Name tag; the zone suffix is appended, e.g. payments-a. On GCP it is
+                  the subnetwork's name itself, without a suffix. Defaults to the claim name.
+                type: string
+              networkID:
+                description: |-
+                  networkID is the network the subnets are carved out of, as its provider ID (for AWS the
+                  VPC ID). It must be discovered by the scope.
+                minLength: 1
+                type: string
+              owner:
+                description: |-
+                  owner, env and tier become the owner, env and tier tags (hs/owner, hs/env and hs/tier on
+                  AWS).
+                type: string
+              prefixLength:
+                description: |-
+                  prefixLength is the size of every subnet, e.g. 24 for a /24. The provider decides the
+                  range; AWS allows 16 to 28.
+                format: int32
+                maximum: 32
+                minimum: 1
+                type: integer
+              region:
+                description: region of the network.
+                type: string
+              scopeRef:
+                description: |-
+                  scopeRef is the NetworkScope whose inventory and credentials are used. The account and
+                  region below must be part of that scope, and the claim's provider is the scope's.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: tags are added to every subnet. The owner, env and tier
+                  tags above win on conflict.
+                type: object
+              tier:
+                type: string
+              zones:
+                description: |-
+                  zones lists the zones to create one subnet in each. Required for providers whose
+                  subnets are zonal: on AWS one to six availability zones, e.g. eu-central-1a. A provider
+                  whose subnets are regional (GCP) takes none, and the claim is for one subnet.
+                items:
+                  type: string
+                maxItems: 6
+                type: array
+                x-kubernetes-list-type: set
+            required:
+            - account
+            - networkID
+            - owner
+            - prefixLength
+            - region
+            - scopeRef
+            type: object
+          status:
+            description: status defines the observed state of SubnetClaim
+            properties:
+              allocations:
+                description: allocations, one per subnet. CIDRs stay stable once reserved.
+                items:
+                  description: SubnetAllocation is one reserved CIDR and, once created,
+                    its subnet.
+                  properties:
+                    cidrBlock:
+                      description: cidrBlock reserved for it.
+                      type: string
+                    error:
+                      description: error is the last creation error, empty otherwise.
+                      type: string
+                    name:
+                      description: |-
+                        name of the subnet the allocation is for: namePrefix and the zone suffix (on GCP
+                        namePrefix alone). It is the Name tag the created subnet carries (on GCP its name), and
+                        the key of the list.
+                      minLength: 1
+                      type: string
+                    state:
+                      description: state is Pending, Created or Failed.
+                      type: string
+                    subnetID:
+                      description: subnetID is the provider ID of the subnet once
+                        it exists.
+                      type: string
+                    zone:
+                      description: zone the subnet is for, on providers with zonal
+                        subnets.
+                      type: string
+                  required:
+                  - cidrBlock
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              conditions:
+                description: |-
+                  conditions: Allocated is True when every subnet has a CIDR; Ready is True when the claim
+                  is fulfilled (subnets created, or allocated in Allocate mode).
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the spec generation the status
+                  refers to.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

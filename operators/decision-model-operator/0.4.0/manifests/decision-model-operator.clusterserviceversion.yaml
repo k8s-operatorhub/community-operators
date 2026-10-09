@@ -1,0 +1,614 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "decisionmodel.io/v1alpha1",
+          "kind": "DecisionModel",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "decision-model-operator"
+            },
+            "name": "decisionmodel-sample"
+          },
+          "spec": {
+            "device": "cpu",
+            "engine": "ollaya",
+            "model": "laya:en",
+            "replicas": 1,
+            "resources": {
+              "limits": {
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "1",
+                "memory": "3500Mi"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "decisionmodel.io/v1alpha1",
+          "kind": "DecisionModel",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "decision-model-operator"
+            },
+            "name": "support-router"
+          },
+          "spec": {
+            "device": "cpu",
+            "engine": "ollaya",
+            "model": "laya:en",
+            "replicas": 1,
+            "resources": {
+              "limits": {
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "1",
+                "memory": "3500Mi"
+              }
+            },
+            "rollout": {
+              "evaluation": {
+                "datasetRef": {
+                  "configMapRef": {
+                    "key": "cases.jsonl",
+                    "name": "support-router-golden"
+                  }
+                },
+                "maxAccuracyDrop": "0.02",
+                "maxCases": 500,
+                "maxECE": "0.10",
+                "maxECEIncrease": "0.02",
+                "minAccuracy": "0.90"
+              },
+              "promotion": "EvaluationGated"
+            }
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: AI/Machine Learning
+    containerImage: ghcr.io/maks3201/decision-model-operator:v0.4.0
+    createdAt: "2026-10-09T10:52:07Z"
+    description: 'Run open-source System-1 decision models served by Ollaya on Kubernetes
+      and manage their full model lifecycle: pin, prefetch, verify, evaluate, promote
+      and roll back.'
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/maks3201/decision-model-operator
+    support: https://github.com/maks3201/decision-model-operator/issues
+  name: decision-model-operator.v0.4.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: |-
+        DecisionModel is the Schema for the decisionmodels API.
+
+        metadata.name must be a DNS-1035 label of at most 43 characters (see
+        MaxNameLength): the operator derives a Service named after it (no dots) and
+        Job/PVC names that must stay within 63 characters (a new revision's 16-hex hash
+        uses the short <dm>-pf-<hash> Job name so the worst case still fits 63).
+      displayName: Decision Model
+      kind: DecisionModel
+      name: decisionmodels.decisionmodel.io
+      resources:
+      - kind: Deployment
+        name: ""
+        version: v1
+      - kind: Job
+        name: ""
+        version: v1
+      - kind: PersistentVolumeClaim
+        name: ""
+        version: v1
+      - kind: PodDisruptionBudget
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: Auth configures the engine API key.
+        displayName: Auth
+        path: auth
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: Cache configures the model store PVC.
+        displayName: Cache
+        path: cache
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: |-
+          DownloadTokenSecretRef references a Secret key holding a credential for
+          weight downloads (e.g. a Hugging Face token for private or gated repositories,
+          or a mirror). It is injected into the prefetch Job only, never into serving
+          Pods. The Secret must carry the label decisionmodel.io/download-token: "true"
+          (opt-in guard), or the operator reports Degraded (SecretNotAllowed) and does
+          not create a prefetch Job. The optional field is not supported: when a ref is
+          set the Secret must exist and contain the referenced key, or the operator
+          reports Degraded (DownloadTokenInvalid).
+        displayName: Download Token Secret
+        path: cache.downloadTokenSecretRef
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes:Secret
+      - description: |-
+          Device selects the target compute device for serving. "cuda" also requests
+          an nvidia.com/gpu and uses the engine's CUDA image.
+        displayName: Device
+        path: device
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:cpu
+        - urn:alm:descriptor:com.tectonic.ui:select:cuda
+      - description: |-
+          Digest optionally pins the model to an immutable digest (bare hex sha256).
+          When empty, the operator resolves the tag and records the digest in status.
+        displayName: Digest
+        path: digest
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Engine is the serving runtime for the model.
+        displayName: Engine
+        path: engine
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: |-
+          Image overrides the engine's default container image. Rejected unless the
+          operator is started with --allow-image-override (a DecisionModel editor
+          could otherwise run an arbitrary image under the operator's Pod template).
+          Mutually exclusive with runtimeVersion.
+        displayName: Image Override
+        path: image
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: |-
+          Model is the model name in engine terms, e.g. "laya:en". The last path
+          segment must include an explicit ":tag" (a bare name resolves to :latest,
+          a different and heavier artifact — see spike 001 §9).
+        displayName: Model
+        path: model
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: |-
+          Replicas is the number of serving Pods for the stable revision (default 1).
+          With replicas > 1 spread across nodes the model store must be shareable —
+          see cache.accessModes; otherwise the operator reports Degraded
+          (CacheNotShareable).
+        displayName: Replicas
+        path: replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Resources are the compute resource requirements for the serving
+          container.
+        displayName: Resources
+        path: resources
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
+      - description: Rollout configures rollout behaviour, including eval-gated promotion.
+        displayName: Rollout
+        path: rollout
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: |-
+          Evaluation gates promotion on a golden-dataset accuracy check. When unset,
+          a candidate is promoted as soon as all its Pods are model-ready.
+        displayName: Evaluation
+        path: rollout.evaluation
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      - description: |-
+          RuntimeVersion pins the engine runtime release (e.g. "0.10.0", plain
+          MAJOR.MINOR.PATCH) independently of the operator's default. Pinning it means
+          an operator upgrade that changes the default runtime image does not start a
+          rollout for this DecisionModel. Mutually exclusive with image. When unset
+          the effective version follows --runtime-version-policy.
+        displayName: Runtime Version
+        path: runtimeVersion
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Scheduling is a passthrough of nodeSelector/tolerations/affinity
+          for serving Pods.
+        displayName: Scheduling
+        path: scheduling
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:advanced
+      statusDescriptors:
+      - description: CandidateRevision is the revision being rolled out, if any.
+        displayName: Candidate Revision
+        path: candidateRevision
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: Conditions represent the latest available observations of the
+          object's state.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      - description: Endpoint is the in-cluster serving endpoint URL.
+        displayName: Endpoint
+        path: endpoint
+        x-descriptors:
+        - urn:alm:descriptor:org.w3:link
+      - description: Evaluation records the most recent eval-gated rollout result.
+        displayName: Evaluation
+        path: evaluation
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: |-
+          FailedRevision is a revision that failed to roll out. The controller does
+          not automatically retry it; a spec change (new revision) is required, or
+          setting the decisionmodel.io/retry annotation to a new token re-attempts
+          the same revision.
+        displayName: Failed Revision
+        path: failedRevision
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: LastPromotionTime is when a candidate was most recently promoted
+          to stable.
+        displayName: Last Promotion Time
+        path: lastPromotionTime
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Phase is the high-level lifecycle phase.
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - description: Replicas reports desired and model-ready replica counts.
+        displayName: Replicas
+        path: replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: StableRevision is the revision currently receiving traffic.
+        displayName: Stable Revision
+        path: stableRevision
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      version: v1alpha1
+  description: |-
+    The Decision Model Operator runs open-source System-1 decision models (Laya,
+    Kev, JevK5, …) served by [Ollaya](https://github.com/ollaya-dev/ollaya) as
+    first-class Kubernetes workloads and manages their **model lifecycle**:
+    **pin → prefetch → load → verify → evaluate → promote → roll back**.
+
+    ## Why
+
+    A plain Deployment of a model server tells you the process is up. It does not
+    tell you *which* model is loaded, *where* it runs, or whether a new version is
+    any good. This operator closes those gaps:
+
+    * **Digest pinning** — resolves `model: laya:en` to an immutable sha256 digest
+      and records it in `status`. A moved tag never changes a running revision.
+    * **Prefetch** — a Job pulls and verifies the weights into a per-revision
+      volume *before* any serving Pod starts; serving Pods mount the store
+      read-only.
+    * **Model-aware readiness** — a Pod readiness gate
+      (`decisionmodel.io/model-ready`) turns True only when the runtime reports the
+      expected digest on the expected device, so a silent CUDA→CPU fallback keeps
+      the Pod out of the Service.
+    * **Blue-green rollout** — every model-affecting change creates a candidate
+      revision next to the stable one; traffic switches only when the candidate is
+      ready, and failures roll back automatically.
+    * **Eval-gated promotion** — optionally runs a golden dataset against the
+      candidate and promotes only if accuracy, accuracy drop and calibration (ECE)
+      gates pass.
+    * **Secure defaults** — registry allow-list, no `http://` registries, no image
+      override, labelled API-key Secrets and restricted Pod security; each guard
+      can be relaxed explicitly.
+
+    ## How it works
+
+    `DecisionModel` → Resolving (digest) → Caching (Job → volume) → Starting
+    (candidate, readiness gate) → Evaluating (golden set, optional) → Promoting
+    (Service switch) → Ready. Any failure rolls back to the stable revision or
+    ends in Failed. The operator owns everything it creates through owner
+    references, so deleting the `DecisionModel` cleans up.
+
+    ## Usage
+
+    ```yaml
+    apiVersion: decisionmodel.io/v1alpha1
+    kind: DecisionModel
+    metadata:
+      name: support-router
+    spec:
+      model: laya:en   # explicit tag required
+      device: cpu      # cpu | cuda
+      replicas: 2
+    ```
+
+    The model is served at `http://<name>.<namespace>.svc:11435/v1/systemone`.
+    See the [quickstart](https://maks3201.github.io/decision-model-operator/quickstart/)
+    and the [API reference](https://maks3201.github.io/decision-model-operator/api-reference/).
+
+    ## Prerequisites
+
+    * A default StorageClass with `ReadWriteOnce` (`ReadWriteMany` for
+      `replicas > 1` across nodes).
+    * Egress from the cluster to `https://ollaya.dev`, or an internal mirror set
+      with the operator's `--ollaya-registry` flag.
+    * For `device: cuda`: amd64 nodes with the NVIDIA device plugin.
+    * API-key Secrets referenced by a `DecisionModel` must carry the label
+      `decisionmodel.io/api-key: "true"`.
+
+    **Status: alpha.** The API is `decisionmodel.io/v1alpha1` and may change
+    between minor versions. Not affiliated with TypeSafe, Convai Innovations or
+    Ollaya.
+  displayName: Decision Model Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkRlY2lzaW9uIE1vZGVsIE9wZXJhdG9yIj4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjI0IiBmaWxsPSIjMGIxZjNhIi8+CiAgPGNpcmNsZSBjeD0iNDAiIGN5PSI0MCIgcj0iMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRmYzNmNyIgc3Ryb2tlLXdpZHRoPSI1Ii8+CiAgPGNpcmNsZSBjeD0iNDAiIGN5PSI4OCIgcj0iMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRmYzNmNyIgc3Ryb2tlLXdpZHRoPSI1Ii8+CiAgPGNpcmNsZSBjeD0iOTIiIGN5PSI2NCIgcj0iMTQiIGZpbGw9IiM0ZmMzZjciLz4KICA8cGF0aCBkPSJNNTIgNDAgSDc4IiBmaWxsPSJub25lIiBzdHJva2U9IiM4MGQ4ZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTUyIDg4IEg3OCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODBkOGZmIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik03OCA0MCBMODIgNTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzgwZDhmZiIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzggODggTDgyIDcwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4MGQ4ZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTg2IDYwIGw1IDYgMTAgLTE0IiBmaWxsPSJub25lIiBzdHJva2U9IiMwYjFmM2EiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - replicasets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - decisionmodel.io
+          resources:
+          - decisionmodels
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - decisionmodel.io
+          resources:
+          - decisionmodels/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - decisionmodel.io
+          resources:
+          - decisionmodels/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: decision-model-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: decision-model-operator
+          control-plane: controller-manager
+        name: decision-model-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: decision-model-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: decision-model-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: ghcr.io/maks3201/decision-model-operator:v0.4.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    ephemeral-storage: 64Mi
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: decision-model-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: decision-model-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: true
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - decision model
+  - system-1
+  - ollaya
+  - laya
+  - inference
+  - model lifecycle
+  - blue-green
+  - gpu
+  links:
+  - name: Source
+    url: https://github.com/maks3201/decision-model-operator
+  - name: Documentation
+    url: https://github.com/maks3201/decision-model-operator/blob/main/docs/ARCHITECTURE.md
+  maintainers:
+  - email: eumaxpl@gmail.com
+    name: maks3201
+  maturity: alpha
+  minKubeVersion: 1.29.0
+  provider:
+    name: maks3201
+    url: https://github.com/maks3201
+  version: 0.4.0

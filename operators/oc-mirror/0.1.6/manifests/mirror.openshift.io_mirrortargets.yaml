@@ -1,0 +1,608 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: mirrortargets.mirror.openshift.io
+spec:
+  group: mirror.openshift.io
+  names:
+    kind: MirrorTarget
+    listKind: MirrorTargetList
+    plural: mirrortargets
+    singular: mirrortarget
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.totalImages
+      name: Total
+      type: integer
+    - jsonPath: .status.mirroredImages
+      name: Mirrored
+      type: integer
+    - jsonPath: .status.pendingImages
+      name: Pending
+      type: integer
+    - jsonPath: .status.failedImages
+      name: Failed
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MirrorTarget is the Schema for the mirrortargets API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MirrorTargetSpec defines the desired state of MirrorTarget
+            properties:
+              authSecret:
+                description: |-
+                  AuthSecret is a reference to a Secret containing the credentials for the target registry.
+                  The Secret should contain "username" and "password" or a ".dockerconfigjson".
+                type: string
+              batchSize:
+                description: |-
+                  BatchSize controls how many images are mirrored per worker pod.
+                  A higher value reduces pod-start overhead at the cost of coarser failure granularity.
+                  Defaults to 10 if not set.
+                maximum: 100
+                minimum: 1
+                type: integer
+              caBundle:
+                description: |-
+                  CABundle references a ConfigMap in the same namespace that contains a
+                  PEM-encoded CA certificate bundle.  When set, the bundle is mounted into
+                  worker, manager, and catalog-builder pods and SSL_CERT_FILE is set so
+                  that custom or private CAs are trusted.
+                properties:
+                  configMapName:
+                    description: ConfigMapName is the name of the ConfigMap containing
+                      the CA bundle.
+                    minLength: 1
+                    type: string
+                  key:
+                    description: |-
+                      Key is the key within the ConfigMap that holds the PEM-encoded CA
+                      certificate bundle.  Defaults to "ca-bundle.crt".
+                    type: string
+                required:
+                - configMapName
+                type: object
+              checkExistInterval:
+                description: |-
+                  CheckExistInterval defines how often the manager verifies that images
+                  exist in the target registry. On manager startup the check always runs
+                  immediately. For Mirrored images this detects drift (manual deletions).
+                  For permanently-failed images (PermanentlyFailed=true) this triggers a
+                  retry attempt in case the upstream error was transient.
+                  Minimum: 1h. Default: 6h.
+                type: string
+                x-kubernetes-validations:
+                - message: checkExistInterval must be at least 1h
+                  rule: duration(self) >= duration('1h')
+              concurrency:
+                description: |-
+                  Concurrency controls how many worker pods may run in parallel.
+                  Defaults to 20 if not set.
+                maximum: 100
+                minimum: 1
+                type: integer
+              expose:
+                description: |-
+                  Expose configures how the resource server endpoint is exposed externally.
+                  The resource server provides IDMS, ITMS, CatalogSource, ClusterCatalog,
+                  and release signature resources via HTTP.
+                properties:
+                  gatewayRef:
+                    description: GatewayRef references the Gateway resource (only
+                      for type=GatewayAPI).
+                    properties:
+                      name:
+                        description: Name of the Gateway resource.
+                        type: string
+                      namespace:
+                        description: Namespace of the Gateway resource (defaults to
+                          the MirrorTarget namespace).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  host:
+                    description: |-
+                      Host is the external hostname for Route or Ingress.
+                      Auto-generated if omitted (OpenShift Route only).
+                    type: string
+                  ingressClassName:
+                    description: IngressClassName selects the Ingress controller (only
+                      for type=Ingress).
+                    type: string
+                  type:
+                    description: |-
+                      Type determines the exposure mechanism: Route (default on OpenShift),
+                      Ingress, GatewayAPI, or Service (default on plain Kubernetes).
+                    enum:
+                    - Route
+                    - Ingress
+                    - GatewayAPI
+                    - Service
+                    type: string
+                type: object
+              imageSets:
+                description: |-
+                  ImageSets is the list of ImageSet names that should be mirrored to this target.
+                  Each ImageSet must be in the same namespace as the MirrorTarget.
+                  An ImageSet may only be referenced by a single MirrorTarget.
+                items:
+                  type: string
+                type: array
+              insecure:
+                description: Insecure allows connecting to the registry without TLS
+                  or with self-signed certs
+                type: boolean
+              manager:
+                description: Manager configuration for the mirroring manager pod.
+                properties:
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: NodeSelector is a selector which must be true for
+                      the pod to fit on a node.
+                    type: object
+                  resources:
+                    description: Resources defines the compute resources required
+                      by this pod.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  tolerations:
+                    description: Tolerations allows the pod to be scheduled onto nodes
+                      with matching taints.
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    type: array
+                type: object
+              maxRetries:
+                description: |-
+                  MaxRetries is how many failed mirror attempts an image gets before it
+                  is marked permanently failed. Retries back off exponentially (1m, 2m,
+                  4m, … capped at 1h), so the default of 10 spans several hours and
+                  rides out typical upstream outages. Permanently failed images are
+                  still retried by the drift check (checkExistInterval) or on recollect.
+                  Default: 10.
+                minimum: 1
+                type: integer
+              pollInterval:
+                description: |-
+                  PollInterval defines how often the operator re-checks upstream sources
+                  (release channels, operator catalogs) for new content.
+                  New images are added as Pending; already-mirrored images are preserved.
+                  Minimum: 1h. Default: 24h. Set to "0" to disable periodic polling.
+                type: string
+                x-kubernetes-validations:
+                - message: pollInterval must be 0s (disabled) or at least 1h
+                  rule: duration(self) == duration('0s') || duration(self) >= duration('1h')
+              proxy:
+                description: |-
+                  Proxy configures HTTP/HTTPS proxy settings for worker, manager, and
+                  catalog-builder pods.  Cluster-internal FQDN suffixes
+                  (localhost, 127.0.0.1, .svc, .svc.cluster.local) are automatically
+                  added to NO_PROXY when a proxy is configured; add further exclusions
+                  via ProxyConfig.NoProxy if needed (e.g. the pod CIDR).
+                properties:
+                  httpProxy:
+                    description: HTTPProxy sets the HTTP_PROXY and http_proxy environment
+                      variables.
+                    type: string
+                  httpsProxy:
+                    description: HTTPSProxy sets the HTTPS_PROXY and https_proxy environment
+                      variables.
+                    type: string
+                  noProxy:
+                    description: |-
+                      NoProxy sets additional NO_PROXY and no_proxy entries appended to the
+                      automatically-injected cluster-internal defaults.
+                      When HTTPProxy or HTTPSProxy is set, the operator always prepends
+                      "localhost,127.0.0.1,.svc,.svc.cluster.local" so that pod-to-service
+                      traffic (e.g. to the manager service) bypasses the proxy without
+                      additional user configuration.  Use this field to add further
+                      exclusions such as the pod/service CIDR or custom domains.
+                    type: string
+                type: object
+              registry:
+                description: Registry is the URL of the target registry (e.g. registry.example.com/mirror)
+                type: string
+              worker:
+                description: Worker configuration for the worker pods started by the
+                  manager.
+                properties:
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: NodeSelector is a selector which must be true for
+                      the pod to fit on a node.
+                    type: object
+                  resources:
+                    description: Resources defines the compute resources required
+                      by this pod.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  tolerations:
+                    description: Tolerations allows the pod to be scheduled onto nodes
+                      with matching taints.
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    type: array
+                type: object
+              workerStorage:
+                description: |-
+                  WorkerStorage replaces the default 10 GiB emptyDir blob buffer with a
+                  larger node-local emptyDir or a dynamically-provisioned ephemeral PVC.
+                  Use this when mirroring very large images (e.g. LLMs) that exceed the
+                  default emptyDir limit.
+                properties:
+                  size:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      Size is the requested storage capacity (e.g. "100Gi").
+                      Defaults to "10Gi" when not set.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storageClassName:
+                    description: |-
+                      StorageClassName selects the StorageClass for a generic ephemeral PVC.
+                      If set, a PVC is used. If omitted, a node-local emptyDir is used with
+                      the given Size.
+                    type: string
+                type: object
+            required:
+            - registry
+            type: object
+          status:
+            description: MirrorTargetStatus defines the observed state of MirrorTarget
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of an object's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              failedImages:
+                description: |-
+                  FailedImages is the cumulative number of images that failed mirroring
+                  (exhausted retries) across all referenced ImageSets.
+                type: integer
+              imageSetStatuses:
+                description: |-
+                  ImageSetStatuses is a per-ImageSet breakdown of mirroring progress for
+                  all ImageSets referenced by spec.imageSets. Entries appear in
+                  alphabetical order. Missing ImageSets are reported with Found=false.
+                items:
+                  description: |-
+                    ImageSetStatusSummary is a per-ImageSet snapshot of mirroring progress
+                    surfaced on the MirrorTarget so users can see overall rollout state at a
+                    glance without listing the individual ImageSet objects.
+                  properties:
+                    failed:
+                      description: Failed is the number of images that failed mirroring
+                        (exhausted retries).
+                      type: integer
+                    found:
+                      description: |-
+                        Found is true if the referenced ImageSet exists in this namespace.
+                        When false the counters are zero and the entry indicates a missing
+                        reference (typo in spec.imageSets or ImageSet not yet created).
+                      type: boolean
+                    mirrored:
+                      description: Mirrored is the number of images successfully mirrored.
+                      type: integer
+                    name:
+                      description: Name is the ImageSet name (matches an entry in
+                        spec.imageSets).
+                      type: string
+                    pending:
+                      description: Pending is the number of images waiting to be mirrored
+                        or in progress.
+                      type: integer
+                    total:
+                      description: Total is the number of images this ImageSet is
+                        responsible for.
+                      type: integer
+                  required:
+                  - found
+                  - name
+                  type: object
+                type: array
+              knownImageSets:
+                description: |-
+                  KnownImageSets is the last observed list of ImageSets from spec.imageSets.
+                  Used internally to detect removals between reconcile cycles.
+                items:
+                  type: string
+                type: array
+              mirroredImages:
+                description: |-
+                  MirroredImages is the cumulative number of successfully mirrored images
+                  across all ImageSets referenced by this MirrorTarget.
+                type: integer
+              pendingCleanup:
+                description: |-
+                  PendingCleanup lists ImageSet names whose images are currently being
+                  deleted from the target registry by cleanup Jobs.
+                items:
+                  type: string
+                type: array
+              pendingImages:
+                description: |-
+                  PendingImages is the cumulative number of images waiting to be mirrored
+                  or currently in progress across all referenced ImageSets.
+                type: integer
+              totalImages:
+                description: |-
+                  TotalImages is the cumulative number of images across all ImageSets
+                  referenced by this MirrorTarget. Aggregated from each ImageSet.Status.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

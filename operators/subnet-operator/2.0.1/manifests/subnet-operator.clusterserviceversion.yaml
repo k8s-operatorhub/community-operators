@@ -1,0 +1,1659 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "network.hypersurgery.dev/v1",
+          "kind": "NetworkScope",
+          "metadata": {
+            "name": "organization"
+          },
+          "spec": {
+            "accounts": [
+              {
+                "id": "111111111111"
+              },
+              {
+                "aws": {
+                  "roleARN": "arn:aws:iam::222222222222:role/aws-subnet-operator-readonly"
+                },
+                "id": "222222222222"
+              },
+              {
+                "aws": {
+                  "roleARN": "arn:aws:iam::333333333333:role/aws-subnet-operator-readonly"
+                },
+                "id": "333333333333",
+                "regions": [
+                  "us-east-1"
+                ]
+              }
+            ],
+            "namespaceSelector": {
+              "matchExpressions": [
+                {
+                  "key": "kubernetes.io/metadata.name",
+                  "operator": "In",
+                  "values": [
+                    "default"
+                  ]
+                }
+              ]
+            },
+            "networkSelector": {
+              "matchTags": {
+                "hs/managed": "true"
+              }
+            },
+            "provider": "AWS",
+            "regions": [
+              "eu-central-1",
+              "eu-west-1"
+            ],
+            "requiredSubnetTags": [
+              "hs/owner",
+              "hs/env",
+              "hs/tier"
+            ],
+            "resyncInterval": "10m"
+          }
+        },
+        {
+          "apiVersion": "network.hypersurgery.dev/v1",
+          "kind": "ResourceImport",
+          "metadata": {
+            "name": "subnet-04d1c2b3a4e5f607-import",
+            "namespace": "default"
+          },
+          "spec": {
+            "account": "333333333333",
+            "dryRun": false,
+            "region": "eu-central-1",
+            "requestedBy": "anton",
+            "resourceID": "subnet-04d1c2b3a4e5f607",
+            "scopeRef": "organization",
+            "tags": {
+              "hs/env": "prod",
+              "hs/managed": "true",
+              "hs/owner": "team-data",
+              "hs/tier": "private"
+            }
+          }
+        },
+        {
+          "apiVersion": "network.hypersurgery.dev/v1",
+          "kind": "SheetExport",
+          "metadata": {
+            "name": "organization"
+          },
+          "spec": {
+            "credentialsSecretRef": {
+              "key": "credentials.json",
+              "name": "google-sheets",
+              "namespace": "subnet-operator-system"
+            },
+            "extraTagColumns": [
+              "cost-center"
+            ],
+            "refreshInterval": "5m",
+            "scopeRef": "organization",
+            "sheetName": "Subnets",
+            "spreadsheetID": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+          }
+        },
+        {
+          "apiVersion": "network.hypersurgery.dev/v1",
+          "kind": "SubnetClaim",
+          "metadata": {
+            "name": "payments",
+            "namespace": "default"
+          },
+          "spec": {
+            "account": "222222222222",
+            "aws": {
+              "routeTableID": "rtb-0a1b2c3d4e5f60718"
+            },
+            "env": "prod",
+            "mode": "Create",
+            "networkID": "vpc-0aa11bb2cc33dd44e",
+            "owner": "team-payments",
+            "prefixLength": 24,
+            "region": "eu-central-1",
+            "scopeRef": "organization",
+            "tags": {
+              "cost-center": "cc-42"
+            },
+            "tier": "private",
+            "zones": [
+              "eu-central-1a",
+              "eu-central-1b",
+              "eu-central-1c"
+            ]
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Networking, Cloud Provider
+    containerImage: ghcr.io/aivandrago/subnet-operator@sha256:a2389b94a04ef13e70909f10b7bf17c4b5930c6536628ccf4acd13feb57102b3
+    createdAt: "2026-10-05T18:26:15Z"
+    description: Discovers AWS VPCs and subnets across accounts and regions from their tags, keeps them as a live inventory in the cluster, and allocates CIDRs on request.
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    olm.skipRange: <2.0.1
+    operatorframework.io/suggested-namespace: subnet-operator-system
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/internal-objects: '["networks.network.hypersurgery.dev","subnets.network.hypersurgery.dev"]'
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/aivandrago/subnet-operator
+    support: https://github.com/aivandrago/subnet-operator/issues
+  name: subnet-operator.v2.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: |-
+          Network is a network discovered by a NetworkScope: an AWS VPC or a GCP VPC network. It is
+          read-only for users. On AWS the object is named after the VPC ID; on GCP, whose network names
+          repeat across projects, after the network's name and a hash of its resource name.
+        displayName: Network
+        kind: Network
+        name: networks.network.hypersurgery.dev
+        specDescriptors:
+          - description: account is the account that owns the network.
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              id is the provider's ID of the network: the VPC ID on AWS, the network's resource name
+              (projects/<project>/global/networks/<name>) on GCP.
+            displayName: ID
+            path: id
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: provider is the provider of the scope that discovered the network.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: region of the network. Empty for providers whose networks are global.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: |-
+              availableIPs is the sum of free IPv4 addresses in all subnets. Unset when the free
+              addresses of any subnet are unknown.
+            displayName: Free IPs
+            path: availableIPs
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: |-
+              cidrBlocks are the associated IPv4 CIDR blocks, primary first. Empty on GCP, where the
+              address ranges belong to the subnets.
+            displayName: CIDR Blocks
+            path: cidrBlocks
+          - description: |-
+              name is the network's name: the value of the Name tag on AWS, the resource's name on
+              GCP.
+            displayName: Name
+            path: name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              overlapsWith lists networks in the same NetworkScope whose CIDRs overlap this one, as
+              "<account>/<region>/<id>". Overlaps break peering and transit routing. On GCP the ranges
+              compared are the subnetworks' (see gcp.overlaps).
+            displayName: Overlaps With
+            path: overlapsWith
+          - description: owner is read from the owner tag configured in the NetworkScope.
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is the provider's state of the network.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: subnets is the number of discovered subnets.
+            displayName: Subnets
+            path: subnets
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+        version: v1
+      - description: |-
+          Network is a network discovered by a NetworkScope: an AWS VPC or a GCP VPC network. It is
+          read-only for users. On AWS the object is named after the VPC ID; on GCP, whose network names
+          repeat across projects, after the network's name and a hash of its resource name.
+        displayName: Network
+        kind: Network
+        name: networks.network.hypersurgery.dev
+        specDescriptors:
+          - description: account is the account that owns the network.
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              id is the provider's ID of the network: the VPC ID on AWS, the network's resource name
+              (projects/<project>/global/networks/<name>) on GCP.
+            displayName: ID
+            path: id
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: provider is the provider of the scope that discovered the network.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: region of the network. Empty for providers whose networks are global.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: |-
+              availableIPs is the sum of free IPv4 addresses in all subnets. Unset when the free
+              addresses of any subnet are unknown.
+            displayName: Free IPs
+            path: availableIPs
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: |-
+              cidrBlocks are the associated IPv4 CIDR blocks, primary first. Empty on GCP, where the
+              address ranges belong to the subnets.
+            displayName: CIDR Blocks
+            path: cidrBlocks
+          - description: |-
+              name is the network's name: the value of the Name tag on AWS, the resource's name on
+              GCP.
+            displayName: Name
+            path: name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              overlapsWith lists networks in the same NetworkScope whose CIDRs overlap this one, as
+              "<account>/<region>/<id>". Overlaps break peering and transit routing. On GCP the ranges
+              compared are the subnetworks' (see gcp.overlaps).
+            displayName: Overlaps With
+            path: overlapsWith
+          - description: owner is read from the owner tag configured in the NetworkScope.
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is the provider's state of the network.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: subnets is the number of discovered subnets.
+            displayName: Subnets
+            path: subnets
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+        version: v1beta1
+      - description: |-
+          NetworkScope selects the accounts and regions of one provider whose networks and subnets
+          are discovered.
+        displayName: Network Scope
+        kind: NetworkScope
+        name: networkscopes.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Network
+            name: ""
+            version: v1
+          - kind: ResourceImport
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: accounts to discover.
+            displayName: Accounts
+            path: accounts
+          - description: |-
+              autoImport tags unmanaged resources on its own, deriving the tags from who created the
+              resource, from its network, or from the account. Off unless configured.
+            displayName: Auto Import
+            path: autoImport
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: |-
+              discoverUnmanaged also lists the networks the selector does not match, and their
+              subnets, so resources nobody has claimed are counted and can be imported instead of
+              staying invisible. They are reported and alerted on, never mirrored as objects.
+            displayName: Discover Unmanaged
+            path: discoverUnmanaged
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: |-
+              namespaceSelector selects the namespaces whose SubnetClaims and ResourceImports may refer
+              to this scope. Referring to a scope is what makes the operator use its identities,
+              including the write identities, on the object's behalf, so this is what keeps one team's
+              namespace from creating subnets in, or tagging, another team's accounts.
+
+              Select namespaces by name with the kubernetes.io/metadata.name label, which the API
+              server sets on every namespace and nobody can change, or by a label only cluster
+              administrators can set. An empty selector ({}) allows every namespace on purpose.
+
+              When unset, no namespace may use the scope. (In aws.hypersurgery/v1alpha1 unset allowed
+              every namespace; migrated scopes get an explicit {} instead.)
+            displayName: Namespace Selector
+            path: namespaceSelector
+          - description: |-
+              networkSelector limits discovery to the networks (AWS VPCs, GCP VPC networks) it
+              selects. When unset or empty, every network is discovered.
+            displayName: Network Selector
+            path: networkSelector
+          - description: |-
+              provider is the cloud the scope discovers. It cannot change: a scope does not move
+              clouds, a new scope does. More values are added by the releases that implement them.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:AWS
+              - urn:alm:descriptor:com.tectonic.ui:select:GCP
+          - description: |-
+              regions to discover in every account (unless the account overrides them): AWS regions
+              such as eu-central-1, GCP regions such as europe-west1. Each region is listed once.
+            displayName: Regions
+            path: regions
+          - description: |-
+              requiredSubnetTags are tag keys every subnet must have. Missing keys are reported in the
+              Subnet status and as metrics.
+            displayName: Required Subnet Tags
+            path: requiredSubnetTags
+          - description: resyncInterval is how often the full inventory is refreshed.
+            displayName: Resync Interval
+            path: resyncInterval
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+        statusDescriptors:
+          - description: 'conditions: Ready is True when every target synced successfully.'
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: lastSyncTime is when the last full sync finished.
+            displayName: Last Sync
+            path: lastSyncTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: networks is the number of networks discovered across all targets.
+            displayName: Networks
+            path: networks
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: subnets is the number of subnets discovered across all targets.
+            displayName: Subnets
+            path: subnets
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: targets reports each account/region pair.
+            displayName: Targets
+            path: targets
+          - description: |-
+              unmanaged is the number of discovered resources without the managed tag, across all
+              targets. Anything above zero is something nobody has taken responsibility for.
+            displayName: Unmanaged
+            path: unmanaged
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+        version: v1
+      - description: |-
+          NetworkScope selects the accounts and regions of one provider whose networks and subnets
+          are discovered.
+        displayName: Network Scope
+        kind: NetworkScope
+        name: networkscopes.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Network
+            name: ""
+            version: v1
+          - kind: ResourceImport
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: accounts to discover.
+            displayName: Accounts
+            path: accounts
+          - description: |-
+              autoImport tags unmanaged resources on its own, deriving the tags from who created the
+              resource, from its network, or from the account. Off unless configured.
+            displayName: Auto Import
+            path: autoImport
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: |-
+              discoverUnmanaged also lists the networks the selector does not match, and their
+              subnets, so resources nobody has claimed are counted and can be imported instead of
+              staying invisible. They are reported and alerted on, never mirrored as objects.
+            displayName: Discover Unmanaged
+            path: discoverUnmanaged
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: |-
+              namespaceSelector selects the namespaces whose SubnetClaims and ResourceImports may refer
+              to this scope. Referring to a scope is what makes the operator use its identities,
+              including the write identities, on the object's behalf, so this is what keeps one team's
+              namespace from creating subnets in, or tagging, another team's accounts.
+
+              Select namespaces by name with the kubernetes.io/metadata.name label, which the API
+              server sets on every namespace and nobody can change, or by a label only cluster
+              administrators can set. An empty selector ({}) allows every namespace on purpose.
+
+              When unset, no namespace may use the scope. (In aws.hypersurgery/v1alpha1 unset allowed
+              every namespace; migrated scopes get an explicit {} instead.)
+            displayName: Namespace Selector
+            path: namespaceSelector
+          - description: |-
+              networkSelector limits discovery to the networks (AWS VPCs, GCP VPC networks) it
+              selects. When unset or empty, every network is discovered.
+            displayName: Network Selector
+            path: networkSelector
+          - description: |-
+              provider is the cloud the scope discovers. It cannot change: a scope does not move
+              clouds, a new scope does. More values are added by the releases that implement them.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:AWS
+              - urn:alm:descriptor:com.tectonic.ui:select:GCP
+          - description: |-
+              regions to discover in every account (unless the account overrides them): AWS regions
+              such as eu-central-1, GCP regions such as europe-west1.
+            displayName: Regions
+            path: regions
+          - description: |-
+              requiredSubnetTags are tag keys every subnet must have. Missing keys are reported in the
+              Subnet status and as metrics.
+            displayName: Required Subnet Tags
+            path: requiredSubnetTags
+          - description: resyncInterval is how often the full inventory is refreshed.
+            displayName: Resync Interval
+            path: resyncInterval
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+        statusDescriptors:
+          - description: 'conditions: Ready is True when every target synced successfully.'
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: lastSyncTime is when the last full sync finished.
+            displayName: Last Sync
+            path: lastSyncTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: networks is the number of networks discovered across all targets.
+            displayName: Networks
+            path: networks
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: subnets is the number of subnets discovered across all targets.
+            displayName: Subnets
+            path: subnets
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: targets reports each account/region pair.
+            displayName: Targets
+            path: targets
+          - description: |-
+              unmanaged is the number of discovered resources without the managed tag, across all
+              targets. Anything above zero is something nobody has taken responsibility for.
+            displayName: Unmanaged
+            path: unmanaged
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+        version: v1beta1
+      - description: |-
+          ResourceImport takes an existing network or subnet under management by tagging it.
+          The resource itself, and every tag the import does not name, is left exactly as it was.
+        displayName: Resource Import
+        kind: ResourceImport
+        name: resourceimports.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Network
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: |-
+              account is the account that owns the resource, in the provider's format (for AWS the
+              12-digit account ID).
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              dryRun records what would be applied without touching the cloud. The auto-import policy sets
+              it in DryRun mode, so a day of imports can be reviewed before anything is tagged.
+            displayName: Dry Run
+            path: dryRun
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: region of the resource. Required for regional resources, which on AWS is every one.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: 'requestedBy records who asked for the import: a person, a team, or "auto-import policy".'
+            displayName: Requested By
+            path: requestedBy
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              resourceID is the provider ID of the network or subnet to tag: for AWS a VPC or subnet
+              ID.
+            displayName: Resource ID
+            path: resourceID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              scopeRef is the NetworkScope that supplies the credentials; the account and region
+              below must be part of it.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              tags are applied to the resource. Tags with other keys are left alone: the operator
+              only ever adds tags, it never removes one.
+            displayName: Tags
+            path: tags
+        statusDescriptors:
+          - description: appliedTime is when they were applied.
+            displayName: Applied
+            path: appliedTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: |-
+              conditions: Ready is True once the import is settled, whether it applied the tags or
+              deliberately did nothing in a dry run.
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: error is the last failure, empty otherwise.
+            displayName: Error
+            path: error
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is Pending, Applied, Skipped (dry run) or Failed.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        version: v1
+      - description: |-
+          ResourceImport takes an existing network or subnet under management by tagging it.
+          The resource itself, and every tag the import does not name, is left exactly as it was.
+        displayName: Resource Import
+        kind: ResourceImport
+        name: resourceimports.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Network
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: |-
+              account is the account that owns the resource, in the provider's format (for AWS the
+              12-digit account ID).
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              dryRun records what would be applied without touching the cloud. The auto-import policy sets
+              it in DryRun mode, so a day of imports can be reviewed before anything is tagged.
+            displayName: Dry Run
+            path: dryRun
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
+          - description: region of the resource. Required for regional resources, which on AWS is every one.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: 'requestedBy records who asked for the import: a person, a team, or "auto-import policy".'
+            displayName: Requested By
+            path: requestedBy
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              resourceID is the provider ID of the network or subnet to tag: for AWS a VPC or subnet
+              ID.
+            displayName: Resource ID
+            path: resourceID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              scopeRef is the NetworkScope that supplies the credentials; the account and region
+              below must be part of it.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              tags are applied to the resource. Tags with other keys are left alone: the operator
+              only ever adds tags, it never removes one.
+            displayName: Tags
+            path: tags
+        statusDescriptors:
+          - description: appliedTime is when they were applied.
+            displayName: Applied
+            path: appliedTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: |-
+              conditions: Ready is True once the import is settled, whether it applied the tags or
+              deliberately did nothing in a dry run.
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: error is the last failure, empty otherwise.
+            displayName: Error
+            path: error
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is Pending, Applied, Skipped (dry run) or Failed.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        version: v1beta1
+      - description: |-
+          SheetExport mirrors the subnets of a NetworkScope into a Google Sheet, for people who
+          still want to look at a table. The sheet is written by the operator and never read back.
+        displayName: Sheet Export
+        kind: SheetExport
+        name: sheetexports.network.hypersurgery.dev
+        resources:
+          - kind: Secret
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: credentialsSecretRef holds the Google service account JSON.
+            displayName: Credentials Secret
+            path: credentialsSecretRef
+          - description: extraTagColumns adds one column per tag key, after the standard columns.
+            displayName: Extra Tag Columns
+            path: extraTagColumns
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: refreshInterval is how often the sheet is rewritten.
+            displayName: Refresh Interval
+            path: refreshInterval
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: scopeRef is the NetworkScope whose subnets are exported.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              sheetName is the tab that holds the inventory. It is created if missing and fully
+              rewritten on every export, so people should not keep their own data in it.
+            displayName: Sheet Name
+            path: sheetName
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              spreadsheetID is the ID from the spreadsheet URL
+              (docs.google.com/spreadsheets/d/<spreadsheetID>/edit). The spreadsheet must be shared
+              with the service account as an editor.
+            displayName: Spreadsheet ID
+            path: spreadsheetID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: 'conditions: Ready is True when the last export succeeded.'
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: lastExportTime is when the sheet was last written.
+            displayName: Last Export
+            path: lastExportTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: rows is the number of subnets in the sheet, excluding the header.
+            displayName: Rows
+            path: rows
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: url links to the exported sheet.
+            displayName: Sheet URL
+            path: url
+            x-descriptors:
+              - urn:alm:descriptor:org.w3:link
+        version: v1
+      - description: |-
+          SheetExport mirrors the subnets of a NetworkScope into a Google Sheet, for people who
+          still want to look at a table. The sheet is written by the operator and never read back.
+        displayName: Sheet Export
+        kind: SheetExport
+        name: sheetexports.network.hypersurgery.dev
+        resources:
+          - kind: Secret
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: credentialsSecretRef holds the Google service account JSON.
+            displayName: Credentials Secret
+            path: credentialsSecretRef
+          - description: extraTagColumns adds one column per tag key, after the standard columns.
+            displayName: Extra Tag Columns
+            path: extraTagColumns
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: refreshInterval is how often the sheet is rewritten.
+            displayName: Refresh Interval
+            path: refreshInterval
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: scopeRef is the NetworkScope whose subnets are exported.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              sheetName is the tab that holds the inventory. It is created if missing and fully
+              rewritten on every export, so people should not keep their own data in it.
+            displayName: Sheet Name
+            path: sheetName
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              spreadsheetID is the ID from the spreadsheet URL
+              (docs.google.com/spreadsheets/d/<spreadsheetID>/edit). The spreadsheet must be shared
+              with the service account as an editor.
+            displayName: Spreadsheet ID
+            path: spreadsheetID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: 'conditions: Ready is True when the last export succeeded.'
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+          - description: lastExportTime is when the sheet was last written.
+            displayName: Last Export
+            path: lastExportTime
+            x-descriptors:
+              - urn:alm:descriptor:timestamp
+          - description: rows is the number of subnets in the sheet, excluding the header.
+            displayName: Rows
+            path: rows
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: url links to the exported sheet.
+            displayName: Sheet URL
+            path: url
+            x-descriptors:
+              - urn:alm:descriptor:org.w3:link
+        version: v1beta1
+      - description: |-
+          SubnetClaim requests subnets in a network: the operator reserves free CIDRs and, in Create
+          mode, creates the subnets with the organization's tags. Subnets are never deleted by the
+          operator: deleting a claim leaves them in place.
+        displayName: Subnet Claim
+        kind: SubnetClaim
+        name: subnetclaims.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: |-
+              account is the account that owns the network, in the provider's format (for AWS the
+              12-digit account ID).
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              aws holds the settings of subnets created on AWS. Only valid when the scope's provider is
+              AWS.
+            displayName: AWS Options
+            path: aws
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Environment
+            path: env
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              gcp holds the settings of the subnetwork created on Google Cloud, where poolCIDRs is
+              required. Only valid when the scope's provider is GCP.
+            displayName: GCP Options
+            path: gcp
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: mode is Allocate (reserve CIDRs only) or Create (also create the subnets).
+            displayName: Mode
+            path: mode
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:Create
+              - urn:alm:descriptor:com.tectonic.ui:select:Allocate
+          - description: |-
+              networkID is the network the subnets are carved out of, as its provider ID (for AWS the
+              VPC ID). It must be discovered by the scope.
+            displayName: Network ID
+            path: networkID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              owner, env and tier become the owner, env and tier tags (hs/owner, hs/env and hs/tier on
+              AWS).
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              prefixLength is the size of every subnet, e.g. 24 for a /24. The provider decides the
+              range; AWS allows 16 to 28.
+            displayName: Prefix Length
+            path: prefixLength
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: region of the network.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              scopeRef is the NetworkScope whose inventory and credentials are used. The account and
+              region below must be part of that scope, and the claim's provider is the scope's.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: tags are added to every subnet. The owner, env and tier tags above win on conflict.
+            displayName: Tags
+            path: tags
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Tier
+            path: tier
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              zones lists the zones to create one subnet in each. Required for providers whose
+              subnets are zonal: on AWS one to six availability zones, e.g. eu-central-1a. A provider
+              whose subnets are regional (GCP) takes none, and the claim is for one subnet.
+            displayName: Zones
+            path: zones
+        statusDescriptors:
+          - description: allocations, one per subnet. CIDRs stay stable once reserved.
+            displayName: Allocations
+            path: allocations
+          - description: |-
+              conditions: Allocated is True when every subnet has a CIDR; Ready is True when the claim
+              is fulfilled (subnets created, or allocated in Allocate mode).
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+        version: v1
+      - description: |-
+          SubnetClaim requests subnets in a network: the operator reserves free CIDRs and, in Create
+          mode, creates the subnets with the organization's tags. Subnets are never deleted by the
+          operator: deleting a claim leaves them in place.
+        displayName: Subnet Claim
+        kind: SubnetClaim
+        name: subnetclaims.network.hypersurgery.dev
+        resources:
+          - kind: Event
+            name: ""
+            version: v1
+          - kind: Subnet
+            name: ""
+            version: v1
+        specDescriptors:
+          - description: |-
+              account is the account that owns the network, in the provider's format (for AWS the
+              12-digit account ID).
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              aws holds the settings of subnets created on AWS. Only valid when the scope's provider is
+              AWS.
+            displayName: AWS Options
+            path: aws
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Environment
+            path: env
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              gcp holds the settings of the subnetwork created on Google Cloud, where poolCIDRs is
+              required. Only valid when the scope's provider is GCP.
+            displayName: GCP Options
+            path: gcp
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - description: mode is Allocate (reserve CIDRs only) or Create (also create the subnets).
+            displayName: Mode
+            path: mode
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:select:Create
+              - urn:alm:descriptor:com.tectonic.ui:select:Allocate
+          - description: |-
+              networkID is the network the subnets are carved out of, as its provider ID (for AWS the
+              VPC ID). It must be discovered by the scope.
+            displayName: Network ID
+            path: networkID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              owner, env and tier become the owner, env and tier tags (hs/owner, hs/env and hs/tier on
+              AWS).
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              prefixLength is the size of every subnet, e.g. 24 for a /24. The provider decides the
+              range; AWS allows 16 to 28.
+            displayName: Prefix Length
+            path: prefixLength
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: region of the network.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              scopeRef is the NetworkScope whose inventory and credentials are used. The account and
+              region below must be part of that scope, and the claim's provider is the scope's.
+            displayName: NetworkScope
+            path: scopeRef
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: tags are added to every subnet. The owner, env and tier tags above win on conflict.
+            displayName: Tags
+            path: tags
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:advanced
+          - displayName: Tier
+            path: tier
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              zones lists the zones to create one subnet in each. Required for providers whose
+              subnets are zonal: on AWS one to six availability zones, e.g. eu-central-1a. A provider
+              whose subnets are regional (GCP) takes none, and the claim is for one subnet.
+            displayName: Zones
+            path: zones
+        statusDescriptors:
+          - description: allocations, one per subnet. CIDRs stay stable once reserved.
+            displayName: Allocations
+            path: allocations
+          - description: |-
+              conditions: Allocated is True when every subnet has a CIDR; Ready is True when the claim
+              is fulfilled (subnets created, or allocated in Allocate mode).
+            displayName: Conditions
+            path: conditions
+            x-descriptors:
+              - urn:alm:descriptor:io.kubernetes.conditions
+        version: v1beta1
+      - description: |-
+          Subnet is a subnet discovered by a NetworkScope. It is read-only for users. On AWS the
+          object is named after the subnet ID; on GCP, whose subnetwork names repeat across projects
+          and regions, after the subnetwork's name and a hash of its resource name.
+        displayName: Subnet
+        kind: Subnet
+        name: subnets.network.hypersurgery.dev
+        specDescriptors:
+          - description: account is the account that owns the subnet.
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              id is the provider's ID of the subnet: the subnet ID on AWS, the subnetwork's resource
+              name (projects/<project>/regions/<region>/subnetworks/<name>) on GCP.
+            displayName: ID
+            path: id
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: networkID is the ID of the network the subnet belongs to, as the network's spec.id.
+            displayName: Network ID
+            path: networkID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: provider is the provider of the scope that discovered the subnet.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: region of the subnet.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: |-
+              availableIPs is the number of free IPv4 addresses. Unset when the provider could not
+              report it, which is not the same as zero.
+            displayName: Free IPs
+            path: availableIPs
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: cidrBlock is the IPv4 CIDR block (on GCP the primary range).
+            displayName: CIDR Block
+            path: cidrBlock
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: missingTags lists required tag keys that are absent or empty.
+            displayName: Missing Tags
+            path: missingTags
+          - description: 'name is the subnet''s name: the value of the Name tag on AWS, the resource''s name on GCP.'
+            displayName: Name
+            path: name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: owner is read from the owner tag configured in the NetworkScope.
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is the provider's state of the subnet.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: utilizationPercent is the share of used IPv4 addresses, 0-100. Unset when unknown.
+            displayName: Utilization (%)
+            path: utilizationPercent
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: |-
+              zone is the zone of a zonal subnet, e.g. the AWS availability zone eu-central-1a. Empty
+              for providers whose subnets are regional.
+            displayName: Zone
+            path: zone
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        version: v1
+      - description: |-
+          Subnet is a subnet discovered by a NetworkScope. It is read-only for users. On AWS the
+          object is named after the subnet ID; on GCP, whose subnetwork names repeat across projects
+          and regions, after the subnetwork's name and a hash of its resource name.
+        displayName: Subnet
+        kind: Subnet
+        name: subnets.network.hypersurgery.dev
+        specDescriptors:
+          - description: account is the account that owns the subnet.
+            displayName: Account
+            path: account
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: |-
+              id is the provider's ID of the subnet: the subnet ID on AWS, the subnetwork's resource
+              name (projects/<project>/regions/<region>/subnetworks/<name>) on GCP.
+            displayName: ID
+            path: id
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: networkID is the ID of the network the subnet belongs to, as the network's spec.id.
+            displayName: Network ID
+            path: networkID
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: provider is the provider of the scope that discovered the subnet.
+            displayName: Provider
+            path: provider
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: region of the subnet.
+            displayName: Region
+            path: region
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        statusDescriptors:
+          - description: |-
+              availableIPs is the number of free IPv4 addresses. Unset when the provider could not
+              report it, which is not the same as zero.
+            displayName: Free IPs
+            path: availableIPs
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: cidrBlock is the IPv4 CIDR block (on GCP the primary range).
+            displayName: CIDR Block
+            path: cidrBlock
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: missingTags lists required tag keys that are absent or empty.
+            displayName: Missing Tags
+            path: missingTags
+          - description: 'name is the subnet''s name: the value of the Name tag on AWS, the resource''s name on GCP.'
+            displayName: Name
+            path: name
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: owner is read from the owner tag configured in the NetworkScope.
+            displayName: Owner
+            path: owner
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: state is the provider's state of the subnet.
+            displayName: State
+            path: state
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - description: utilizationPercent is the share of used IPv4 addresses, 0-100. Unset when unknown.
+            displayName: Utilization (%)
+            path: utilizationPercent
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:number
+          - description: |-
+              zone is the zone of a zonal subnet, e.g. the AWS availability zone eu-central-1a. Empty
+              for providers whose subnets are regional.
+            displayName: Zone
+            path: zone
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+        version: v1beta1
+  description: |
+    subnet-operator replaces the hand-maintained VPC and subnet inventory (the usual shared
+    spreadsheet) with one that is discovered and kept current. AWS and, from 2.0, Google Cloud;
+    Azure follows behind the same provider-neutral API.
+
+    ## What it does
+
+    * **Discovery.** A `NetworkScope` names accounts, regions and a tag selector. The operator
+      finds the matching VPCs and subnets, calling only EC2 `Describe*` APIs, and mirrors them
+      as cluster-scoped `Network` and `Subnet` objects with CIDRs, free addresses, utilization,
+      owner/env/tier tags and missing required tags.
+    * **Compliance and metrics.** Missing tags, overlapping CIDRs and exhausted subnets are
+      reported in status, as Kubernetes Events and as Prometheus metrics.
+    * **Allocation (opt-in).** A `SubnetClaim` reserves free CIDRs in a VPC and, in `Create`
+      mode, creates the subnets with the organization's tags. A `ResourceImport` brings an
+      existing untagged network or subnet under management by tagging it. Both need
+      `--enable-writes` and a separate write role; the operator never deletes a cloud resource.
+    * **Sheet export.** A `SheetExport` mirrors a scope's subnets into a Google Sheet.
+
+    Invalid objects are refused by admission webhooks. The API is `network.hypersurgery.dev/v1`
+    with a written compatibility promise; `v1beta1` is still served, deprecated, and converted
+    by the operator's conversion webhook.
+
+    ## Before you install
+
+    The operator needs AWS credentials in the cluster it runs in. On EKS, use
+    **EKS Pod Identity**: associate an IAM role with the `subnet-operator-controller-manager`
+    service account in the namespace the operator is installed in. IRSA needs an annotation on
+    that service account, which OLM owns; see the OLM guide linked below for how to set it
+    through the Subscription instead. The IAM policies and cross-account roles are in
+    [deploy/iam](https://github.com/aivandrago/subnet-operator/tree/main/deploy/iam).
+
+    Install the operator in all namespaces (the only install mode it supports: it serves
+    conversion webhooks for its CRDs and watches cluster-scoped objects).
+
+    ## Compared with the Helm chart
+
+    The Helm chart is the primary way to install and has more options: two replicas with a
+    PodDisruptionBudget, the dashboard, NetworkPolicies, the ServiceMonitor, alerting rules and
+    the Grafana dashboard. The OLM bundle installs the operator, its CRDs, RBAC and webhooks.
+
+    [Documentation](https://hypersurgery.dev/docs/) ·
+    [OLM guide](https://github.com/aivandrago/subnet-operator/blob/main/docs/olm.md) ·
+    [Source](https://github.com/aivandrago/subnet-operator)
+  displayName: Subnet Operator
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJTdWJuZXQgaW52ZW50b3J5Ij4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0iIzBjMTIyMiIvPgogIDxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJkZDRiZiIgc3Ryb2tlLXdpZHRoPSI0LjUiPgogICAgPHJlY3QgeD0iMTMiIHk9IjEzIiB3aWR0aD0iMTciIGhlaWdodD0iMTciIHJ4PSI0Ii8+CiAgICA8cmVjdCB4PSIzNCIgeT0iMzQiIHdpZHRoPSIxNyIgaGVpZ2h0PSIxNyIgcng9IjQiLz4KICA8L2c+CiAgPHJlY3QgeD0iMzQiIHk9IjEzIiB3aWR0aD0iMTciIGhlaWdodD0iMTciIHJ4PSI0IiBmaWxsPSIjOGI1Y2Y2Ii8+CiAgPHJlY3QgeD0iMTMiIHk9IjM0IiB3aWR0aD0iMTciIGhlaWdodD0iMTciIHJ4PSI0IiBmaWxsPSIjNjBhNWZhIi8+Cjwvc3ZnPgo=
+      mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - namespaces
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apiextensions.k8s.io
+              resourceNames:
+                - networks.network.hypersurgery.dev
+                - networkscopes.network.hypersurgery.dev
+                - resourceimports.network.hypersurgery.dev
+                - sheetexports.network.hypersurgery.dev
+                - subnetclaims.network.hypersurgery.dev
+                - subnets.network.hypersurgery.dev
+              resources:
+                - customresourcedefinitions
+              verbs:
+                - get
+                - patch
+            - apiGroups:
+                - apiextensions.k8s.io
+              resourceNames:
+                - networks.network.hypersurgery.dev
+                - networkscopes.network.hypersurgery.dev
+                - resourceimports.network.hypersurgery.dev
+                - sheetexports.network.hypersurgery.dev
+                - subnetclaims.network.hypersurgery.dev
+                - subnets.network.hypersurgery.dev
+              resources:
+                - customresourcedefinitions/status
+              verbs:
+                - get
+                - update
+            - apiGroups:
+                - aws.hypersurgery
+              resources:
+                - networkscopes
+                - resourceimports
+                - sheetexports
+                - subnetclaims
+              verbs:
+                - list
+            - apiGroups:
+                - events.k8s.io
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - network.hypersurgery.dev
+              resources:
+                - networks
+                - subnets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - network.hypersurgery.dev
+              resources:
+                - networks/status
+                - networkscopes/status
+                - resourceimports/status
+                - sheetexports/status
+                - subnetclaims/status
+                - subnets/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - network.hypersurgery.dev
+              resources:
+                - networkscopes
+                - sheetexports
+                - subnetclaims
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - network.hypersurgery.dev
+              resources:
+                - networkscopes/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - network.hypersurgery.dev
+              resources:
+                - resourceimports
+              verbs:
+                - create
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+          serviceAccountName: subnet-operator-controller-manager
+      deployments:
+        - label:
+            app.kubernetes.io/managed-by: kustomize
+            app.kubernetes.io/name: subnet-operator
+            control-plane: controller-manager
+          name: subnet-operator-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: subnet-operator
+                control-plane: controller-manager
+            strategy: {}
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  app.kubernetes.io/name: subnet-operator
+                  control-plane: controller-manager
+              spec:
+                containers:
+                  - args:
+                      - --metrics-bind-address=:8443
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                    command:
+                      - /manager
+                    image: ghcr.io/aivandrago/subnet-operator@sha256:a2389b94a04ef13e70909f10b7bf17c4b5930c6536628ccf4acd13feb57102b3
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    ports:
+                      - containerPort: 8081
+                        name: health
+                        protocol: TCP
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                      requests:
+                        cpu: 50m
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: subnet-operator-controller-manager
+                terminationGracePeriodSeconds: 45
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - get
+                - list
+                - watch
+          serviceAccountName: subnet-operator-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: false
+      type: OwnNamespace
+    - supported: false
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - aws
+    - vpc
+    - subnet
+    - ipam
+    - cidr
+    - networking
+    - inventory
+  links:
+    - name: Documentation
+      url: https://hypersurgery.dev/docs/
+    - name: Source
+      url: https://github.com/aivandrago/subnet-operator
+    - name: OLM guide
+      url: https://github.com/aivandrago/subnet-operator/blob/main/docs/olm.md
+  maintainers:
+    - email: feverondiva@proton.me
+      name: Ivan Drago
+  maturity: stable
+  minKubeVersion: 1.28.0
+  provider:
+    name: hypersurgery.dev
+    url: https://hypersurgery.dev
+  relatedImages:
+    - image: ghcr.io/aivandrago/subnet-operator@sha256:a2389b94a04ef13e70909f10b7bf17c4b5930c6536628ccf4acd13feb57102b3
+      name: manager
+    - image: ghcr.io/aivandrago/subnet-operator@sha256:a2389b94a04ef13e70909f10b7bf17c4b5930c6536628ccf4acd13feb57102b3
+      name: subnet-operator-a2389b94a04ef13e70909f10b7bf17c4b5930c6536628ccf4acd13feb57102b3-annotation
+  version: 2.0.1
+  webhookdefinitions:
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      conversionCRDs:
+        - networks.network.hypersurgery.dev
+        - networkscopes.network.hypersurgery.dev
+        - resourceimports.network.hypersurgery.dev
+        - sheetexports.network.hypersurgery.dev
+        - subnetclaims.network.hypersurgery.dev
+        - subnets.network.hypersurgery.dev
+      deploymentName: subnet-operator-controller-manager
+      generateName: cnetworksnetworkscopesresourceimportssheetexportssubnetclaimssubnets.kb.io
+      sideEffects: None
+      targetPort: 9443
+      type: ConversionWebhook
+      webhookPath: /convert
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Ignore
+      generateName: mnetworkscope-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - networkscopes
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-network-hypersurgery-dev-v1-networkscope
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Ignore
+      generateName: mresourceimport-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - resourceimports
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-network-hypersurgery-dev-v1-resourceimport
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Ignore
+      generateName: msubnetclaim-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - subnetclaims
+      sideEffects: None
+      targetPort: 9443
+      type: MutatingAdmissionWebhook
+      webhookPath: /mutate-network-hypersurgery-dev-v1-subnetclaim
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Fail
+      generateName: vnetworkscope-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - networkscopes
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-network-hypersurgery-dev-v1-networkscope
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Fail
+      generateName: vresourceimport-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - resourceimports
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-network-hypersurgery-dev-v1-resourceimport
+    - admissionReviewVersions:
+        - v1
+      containerPort: 443
+      deploymentName: subnet-operator-controller-manager
+      failurePolicy: Fail
+      generateName: vsubnetclaim-v1.kb.io
+      rules:
+        - apiGroups:
+            - network.hypersurgery.dev
+          apiVersions:
+            - v1
+          operations:
+            - CREATE
+            - UPDATE
+          resources:
+            - subnetclaims
+      sideEffects: None
+      targetPort: 9443
+      type: ValidatingAdmissionWebhook
+      webhookPath: /validate-network-hypersurgery-dev-v1-subnetclaim

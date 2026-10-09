@@ -1,0 +1,1284 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: networkscopes.network.hypersurgery.dev
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: webhook-service
+          namespace: system
+          path: /convert
+      conversionReviewVersions:
+      - v1
+  group: network.hypersurgery.dev
+  names:
+    categories:
+    - hypersurgery
+    kind: NetworkScope
+    listKind: NetworkScopeList
+    plural: networkscopes
+    shortNames:
+    - nscope
+    singular: networkscope
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.networks
+      name: Networks
+      type: integer
+    - jsonPath: .status.subnets
+      name: Subnets
+      type: integer
+    - jsonPath: .status.unmanaged
+      name: Unmanaged
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastSyncTime
+      name: Last sync
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NetworkScope selects the accounts and regions of one provider whose networks and subnets
+          are discovered.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of NetworkScope
+            properties:
+              accounts:
+                description: accounts to discover.
+                items:
+                  description: |-
+                    Account is one account of the provider: an AWS account or a GCP project (the host project
+                    of a Shared VPC). Its identity settings are in the member named after the scope's provider.
+                  properties:
+                    aws:
+                      description: |-
+                        aws holds how the operator reaches the account on AWS. Only valid in a scope with
+                        provider AWS.
+                      properties:
+                        externalID:
+                          description: externalID is passed to sts:AssumeRole when
+                            the role trust policy requires it.
+                          type: string
+                        roleARN:
+                          description: |-
+                            roleARN is assumed (sts:AssumeRole) to read the account. When empty, the operator's own
+                            credentials (EKS Pod Identity / IRSA) are used, which only works for the account the
+                            operator runs in.
+                          pattern: ^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$
+                          type: string
+                        writeRoleARN:
+                          description: |-
+                            writeRoleARN is assumed for SubnetClaims in Create mode and for ResourceImports. It is
+                            separate from roleARN so that discovery never carries write permissions. When empty,
+                            claims for an account reached through roleARN can only be allocated, not created.
+                          pattern: ^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$
+                          type: string
+                      type: object
+                    gcp:
+                      description: |-
+                        gcp holds how the operator reaches the project on Google Cloud. Only valid in a scope
+                        with provider GCP.
+                      properties:
+                        serviceAccount:
+                          description: |-
+                            serviceAccount is the email of the service account impersonated to read the project.
+                            The operator's own identity needs roles/iam.serviceAccountTokenCreator on it. When
+                            empty, the operator's own identity reads the project.
+                          maxLength: 254
+                          pattern: ^[a-z0-9][a-z0-9-]{4,61}[a-z0-9]@[a-z0-9][a-z0-9.-]*\.gserviceaccount\.com$
+                          type: string
+                        writeServiceAccount:
+                          description: |-
+                            writeServiceAccount is impersonated for SubnetClaims in Create mode and for
+                            ResourceImports. It is separate from serviceAccount so that discovery never carries
+                            write permissions. When empty, claims for a project read through serviceAccount can only
+                            be allocated, not created.
+                          maxLength: 254
+                          pattern: ^[a-z0-9][a-z0-9-]{4,61}[a-z0-9]@[a-z0-9][a-z0-9.-]*\.gserviceaccount\.com$
+                          type: string
+                      type: object
+                    id:
+                      description: |-
+                        id is the account's ID at the provider: the 12-digit account ID on AWS, the project ID
+                        on GCP. The format is checked per provider on the scope.
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                    regions:
+                      description: regions overrides spec.regions for this account.
+                        Each region is listed once.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - id
+                  type: object
+                maxItems: 1000
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+              autoImport:
+                description: |-
+                  autoImport tags unmanaged resources on its own, deriving the tags from who created the
+                  resource, from its network, or from the account. Off unless configured.
+                properties:
+                  accountDefaults:
+                    description: accountDefaults are the last resort, per account.
+                      An account has at most one entry.
+                    items:
+                      description: AccountDefault gives an account a set of fallback
+                        tags.
+                      properties:
+                        account:
+                          description: account is the account ID, in the provider's
+                            format; checked on the scope.
+                          maxLength: 128
+                          minLength: 1
+                          type: string
+                        tags:
+                          additionalProperties:
+                            type: string
+                          description: tags are applied to resources in that account
+                            when nothing more specific matched.
+                          minProperties: 1
+                          type: object
+                      required:
+                      - account
+                      - tags
+                      type: object
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - account
+                    x-kubernetes-list-type: map
+                  fromCreator:
+                    description: |-
+                      fromCreator derives tags from the principal that created the resource, which the
+                      provider's audit trail reports (CloudTrail on AWS, Cloud Audit Logs on GCP). Rules are tried in order
+                      and the first match wins.
+                    items:
+                      description: CreatorRule maps the principal that created a resource
+                        to the tags it should carry.
+                      properties:
+                        principalPrefix:
+                          description: |-
+                            principalPrefix is matched against the principal as the provider's audit trail reports
+                            it; on AWS the CloudTrail principal, e.g.
+                            "arn:aws:sts::222222222222:assumed-role/payments-deploy/"; on GCP the principalEmail
+                            of Cloud Audit Logs, e.g. "payments-deploy@". A prefix, not a pattern:
+                            the operator never guesses an owner from a partial match in the middle of an ARN.
+                          minLength: 1
+                          type: string
+                        tags:
+                          additionalProperties:
+                            type: string
+                          description: tags are applied when the prefix matches.
+                          minProperties: 1
+                          type: object
+                      required:
+                      - principalPrefix
+                      - tags
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  inheritFromNetwork:
+                    description: |-
+                      inheritFromNetwork copies these tag keys from the parent network onto an unmanaged
+                      subnet. Tried after fromCreator, for the common case of a subnet added by hand to a
+                      network that already has an owner.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  managedTag:
+                    description: |-
+                      managedTag and managedValue are added to every generated import, because that is what
+                      makes the resource part of the inventory. managedTag defaults per provider; on AWS to
+                      hs/managed.
+                    type: string
+                  managedValue:
+                    default: "true"
+                    type: string
+                  mode:
+                    default: "Off"
+                    description: mode is Off (report only), DryRun (record what would
+                      be applied) or Apply.
+                    enum:
+                    - "Off"
+                    - DryRun
+                    - Apply
+                    type: string
+                  namespace:
+                    default: default
+                    description: namespace holds the generated ResourceImport objects.
+                    type: string
+                  requiredTags:
+                    description: |-
+                      requiredTags must all be resolved before anything is imported. Defaults to the owner
+                      tag: a resource nobody owns stays unmanaged, and the alert asks a human to decide.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  skip:
+                    description: skip keeps the policy away from matching resources
+                      entirely.
+                    items:
+                      description: |-
+                        SkipRule keeps the policy away from resources somebody else owns. Terraform is the usual
+                        reason: tagging a resource it manages makes the next plan want to remove the tags again.
+                      properties:
+                        principalPrefix:
+                          description: principalPrefix skips resources created by
+                            a matching principal, e.g. a CI role.
+                          type: string
+                        tagKey:
+                          description: tagKey, when present on the resource, skips
+                            it. With tagValue set, only that value skips.
+                          type: string
+                        tagValue:
+                          description: tagValue narrows tagKey to one value.
+                          type: string
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              aws:
+                description: aws holds scope-wide AWS settings. Only valid with provider
+                  AWS.
+                type: object
+              discoverUnmanaged:
+                default: true
+                description: |-
+                  discoverUnmanaged also lists the networks the selector does not match, and their
+                  subnets, so resources nobody has claimed are counted and can be imported instead of
+                  staying invisible. They are reported and alerted on, never mirrored as objects.
+                type: boolean
+              gcp:
+                description: |-
+                  gcp holds scope-wide Google Cloud settings. Required with provider GCP, and only valid
+                  with it.
+                properties:
+                  claimTag:
+                    default: Skip
+                    description: |-
+                      claimTag says whether a subnetwork a SubnetClaim creates is also bound the claim tag,
+                      hs-claim=<namespace>_<name>. Skip (the default) binds only the other ownership tags
+                      (hs-owner, hs-env, hs-tier, hs-managed-by and the claim's own tags); the claim keeps its
+                      subnetwork in status.allocations, and a subnetwork it created is found again by its name.
+                      Bind also binds hs-claim, which needs the hs-claim tag key under tagParent and a value per
+                      claim: created beforehand, or by the operator with createTagValues. The operator never
+                      deletes a value, and a key holds at most 1,000.
+                    enum:
+                    - Skip
+                    - Bind
+                    type: string
+                  createTagValues:
+                    description: |-
+                      createTagValues lets the operator's write identity create a tag value that does not
+                      exist yet under one of tagParent's tag keys, when a SubnetClaim or ResourceImport needs
+                      it (a new owner or claim, say). That needs roles/resourcemanager.tagAdmin on those keys.
+                      Off by default: every value must then exist before it is bound, and a claim or import
+                      that needs a missing one fails with reason TagValueMissing, naming it. Tag keys are
+                      never created; a missing key fails with TagKeyMissing. A key holds at most 1,000 values.
+                    type: boolean
+                  tagParent:
+                    description: |-
+                      tagParent is the organization or project that owns the Resource Manager tag keys
+                      ownership is read from (hs-owner, hs-env, hs-tier and hs-managed by default):
+                      organizations/<organization number> or projects/<project ID>. A tag bound from a key of
+                      that parent is reported under the key's short name, a tag from any other parent under
+                      its namespaced key, <parent>/<key>. Only tags bound to a network or subnet directly
+                      count; tags it inherits from its project, folder or organization do not.
+                    pattern: ^(organizations/[0-9]+|projects/[a-z][a-z0-9-]{4,28}[a-z0-9])$
+                    type: string
+                required:
+                - tagParent
+                type: object
+              namespaceSelector:
+                description: |-
+                  namespaceSelector selects the namespaces whose SubnetClaims and ResourceImports may refer
+                  to this scope. Referring to a scope is what makes the operator use its identities,
+                  including the write identities, on the object's behalf, so this is what keeps one team's
+                  namespace from creating subnets in, or tagging, another team's accounts.
+
+                  Select namespaces by name with the kubernetes.io/metadata.name label, which the API
+                  server sets on every namespace and nobody can change, or by a label only cluster
+                  administrators can set. An empty selector ({}) allows every namespace on purpose.
+
+                  When unset, no namespace may use the scope. (In aws.hypersurgery/v1alpha1 unset allowed
+                  every namespace; migrated scopes get an explicit {} instead.)
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              networkSelector:
+                description: |-
+                  networkSelector limits discovery to the networks (AWS VPCs, GCP VPC networks) it
+                  selects. When unset or empty, every network is discovered.
+                properties:
+                  matchTags:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchTags selects the networks that carry all of these tags. An empty value matches any
+                      value of the key. All subnets of a selected network are discovered, including untagged
+                      ones, so they show up in compliance reports.
+                    type: object
+                type: object
+              provider:
+                description: |-
+                  provider is the cloud the scope discovers. It cannot change: a scope does not move
+                  clouds, a new scope does. More values are added by the releases that implement them.
+                enum:
+                - AWS
+                - GCP
+                type: string
+                x-kubernetes-validations:
+                - message: provider is immutable
+                  rule: self == oldSelf
+              regions:
+                description: |-
+                  regions to discover in every account (unless the account overrides them): AWS regions
+                  such as eu-central-1, GCP regions such as europe-west1. Each region is listed once.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: set
+              requiredSubnetTags:
+                description: |-
+                  requiredSubnetTags are tag keys every subnet must have. Missing keys are reported in the
+                  Subnet status and as metrics.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              resyncInterval:
+                default: 10m
+                description: resyncInterval is how often the full inventory is refreshed.
+                type: string
+              tagKeys:
+                description: |-
+                  tagKeys maps inventory fields (owner, env, tier) to tag keys. Unset keys default per
+                  provider; on AWS to hs/owner, hs/env and hs/tier, on GCP to hs-owner, hs-env and
+                  hs-tier.
+                properties:
+                  env:
+                    description: env is the tag key holding the environment.
+                    type: string
+                  owner:
+                    description: owner is the tag key holding the owning team.
+                    type: string
+                  tier:
+                    description: tier is the tag key holding the subnet tier (public,
+                      private, db, ...).
+                    type: string
+                type: object
+            required:
+            - accounts
+            - provider
+            - regions
+            type: object
+            x-kubernetes-validations:
+            - message: aws is only valid for provider AWS
+              rule: '!has(self.aws) || self.provider == ''AWS'''
+            - message: accounts[].aws is only valid for provider AWS
+              rule: self.accounts.all(a, !has(a.aws) || self.provider == 'AWS')
+            - message: an AWS account id is 12 digits
+              rule: self.provider != 'AWS' || self.accounts.all(a, a.id.matches('^[0-9]{12}$'))
+            - message: an AWS account in autoImport.accountDefaults is 12 digits
+              rule: self.provider != 'AWS' || !has(self.autoImport) || !has(self.autoImport.accountDefaults)
+                || self.autoImport.accountDefaults.all(d, d.account.matches('^[0-9]{12}$'))
+            - message: gcp is only valid for provider GCP
+              rule: '!has(self.gcp) || self.provider == ''GCP'''
+            - message: provider GCP needs gcp.tagParent
+              rule: self.provider != 'GCP' || has(self.gcp)
+            - message: accounts[].gcp is only valid for provider GCP
+              rule: self.accounts.all(a, !has(a.gcp) || self.provider == 'GCP')
+            - message: 'a GCP account id is a project ID: 6 to 30 lowercase letters,
+                digits and hyphens, starting with a letter'
+              rule: self.provider != 'GCP' || self.accounts.all(a, a.id.matches('^[a-z][a-z0-9-]{4,28}[a-z0-9]$'))
+            - message: a GCP account in autoImport.accountDefaults is a project ID
+              rule: self.provider != 'GCP' || !has(self.autoImport) || !has(self.autoImport.accountDefaults)
+                || self.autoImport.accountDefaults.all(d, d.account.matches('^[a-z][a-z0-9-]{4,28}[a-z0-9]$'))
+          status:
+            description: status defines the observed state of NetworkScope
+            properties:
+              capabilities:
+                description: |-
+                  capabilities lists what the scope's provider can do as the operator runs it:
+                  CreateSubnet, ChangeEvents, IPUsage. More values may be added; ignore unknown ones.
+                items:
+                  description: |-
+                    Capability is something a provider can do, as the operator runs it (ADR 0002 §8). The
+                    dashboard and the webhooks read it from NetworkScope.status.capabilities instead of guessing
+                    from the provider's name. More values may be added; a client must ignore values it does not
+                    know.
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              conditions:
+                description: 'conditions: Ready is True when every target synced successfully.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastSyncTime:
+                description: lastSyncTime is when the last full sync finished.
+                format: date-time
+                type: string
+              networks:
+                description: networks is the number of networks discovered across
+                  all targets.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: observedGeneration is the generation of the spec that
+                  was last synced.
+                format: int64
+                type: integer
+              ownership:
+                description: ownership says where the provider keeps ownership metadata
+                  of networks and subnets.
+                properties:
+                  networks:
+                    description: networks is where the metadata of a network is kept.
+                    type: string
+                  subnets:
+                    description: subnets is where the metadata of a subnet is kept.
+                    type: string
+                type: object
+              subnets:
+                description: subnets is the number of subnets discovered across all
+                  targets.
+                format: int32
+                type: integer
+              targets:
+                description: targets reports each account/region pair.
+                items:
+                  description: TargetStatus reports the last sync of one account/region
+                    pair.
+                  properties:
+                    account:
+                      description: account is the account ID.
+                      type: string
+                    error:
+                      description: error is the last sync error, empty when the last
+                        sync succeeded.
+                      type: string
+                    lastSyncTime:
+                      description: lastSyncTime is the time of the last successful
+                        sync.
+                      format: date-time
+                      type: string
+                    networks:
+                      description: networks is the number of networks discovered.
+                      format: int32
+                      type: integer
+                    region:
+                      description: region is the region.
+                      type: string
+                    subnets:
+                      description: subnets is the number of subnets discovered.
+                      format: int32
+                      type: integer
+                    unmanagedIDs:
+                      description: |-
+                        unmanagedIDs are the network and subnet IDs that were outside the selector at the last
+                        successful sync. The operator keeps them here rather than in memory so that a restart or
+                        a change of leader can tell a resource that appeared since then from one that was
+                        already known — otherwise every known unmanaged resource would be reported as new again.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                    unmanagedNetworks:
+                      description: unmanagedNetworks is the number of networks the
+                        selector does not match.
+                      format: int32
+                      type: integer
+                    unmanagedSubnets:
+                      description: unmanagedSubnets is the number of subnets inside
+                        those networks.
+                      format: int32
+                      type: integer
+                  required:
+                  - account
+                  - networks
+                  - region
+                  - subnets
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              unmanaged:
+                description: |-
+                  unmanaged is the number of discovered resources without the managed tag, across all
+                  targets. Anything above zero is something nobody has taken responsibility for.
+                format: int32
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.networks
+      name: Networks
+      type: integer
+    - jsonPath: .status.subnets
+      name: Subnets
+      type: integer
+    - jsonPath: .status.unmanaged
+      name: Unmanaged
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastSyncTime
+      name: Last sync
+      type: date
+    deprecated: true
+    deprecationWarning: 'network.hypersurgery.dev/v1beta1 is deprecated: use network.hypersurgery.dev/v1,
+      which has the same fields. v1beta1 is served until at least 1.2 and six months
+      after 1.0'
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NetworkScope selects the accounts and regions of one provider whose networks and subnets
+          are discovered.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of NetworkScope
+            properties:
+              accounts:
+                description: accounts to discover.
+                items:
+                  description: |-
+                    Account is one account of the provider: an AWS account or a GCP project (the host project
+                    of a Shared VPC). Its identity settings are in the member named after the scope's provider.
+                  properties:
+                    aws:
+                      description: |-
+                        aws holds how the operator reaches the account on AWS. Only valid in a scope with
+                        provider AWS.
+                      properties:
+                        externalID:
+                          description: externalID is passed to sts:AssumeRole when
+                            the role trust policy requires it.
+                          type: string
+                        roleARN:
+                          description: |-
+                            roleARN is assumed (sts:AssumeRole) to read the account. When empty, the operator's own
+                            credentials (EKS Pod Identity / IRSA) are used, which only works for the account the
+                            operator runs in.
+                          pattern: ^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$
+                          type: string
+                        writeRoleARN:
+                          description: |-
+                            writeRoleARN is assumed for SubnetClaims in Create mode and for ResourceImports. It is
+                            separate from roleARN so that discovery never carries write permissions. When empty,
+                            claims for an account reached through roleARN can only be allocated, not created.
+                          pattern: ^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$
+                          type: string
+                      type: object
+                    gcp:
+                      description: |-
+                        gcp holds how the operator reaches the project on Google Cloud. Only valid in a scope
+                        with provider GCP.
+                      properties:
+                        serviceAccount:
+                          description: |-
+                            serviceAccount is the email of the service account impersonated to read the project.
+                            The operator's own identity needs roles/iam.serviceAccountTokenCreator on it. When
+                            empty, the operator's own identity reads the project.
+                          maxLength: 254
+                          pattern: ^[a-z0-9][a-z0-9-]{4,61}[a-z0-9]@[a-z0-9][a-z0-9.-]*\.gserviceaccount\.com$
+                          type: string
+                        writeServiceAccount:
+                          description: |-
+                            writeServiceAccount is impersonated for SubnetClaims in Create mode and for
+                            ResourceImports. It is separate from serviceAccount so that discovery never carries
+                            write permissions. When empty, claims for a project read through serviceAccount can only
+                            be allocated, not created.
+                          maxLength: 254
+                          pattern: ^[a-z0-9][a-z0-9-]{4,61}[a-z0-9]@[a-z0-9][a-z0-9.-]*\.gserviceaccount\.com$
+                          type: string
+                      type: object
+                    id:
+                      description: |-
+                        id is the account's ID at the provider: the 12-digit account ID on AWS, the project ID
+                        on GCP. The format is checked per provider on the scope.
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                    regions:
+                      description: regions overrides spec.regions for this account.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  required:
+                  - id
+                  type: object
+                maxItems: 1000
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+              autoImport:
+                description: |-
+                  autoImport tags unmanaged resources on its own, deriving the tags from who created the
+                  resource, from its network, or from the account. Off unless configured.
+                properties:
+                  accountDefaults:
+                    description: accountDefaults are the last resort, per account.
+                    items:
+                      description: AccountDefault gives an account a set of fallback
+                        tags.
+                      properties:
+                        account:
+                          description: account is the account ID, in the provider's
+                            format; checked on the scope.
+                          maxLength: 128
+                          minLength: 1
+                          type: string
+                        tags:
+                          additionalProperties:
+                            type: string
+                          description: tags are applied to resources in that account
+                            when nothing more specific matched.
+                          minProperties: 1
+                          type: object
+                      required:
+                      - account
+                      - tags
+                      type: object
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  fromCreator:
+                    description: |-
+                      fromCreator derives tags from the principal that created the resource, which the
+                      provider's audit trail reports (CloudTrail on AWS). Rules are tried in order and the first match wins.
+                    items:
+                      description: CreatorRule maps the principal that created a resource
+                        to the tags it should carry.
+                      properties:
+                        principalPrefix:
+                          description: |-
+                            principalPrefix is matched against the principal as the provider's audit trail reports
+                            it; on AWS the CloudTrail principal, e.g.
+                            "arn:aws:sts::222222222222:assumed-role/payments-deploy/". A prefix, not a pattern:
+                            the operator never guesses an owner from a partial match in the middle of an ARN.
+                          minLength: 1
+                          type: string
+                        tags:
+                          additionalProperties:
+                            type: string
+                          description: tags are applied when the prefix matches.
+                          minProperties: 1
+                          type: object
+                      required:
+                      - principalPrefix
+                      - tags
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  inheritFromNetwork:
+                    description: |-
+                      inheritFromNetwork copies these tag keys from the parent network onto an unmanaged
+                      subnet. Tried after fromCreator, for the common case of a subnet added by hand to a
+                      network that already has an owner.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  managedTag:
+                    description: |-
+                      managedTag and managedValue are added to every generated import, because that is what
+                      makes the resource part of the inventory. managedTag defaults per provider; on AWS to
+                      hs/managed.
+                    type: string
+                  managedValue:
+                    default: "true"
+                    type: string
+                  mode:
+                    default: "Off"
+                    description: mode is Off (report only), DryRun (record what would
+                      be applied) or Apply.
+                    enum:
+                    - "Off"
+                    - DryRun
+                    - Apply
+                    type: string
+                  namespace:
+                    default: default
+                    description: namespace holds the generated ResourceImport objects.
+                    type: string
+                  requiredTags:
+                    description: |-
+                      requiredTags must all be resolved before anything is imported. Defaults to the owner
+                      tag: a resource nobody owns stays unmanaged, and the alert asks a human to decide.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  skip:
+                    description: skip keeps the policy away from matching resources
+                      entirely.
+                    items:
+                      description: |-
+                        SkipRule keeps the policy away from resources somebody else owns. Terraform is the usual
+                        reason: tagging a resource it manages makes the next plan want to remove the tags again.
+                      properties:
+                        principalPrefix:
+                          description: principalPrefix skips resources created by
+                            a matching principal, e.g. a CI role.
+                          type: string
+                        tagKey:
+                          description: tagKey, when present on the resource, skips
+                            it. With tagValue set, only that value skips.
+                          type: string
+                        tagValue:
+                          description: tagValue narrows tagKey to one value.
+                          type: string
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              aws:
+                description: aws holds scope-wide AWS settings. Only valid with provider
+                  AWS.
+                type: object
+              discoverUnmanaged:
+                default: true
+                description: |-
+                  discoverUnmanaged also lists the networks the selector does not match, and their
+                  subnets, so resources nobody has claimed are counted and can be imported instead of
+                  staying invisible. They are reported and alerted on, never mirrored as objects.
+                type: boolean
+              gcp:
+                description: |-
+                  gcp holds scope-wide Google Cloud settings. Required with provider GCP, and only valid
+                  with it.
+                properties:
+                  claimTag:
+                    default: Skip
+                    description: |-
+                      claimTag says whether a subnetwork a SubnetClaim creates is also bound the claim tag,
+                      hs-claim=<namespace>_<name>. Skip (the default) binds only the other ownership tags
+                      (hs-owner, hs-env, hs-tier, hs-managed-by and the claim's own tags); the claim keeps its
+                      subnetwork in status.allocations, and a subnetwork it created is found again by its name.
+                      Bind also binds hs-claim, which needs the hs-claim tag key under tagParent and a value per
+                      claim: created beforehand, or by the operator with createTagValues. The operator never
+                      deletes a value, and a key holds at most 1,000.
+                    enum:
+                    - Skip
+                    - Bind
+                    type: string
+                  createTagValues:
+                    description: |-
+                      createTagValues lets the operator's write identity create a tag value that does not
+                      exist yet under one of tagParent's tag keys, when a SubnetClaim or ResourceImport needs
+                      it (a new owner or claim, say). That needs roles/resourcemanager.tagAdmin on those keys.
+                      Off by default: every value must then exist before it is bound, and a claim or import
+                      that needs a missing one fails with reason TagValueMissing, naming it. Tag keys are
+                      never created; a missing key fails with TagKeyMissing. A key holds at most 1,000 values.
+                    type: boolean
+                  tagParent:
+                    description: |-
+                      tagParent is the organization or project that owns the Resource Manager tag keys
+                      ownership is read from (hs-owner, hs-env, hs-tier and hs-managed by default):
+                      organizations/<organization number> or projects/<project ID>. A tag bound from a key of
+                      that parent is reported under the key's short name, a tag from any other parent under
+                      its namespaced key, <parent>/<key>. Only tags bound to a network or subnet directly
+                      count; tags it inherits from its project, folder or organization do not.
+                    pattern: ^(organizations/[0-9]+|projects/[a-z][a-z0-9-]{4,28}[a-z0-9])$
+                    type: string
+                required:
+                - tagParent
+                type: object
+              namespaceSelector:
+                description: |-
+                  namespaceSelector selects the namespaces whose SubnetClaims and ResourceImports may refer
+                  to this scope. Referring to a scope is what makes the operator use its identities,
+                  including the write identities, on the object's behalf, so this is what keeps one team's
+                  namespace from creating subnets in, or tagging, another team's accounts.
+
+                  Select namespaces by name with the kubernetes.io/metadata.name label, which the API
+                  server sets on every namespace and nobody can change, or by a label only cluster
+                  administrators can set. An empty selector ({}) allows every namespace on purpose.
+
+                  When unset, no namespace may use the scope. (In aws.hypersurgery/v1alpha1 unset allowed
+                  every namespace; migrated scopes get an explicit {} instead.)
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              networkSelector:
+                description: |-
+                  networkSelector limits discovery to the networks (AWS VPCs, GCP VPC networks) it
+                  selects. When unset or empty, every network is discovered.
+                properties:
+                  matchTags:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchTags selects the networks that carry all of these tags. An empty value matches any
+                      value of the key. All subnets of a selected network are discovered, including untagged
+                      ones, so they show up in compliance reports.
+                    type: object
+                type: object
+              provider:
+                description: |-
+                  provider is the cloud the scope discovers. It cannot change: a scope does not move
+                  clouds, a new scope does. More values are added by the releases that implement them.
+                enum:
+                - AWS
+                - GCP
+                type: string
+                x-kubernetes-validations:
+                - message: provider is immutable
+                  rule: self == oldSelf
+              regions:
+                description: |-
+                  regions to discover in every account (unless the account overrides them): AWS regions
+                  such as eu-central-1, GCP regions such as europe-west1.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+              requiredSubnetTags:
+                description: |-
+                  requiredSubnetTags are tag keys every subnet must have. Missing keys are reported in the
+                  Subnet status and as metrics.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              resyncInterval:
+                default: 10m
+                description: resyncInterval is how often the full inventory is refreshed.
+                type: string
+              tagKeys:
+                description: |-
+                  tagKeys maps inventory fields (owner, env, tier) to tag keys. Unset keys default per
+                  provider; on AWS to hs/owner, hs/env and hs/tier, on GCP to hs-owner, hs-env and
+                  hs-tier.
+                properties:
+                  env:
+                    description: env is the tag key holding the environment.
+                    type: string
+                  owner:
+                    description: owner is the tag key holding the owning team.
+                    type: string
+                  tier:
+                    description: tier is the tag key holding the subnet tier (public,
+                      private, db, ...).
+                    type: string
+                type: object
+            required:
+            - accounts
+            - provider
+            - regions
+            type: object
+            x-kubernetes-validations:
+            - message: aws is only valid for provider AWS
+              rule: '!has(self.aws) || self.provider == ''AWS'''
+            - message: accounts[].aws is only valid for provider AWS
+              rule: self.accounts.all(a, !has(a.aws) || self.provider == 'AWS')
+            - message: an AWS account id is 12 digits
+              rule: self.provider != 'AWS' || self.accounts.all(a, a.id.matches('^[0-9]{12}$'))
+            - message: an AWS account in autoImport.accountDefaults is 12 digits
+              rule: self.provider != 'AWS' || !has(self.autoImport) || !has(self.autoImport.accountDefaults)
+                || self.autoImport.accountDefaults.all(d, d.account.matches('^[0-9]{12}$'))
+            - message: gcp is only valid for provider GCP
+              rule: '!has(self.gcp) || self.provider == ''GCP'''
+            - message: provider GCP needs gcp.tagParent
+              rule: self.provider != 'GCP' || has(self.gcp)
+            - message: accounts[].gcp is only valid for provider GCP
+              rule: self.accounts.all(a, !has(a.gcp) || self.provider == 'GCP')
+            - message: 'a GCP account id is a project ID: 6 to 30 lowercase letters,
+                digits and hyphens, starting with a letter'
+              rule: self.provider != 'GCP' || self.accounts.all(a, a.id.matches('^[a-z][a-z0-9-]{4,28}[a-z0-9]$'))
+            - message: a GCP account in autoImport.accountDefaults is a project ID
+              rule: self.provider != 'GCP' || !has(self.autoImport) || !has(self.autoImport.accountDefaults)
+                || self.autoImport.accountDefaults.all(d, d.account.matches('^[a-z][a-z0-9-]{4,28}[a-z0-9]$'))
+          status:
+            description: status defines the observed state of NetworkScope
+            properties:
+              capabilities:
+                description: |-
+                  capabilities lists what the scope's provider can do as the operator runs it:
+                  CreateSubnet, ChangeEvents, IPUsage. More values may be added; ignore unknown ones.
+                items:
+                  description: |-
+                    Capability is something a provider can do, as the operator runs it (ADR 0002 §8). The
+                    dashboard and the webhooks read it from NetworkScope.status.capabilities instead of guessing
+                    from the provider's name. More values may be added; a client must ignore values it does not
+                    know.
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              conditions:
+                description: 'conditions: Ready is True when every target synced successfully.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastSyncTime:
+                description: lastSyncTime is when the last full sync finished.
+                format: date-time
+                type: string
+              networks:
+                description: networks is the number of networks discovered across
+                  all targets.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: observedGeneration is the generation of the spec that
+                  was last synced.
+                format: int64
+                type: integer
+              ownership:
+                description: ownership says where the provider keeps ownership metadata
+                  of networks and subnets.
+                properties:
+                  networks:
+                    description: networks is where the metadata of a network is kept.
+                    type: string
+                  subnets:
+                    description: subnets is where the metadata of a subnet is kept.
+                    type: string
+                type: object
+              subnets:
+                description: subnets is the number of subnets discovered across all
+                  targets.
+                format: int32
+                type: integer
+              targets:
+                description: targets reports each account/region pair.
+                items:
+                  description: TargetStatus reports the last sync of one account/region
+                    pair.
+                  properties:
+                    account:
+                      description: account is the account ID.
+                      type: string
+                    error:
+                      description: error is the last sync error, empty when the last
+                        sync succeeded.
+                      type: string
+                    lastSyncTime:
+                      description: lastSyncTime is the time of the last successful
+                        sync.
+                      format: date-time
+                      type: string
+                    networks:
+                      description: networks is the number of networks discovered.
+                      format: int32
+                      type: integer
+                    region:
+                      description: region is the region.
+                      type: string
+                    subnets:
+                      description: subnets is the number of subnets discovered.
+                      format: int32
+                      type: integer
+                    unmanagedIDs:
+                      description: |-
+                        unmanagedIDs are the network and subnet IDs that were outside the selector at the last
+                        successful sync. The operator keeps them here rather than in memory so that a restart or
+                        a change of leader can tell a resource that appeared since then from one that was
+                        already known — otherwise every known unmanaged resource would be reported as new again.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                    unmanagedNetworks:
+                      description: unmanagedNetworks is the number of networks the
+                        selector does not match.
+                      format: int32
+                      type: integer
+                    unmanagedSubnets:
+                      description: unmanagedSubnets is the number of subnets inside
+                        those networks.
+                      format: int32
+                      type: integer
+                  required:
+                  - account
+                  - networks
+                  - region
+                  - subnets
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              unmanaged:
+                description: |-
+                  unmanaged is the number of discovered resources without the managed tag, across all
+                  targets. Anything above zero is something nobody has taken responsibility for.
+                format: int32
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

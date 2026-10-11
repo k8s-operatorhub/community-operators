@@ -1,0 +1,635 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "mirror.openshift.io/v1alpha1",
+          "kind": "ImageSet",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "oc-mirror"
+            },
+            "name": "imageset-sample"
+          },
+          "spec": {
+            "mirror": {
+              "operators": [
+                {
+                  "catalog": "\u003cregistry\u003e/redhat/redhat-operator-index:v4.14",
+                  "packages": [
+                    {
+                      "name": "web-terminal"
+                    },
+                    {
+                      "channels": [
+                        {
+                          "name": "stable-v1"
+                        }
+                      ],
+                      "name": "cert-manager"
+                    }
+                  ]
+                }
+              ],
+              "platform": {
+                "architectures": [
+                  "amd64"
+                ],
+                "channels": [
+                  {
+                    "maxVersion": "4.14.35",
+                    "minVersion": "4.14.30",
+                    "name": "stable-4.14",
+                    "shortestPath": true
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "mirror.openshift.io/v1alpha1",
+          "kind": "MirrorExport",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "oc-mirror"
+            },
+            "name": "mirrorexport-sample"
+          },
+          "spec": {
+            "destination": {
+              "registry": "registry.example.com/mirror"
+            },
+            "mirror": {
+              "operators": [
+                {
+                  "catalog": "\u003cregistry\u003e/redhat/redhat-operator-index:v4.14",
+                  "packages": [
+                    {
+                      "name": "web-terminal"
+                    }
+                  ]
+                }
+              ],
+              "platform": {
+                "architectures": [
+                  "amd64"
+                ],
+                "channels": [
+                  {
+                    "maxVersion": "4.14.35",
+                    "minVersion": "4.14.30",
+                    "name": "stable-4.14",
+                    "shortestPath": true
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "mirror.openshift.io/v1alpha1",
+          "kind": "MirrorTarget",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "oc-mirror"
+            },
+            "name": "mirrortarget-sample"
+          },
+          "spec": {
+            "authSecret": "registry-credentials",
+            "imageSets": [
+              "imageset-sample"
+            ],
+            "insecure": false,
+            "registry": "registry.example.com/mirror"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: OpenShift Optional, Integration & Delivery
+    com.redhat.openshift.versions: v4.18-v4.22
+    containerImage: ghcr.io/mariusbertram/oc-mirror-operator-controller@sha256:47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a
+    createdAt: "2026-10-10T20:35:44Z"
+    description: Mirrors OpenShift releases, operator catalogs, Helm charts and additional images into private registries behind air-gapped or restricted networks, with declarative ImageSets, drift healing and generated IDMS/ITMS resources.
+    oc-mirror-manager-image: ghcr.io/mariusbertram/oc-mirror-operator-manager@sha256:07fd1d085da5a7dda4aad21ee196f68da9dbbcccecc8642d43f30b641c72fc7b
+    oc-mirror-worker-image: ghcr.io/mariusbertram/oc-mirror-operator-worker@sha256:1e5e1e70918e03d667bfcff7e85ced9a1bcc34576df122038baea812fe44696d
+    operatorframework.io/suggested-namespace: oc-mirror-operator
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/mariusbertram/oc-mirror-operator
+    support: Marius Bertram
+  name: oc-mirror.v0.1.7
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: |
+          An ImageSet describes the desired content (release channels, operator
+          catalogs, additional images) to mirror to one or more MirrorTargets.
+        displayName: Image Set
+        kind: ImageSet
+        name: imagesets.mirror.openshift.io
+        version: v1alpha1
+      - description: |
+          A MirrorExport defines a one-shot export of selected release, operator,
+          and additional image content to an external registry.
+        displayName: Mirror Export
+        kind: MirrorExport
+        name: mirrorexports.mirror.openshift.io
+        version: v1alpha1
+      - description: |
+          A MirrorTarget defines a destination registry for one or more ImageSets.
+          It owns the manager Deployment that orchestrates per-image worker pods
+          and exposes aggregated mirroring progress (Total/Mirrored/Pending/Failed).
+        displayName: Mirror Target
+        kind: MirrorTarget
+        name: mirrortargets.mirror.openshift.io
+        version: v1alpha1
+  description: |
+    The oc-mirror operator brings the functionality of the upstream `oc-mirror`
+    plugin to Kubernetes/OpenShift as a fully declarative, in-cluster operator.
+
+    ## Features
+
+    - **Declarative content selection** via `ImageSet` CRs (release channels,
+      operator catalogs, additional images, helm charts).
+    - **Per-target mirroring** via `MirrorTarget` CRs that aggregate one or
+      more ImageSets into a destination registry.
+    - **Live progress aggregation**: TOTAL/MIRRORED/PENDING/FAILED columns on
+      `oc get mirrortarget`.
+    - **Filtered FBC catalog images** built in-cluster from upstream operator
+      indexes.
+    - **Live skip of obsolete images** when ImageSets are reduced while a
+      mirror run is in flight.
+    - **Resource server** that publishes IDMS/ITMS/CatalogSource/ClusterCatalog
+      manifests once an ImageSet is Ready.
+
+    See https://github.com/mariusbertram/oc-mirror-operator for the full
+    architecture, security model, and deployment guide.
+  displayName: oc-mirror Operator
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiI+CiAgPGRlZnM+CiAgICA8IS0tIEJhY2tncm91bmQgR3JhZGllbnQgLS0+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnR3JhZCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwRjE3MkEiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAyMDYxNyIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CgogICAgPCEtLSBTb3VyY2UgR3JhZGllbnQgKE9wZW5TaGlmdCAvIFJlZCBIYXQgUmVkKSAtLT4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic291cmNlR3JhZCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNFRjQ0NDQiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzk5MUIxQiIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CgogICAgPCEtLSBUYXJnZXQgR3JhZGllbnQgKFByaXZhdGUgQ2xvdWQgLyBCbHVlKSAtLT4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0idGFyZ2V0R3JhZCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMzOEJERjgiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAzNjlBMSIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CgogICAgPCEtLSBTeW5jIEdyYWRpZW50IC0tPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJzeW5jR3JhZCIgeDE9IjAlIiB5MT0iMCUiIHgyPSIxMDAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNFRjQ0NDQiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTAlIiBzdG9wLWNvbG9yPSIjOEI1Q0Y2IiAvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzOEJERjgiIC8+CiAgICA8L2xpbmVhckdyYWRpZW50PgoKICAgIDwhLS0gR2xvdyBGaWx0ZXIgLS0+CiAgICA8ZmlsdGVyIGlkPSJnbG93IiB4PSItMjAlIiB5PSItMjAlIiB3aWR0aD0iMTQwJSIgaGVpZ2h0PSIxNDAlIj4KICAgICAgPGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMyIgcmVzdWx0PSJibHVyIiAvPgogICAgICA8ZmVDb21wb3NpdGUgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iYmx1ciIgb3BlcmF0b3I9Im92ZXIiIC8+CiAgICA8L2ZpbHRlcj4KICA8L2RlZnM+CgogIDwhLS0gQXBwIEljb24gQmFja2dyb3VuZCB3aXRoIFJvdW5kZWQgQ29ybmVycyAtLT4KICA8cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgcng9IjQ4IiBmaWxsPSJ1cmwoI2JnR3JhZCkiIC8+CgogIDwhLS0gT3V0ZXIgQW5pbWF0ZWQgRGFzaGVkIFJpbmcgcmVwcmVzZW50aW5nIHRoZSBjb250aW51b3VzIHJlY29uY2lsaWF0aW9uIGxvb3AgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTI4LCAxMTYpIj4KICAgIDxjaXJjbGUgY3g9IjAiIGN5PSIwIiByPSI4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUUyOTNCIiBzdHJva2Utd2lkdGg9IjQiIC8+CiAgICA8Y2lyY2xlIGN4PSIwIiBjeT0iMCIgcj0iODAiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNzeW5jR3JhZCkiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWRhc2hhcnJheT0iMTI1LjYgMTI1LjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+CiAgICAgIDxhbmltYXRlVHJhbnNmb3JtIGF0dHJpYnV0ZU5hbWU9InRyYW5zZm9ybSIgdHlwZT0icm90YXRlIiBmcm9tPSIwIiB0bz0iMzYwIiBkdXI9IjRzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIgLz4KICAgIDwvY2lyY2xlPgogIDwvZz4KCiAgPCEtLSBMZWZ0OiBTb3VyY2UgUmVnaXN0cnkgKFVwc3RyZWFtKSAtLT4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4MCwgMTE2KSI+CiAgICA8cGF0aCBkPSJNLTE4LC0xNCBDLTE4LC0yMSAxOCwtMjEgMTgsLTE0IEwxOCwxNCBDMTgsMjEgLTE4LDIxIC0xOCwxNCBaIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc291cmNlR3JhZCkiIHN0cm9rZS13aWR0aD0iMyIgZmlsdGVyPSJ1cmwoI2dsb3cpIi8+CiAgICA8ZWxsaXBzZSBjeD0iMCIgY3k9Ii0xNCIgcng9IjE4IiByeT0iNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NvdXJjZUdyYWQpIiBzdHJva2Utd2lkdGg9IjMiIC8+CiAgICA8cGF0aCBkPSJNLTE4LDAgQy0xOCw3IDE4LDcgMTgsMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NvdXJjZUdyYWQpIiBzdHJva2Utd2lkdGg9IjMiIC8+CiAgPC9nPgoKICA8IS0tIFJpZ2h0OiBUYXJnZXQgUmVnaXN0cnkgKFByaXZhdGUgTWlycm9yKSAtLT4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNzYsIDExNikiPgogICAgPHBhdGggZD0iTS0xOCwtMTQgQy0xOCwtMjEgMTgsLTIxIDE4LC0xNCBMMTgsMTQgQzE4LDIxIC0xOCwyMSAtMTgsMTQgWiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3RhcmdldEdyYWQpIiBzdHJva2Utd2lkdGg9IjMiIGZpbHRlcj0idXJsKCNnbG93KSIvPgogICAgPGVsbGlwc2UgY3g9IjAiIGN5PSItMTQiIHJ4PSIxOCIgcnk9IjciIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCN0YXJnZXRHcmFkKSIgc3Ryb2tlLXdpZHRoPSIzIiAvPgogICAgPHBhdGggZD0iTS0xOCwwIEMtMTgsNyAxOCw3IDE4LDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCN0YXJnZXRHcmFkKSIgc3Ryb2tlLXdpZHRoPSIzIiAvPgogIDwvZz4KCiAgPCEtLSBDZW50ZXI6IENvbm5lY3RpbmcgU3luYyBBcnJvd3MgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTI4LCAxMTYpIj4KICAgIDwhLS0gU291cmNlIC0+IFRhcmdldCBBcnJvdyAtLT4KICAgIDxwYXRoIGQ9Ik0gLTI0LC0xMiBDIC0xMCwtMTIgLTEwLDEyIDEwLDEyIiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc3luY0dyYWQpIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZmlsdGVyPSJ1cmwoI2dsb3cpIj4KICAgICAgIDxhbmltYXRlIGF0dHJpYnV0ZU5hbWU9InN0cm9rZS1kYXNoYXJyYXkiIHZhbHVlcz0iMCw0MDsgNDAsMCIgZHVyPSIxLjVzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIgLz4KICAgIDwvcGF0aD4KICAgIDxwYXRoIGQ9Ik0gNCw3IEwgMTIsMTIgTCA0LDE3IiBmaWxsPSJub25lIiBzdHJva2U9IiMzOEJERjgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBmaWx0ZXI9InVybCgjZ2xvdykiPgogICAgICAgPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ib3BhY2l0eSIgdmFsdWVzPSIwOzE7MCIgZHVyPSIxLjVzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIgLz4KICAgIDwvcGF0aD4KCiAgICA8IS0tIFRhcmdldCAtPiBTb3VyY2UgU3RhdHVzL1N5bmMgQXJyb3cgLS0+CiAgICA8cGF0aCBkPSJNIDI0LDEyIEMgMTAsMTIgMTAsLTEyIC0xMCwtMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNzeW5jR3JhZCkiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWx0ZXI9InVybCgjZ2xvdykiPgogICAgICAgPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hhcnJheSIgdmFsdWVzPSIwLDQwOyA0MCwwIiBkdXI9IjEuNXMiIGJlZ2luPSIwLjc1cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiIC8+CiAgICA8L3BhdGg+CiAgICA8cGF0aCBkPSJNIC00LC03IEwgLTEyLC0xMiBMIC00LC0xNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRUY0NDQ0IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZmlsdGVyPSJ1cmwoI2dsb3cpIj4KICAgICAgIDxhbmltYXRlIGF0dHJpYnV0ZU5hbWU9Im9wYWNpdHkiIHZhbHVlcz0iMDsxOzAiIGR1cj0iMS41cyIgYmVnaW49IjAuNzVzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIgLz4KICAgIDwvcGF0aD4KICA8L2c+CgogIDwhLS0gRmxvYXRpbmcgRGF0YSBQYXJ0aWNsZXMgKEJsb2JzIHN5bmNpbmcpIC0tPgogIDxnIGZpbGw9IiNGRkZGRkYiIG9wYWNpdHk9IjAuOCI+CiAgICA8Y2lyY2xlIGN4PSIxMjgiIGN5PSIxMTYiIHI9IjIuNSI+CiAgICAgIDxhbmltYXRlTW90aW9uIHBhdGg9Ik0gLTI0LC0xMiBDIC0xMCwtMTIgLTEwLDEyIDEwLDEyIiBkdXI9IjEuNXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIiAvPgogICAgICA8YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJvcGFjaXR5IiB2YWx1ZXM9IjA7MTswIiBkdXI9IjEuNXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIiAvPgogICAgPC9jaXJjbGU+CiAgICA8Y2lyY2xlIGN4PSIxMjgiIGN5PSIxMTYiIHI9IjIuNSI+CiAgICAgIDxhbmltYXRlTW90aW9uIHBhdGg9Ik0gMjQsMTIgQyAxMCwxMiAxMCwtMTIgLTEwLC0xMiIgZHVyPSIxLjVzIiBiZWdpbj0iMC43NXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIiAvPgogICAgICA8YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJvcGFjaXR5IiB2YWx1ZXM9IjA7MTswIiBkdXI9IjEuNXMiIGJlZ2luPSIwLjc1cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiIC8+CiAgICA8L2NpcmNsZT4KICA8L2c+CgogIDwhLS0gVGl0bGUgVGV4dCBDZW50ZXJlZCBhdCB0aGUgQm90dG9tIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEyOCwgMjIwKSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgJ1NlZ29lIFVJJywgUm9ib3RvLCBzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIj4KICAgIDx0ZXh0IHg9IjAiIHk9IjAiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiNGOEZBRkMiIGxldHRlci1zcGFjaW5nPSIwIj4KICAgICAgPHRzcGFuIGZpbGw9IiNFRjQ0NDQiPm9jPC90c3Bhbj4tbWlycm9yCiAgICA8L3RleHQ+CiAgICA8dGV4dCB4PSIwIiB5PSIxNCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk0QTNCOCIgbGV0dGVyLXNwYWNpbmc9IjIiPk9QRVJBVE9SPC90ZXh0PgogIDwvZz4KPC9zdmc+
+      mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - namespaces
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - console.openshift.io
+              resources:
+                - consoleplugins
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - config.openshift.io
+              resources:
+                - clusteroperators
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+          serviceAccountName: oc-mirror-controller-manager
+      deployments:
+        - label:
+            app.kubernetes.io/managed-by: kustomize
+            app.kubernetes.io/name: oc-mirror
+            control-plane: controller-manager
+          name: oc-mirror-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: oc-mirror
+                control-plane: controller-manager
+            strategy: {}
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                  oc-mirror-manager-image: ghcr.io/mariusbertram/oc-mirror-operator-manager@sha256:07fd1d085da5a7dda4aad21ee196f68da9dbbcccecc8642d43f30b641c72fc7b
+                  oc-mirror-plugin-image-4-18: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82
+                  oc-mirror-plugin-image-4-19: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4
+                  oc-mirror-plugin-image-4-20: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084
+                  oc-mirror-plugin-image-4-21: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371
+                  oc-mirror-plugin-image-4-22: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3
+                  oc-mirror-worker-image: ghcr.io/mariusbertram/oc-mirror-operator-worker@sha256:1e5e1e70918e03d667bfcff7e85ced9a1bcc34576df122038baea812fe44696d
+                labels:
+                  app.kubernetes.io/name: oc-mirror
+                  control-plane: controller-manager
+              spec:
+                affinity:
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: kubernetes.io/arch
+                              operator: In
+                              values:
+                                - amd64
+                                - arm64
+                                - ppc64le
+                                - s390x
+                            - key: kubernetes.io/os
+                              operator: In
+                              values:
+                                - linux
+                containers:
+                  - args:
+                      - --metrics-bind-address=:8443
+                      - --leader-elect
+                      - --health-probe-bind-address=:8081
+                    command:
+                      - /controller
+                    env:
+                      - name: OPERATOR_IMAGE
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-controller@sha256:47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a
+                      - name: MANAGER_IMAGE
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-manager@sha256:07fd1d085da5a7dda4aad21ee196f68da9dbbcccecc8642d43f30b641c72fc7b
+                      - name: WORKER_IMAGE
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-worker@sha256:1e5e1e70918e03d667bfcff7e85ced9a1bcc34576df122038baea812fe44696d
+                      - name: RELATED_IMAGE_PLUGIN_4_18
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82
+                      - name: RELATED_IMAGE_PLUGIN_4_19
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4
+                      - name: RELATED_IMAGE_PLUGIN_4_20
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084
+                      - name: RELATED_IMAGE_PLUGIN_4_21
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371
+                      - name: RELATED_IMAGE_PLUGIN_4_22
+                        value: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3
+                      - name: OPERATOR_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                    image: ghcr.io/mariusbertram/oc-mirror-operator-controller@sha256:47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: "2"
+                        memory: 2Gi
+                      requests:
+                        cpu: 500m
+                        memory: 512Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: oc-mirror-controller-manager
+                terminationGracePeriodSeconds: 10
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+                - pods
+                - serviceaccounts
+                - services
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - persistentvolumeclaims
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - config.openshift.io
+              resources:
+                - clusteroperators
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - console.openshift.io
+              resources:
+                - consoleplugins
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - httproutes
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - mirror.openshift.io
+              resources:
+                - imagesets
+                - mirrorexports
+                - mirrortargets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - mirror.openshift.io
+              resources:
+                - imagesets/finalizers
+                - mirrorexports/finalizers
+                - mirrortargets/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - mirror.openshift.io
+              resources:
+                - imagesets/status
+              verbs:
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - mirror.openshift.io
+              resources:
+                - mirrorexports/status
+                - mirrortargets/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - monitoring.coreos.com
+              resources:
+                - prometheusrules
+                - servicemonitors
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - networking.k8s.io
+              resources:
+                - ingresses
+                - networkpolicies
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - rolebindings
+                - roles
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - routes
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - route.openshift.io
+              resources:
+                - routes/custom-host
+              verbs:
+                - create
+                - patch
+                - update
+          serviceAccountName: oc-mirror-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - mirror
+    - ocp
+    - images
+    - operator
+    - catalog
+    - disconnected
+  links:
+    - name: Source Code
+      url: https://github.com/mariusbertram/oc-mirror-operator
+    - name: Documentation
+      url: https://github.com/mariusbertram/oc-mirror-operator/blob/main/README.md
+  maintainers:
+    - email: marius@brtrm.de
+      name: Marius Bertram
+  maturity: alpha
+  minKubeVersion: 1.22.0
+  provider:
+    name: Marius Bertram
+    url: github.com/mariusbertram/oc-mirror-operator
+  relatedImages:
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82
+      name: plugin_4_18
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084
+      name: plugin_4_20
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3
+      name: plugin_4_22
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82
+      name: oc-mirror-operator-plugin-a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371
+      name: plugin-4-21
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-controller@sha256:47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a
+      name: oc-mirror-operator-controller-47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-manager@sha256:07fd1d085da5a7dda4aad21ee196f68da9dbbcccecc8642d43f30b641c72fc7b
+      name: oc-mirror-operator-manager-07fd1d085da5a7dda4aad21ee196f68da9dbbcccecc8642d43f30b641c72fc7b-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3
+      name: oc-mirror-operator-plugin-51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:a9623c82e6b45e864efddaaad60a10ab1fe9e7fcf9fa802f8c8481b8cd522c82
+      name: plugin-4-18
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371
+      name: oc-mirror-operator-plugin-4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4
+      name: oc-mirror-operator-plugin-9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-controller@sha256:47a842697f2a796b20b7ae550a1967fcb8ef0bd559c693dc4cfc6cb7cbd1da5a
+      name: manager
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4
+      name: plugin_4_19
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:4f46228343147b22bf147085fef014397c309699e123a73051944fc65c9e2371
+      name: plugin_4_21
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-worker@sha256:1e5e1e70918e03d667bfcff7e85ced9a1bcc34576df122038baea812fe44696d
+      name: oc-mirror-operator-worker-1e5e1e70918e03d667bfcff7e85ced9a1bcc34576df122038baea812fe44696d-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084
+      name: oc-mirror-operator-plugin-43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084-annotation
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:9977c7a3184f60fa7e64eb1d5610ca2fd1759594eadec6452d5e4a2009eee7c4
+      name: plugin-4-19
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:43bfe8a3cd9b2dfaaad643d7358a963242cb27c2df3f694594a9fb1c07027084
+      name: plugin-4-20
+    - image: ghcr.io/mariusbertram/oc-mirror-operator-plugin@sha256:51eb6e385906027cef4b1a5fc4b58b353aac493fd3ceea4357153fa6ec4bb0d3
+      name: plugin-4-22
+  version: 0.1.7

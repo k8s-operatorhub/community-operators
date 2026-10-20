@@ -1,0 +1,613 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: mirrorexports.mirror.openshift.io
+spec:
+  group: mirror.openshift.io
+  names:
+    kind: MirrorExport
+    listKind: MirrorExportList
+    plural: mirrorexports
+    singular: mirrorexport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.totalImages
+      name: Total
+      type: integer
+    - jsonPath: .status.artifactsConfigMap
+      name: Artifacts
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MirrorExport is the Schema for the mirrorexports API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              MirrorExportSpec defines the desired state of MirrorExport.
+
+              Unlike MirrorTarget/ImageSet, a MirrorExport is not continuously
+              reconciled into a live mirror: it describes content to resolve for a
+              disconnected (air-gapped) destination that the reconciling cluster cannot
+              necessarily reach. Reconciling it produces downloadable artifacts (a
+              resolved image manifest, IDMS/ITMS/CatalogSource/ClusterCatalog resources,
+              and a build spec for the operator-catalog/graph-data content that must be
+              built rather than copied) — see docs/mirror2disk.md.
+            properties:
+              destination:
+                description: |-
+                  Destination is the registry the resolved manifest's destinations, and
+                  the generated IDMS/ITMS/CatalogSource/ClusterCatalog resources, are
+                  computed against. The reconciling cluster does not need to be able to
+                  reach it — it is only used to compute destination image references.
+                properties:
+                  insecure:
+                    description: |-
+                      Insecure marks the destination registry as not requiring TLS/using a
+                      self-signed cert, reflected into the generated IDMS/ITMS resources.
+                    type: boolean
+                  registry:
+                    description: |-
+                      Registry is the URL of the destination registry (e.g.
+                      registry.example.com/mirror). This registry does not need to be
+                      reachable from the cluster reconciling the MirrorExport.
+                    type: string
+                required:
+                - registry
+                type: object
+              mirror:
+                description: |-
+                  Mirror defines the content to resolve — identical schema to
+                  ImageSet.spec.mirror (release channels, operator catalogs, additional
+                  images, Helm charts).
+                properties:
+                  additionalImages:
+                    description: |-
+                      AdditionalImages defines the configuration for a list
+                      of individual image content types.
+                    items:
+                      description: AdditionalImage contains image pull information
+                        for additional images.
+                      properties:
+                        name:
+                          description: Name of the image.
+                          type: string
+                        targetRepo:
+                          description: TargetRepo replaces the repository path.
+                          type: string
+                        targetTag:
+                          description: TargetTag is the tag the image will be mirrored
+                            with.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  blockedImages:
+                    description: |-
+                      BlockedImages define a list of images that will be blocked
+                      from the mirroring process if they exist in other content
+                      types in the configuration.
+                    items:
+                      description: BlockedImage contains image information used for
+                        excluding images.
+                      properties:
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  helm:
+                    description: Helm define the configuration for Helm content types.
+                    properties:
+                      local:
+                        description: Local is the configuration for locally stored
+                          helm charts.
+                        items:
+                          description: Chart is the information an individual Helm
+                            chart.
+                          properties:
+                            imagePaths:
+                              description: ImagePaths are custom JSON paths for images
+                                location.
+                              items:
+                                type: string
+                              type: array
+                            name:
+                              description: Name is the chart name.
+                              type: string
+                            path:
+                              description: Path defines the path on disk where the
+                                chart is stored.
+                              type: string
+                            version:
+                              description: Version is the chart version.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      repositories:
+                        description: Repositories are the Helm repositories containing
+                          the charts.
+                        items:
+                          description: Repository defines the configuration for a
+                            Helm repository.
+                          properties:
+                            charts:
+                              description: Charts is a list of charts to pull from
+                                the repo.
+                              items:
+                                description: Chart is the information an individual
+                                  Helm chart.
+                                properties:
+                                  imagePaths:
+                                    description: ImagePaths are custom JSON paths
+                                      for images location.
+                                    items:
+                                      type: string
+                                    type: array
+                                  name:
+                                    description: Name is the chart name.
+                                    type: string
+                                  path:
+                                    description: Path defines the path on disk where
+                                      the chart is stored.
+                                    type: string
+                                  version:
+                                    description: Version is the chart version.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                            name:
+                              description: Name is the name of the Helm repository.
+                              type: string
+                            url:
+                              description: URL is the url of the Helm repository.
+                              type: string
+                          required:
+                          - charts
+                          - name
+                          - url
+                          type: object
+                        type: array
+                    type: object
+                  operators:
+                    description: Operators defines the configuration for Operator
+                      content types.
+                    items:
+                      description: Operator defines the configuration for operator
+                        catalog mirroring.
+                      properties:
+                        catalog:
+                          description: Catalog image to mirror.
+                          type: string
+                        full:
+                          description: Full defines whether all packages within the
+                            catalog will be mirrored.
+                          type: boolean
+                        packages:
+                          description: Packages to include.
+                          items:
+                            description: IncludePackage contains a name (required)
+                              and channels and/or versions (optional).
+                            properties:
+                              bundles:
+                                description: |-
+                                  Bundles selects individual bundles of the package by name (e.g.
+                                  "web-terminal.v1.11.0"). Only these bundles are mirrored (plus their
+                                  dependencies), and the filtered catalog contains them in every channel
+                                  they belong to. Cannot be combined with channels, minVersion,
+                                  maxVersion or previousVersions.
+                                items:
+                                  description: SelectedBundle names a single bundle
+                                    of an operator package.
+                                  properties:
+                                    name:
+                                      description: Name of the bundle as listed in
+                                        the catalog (olm.bundle name).
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              channels:
+                                description: Channels to include.
+                                items:
+                                  description: IncludeChannel contains a name (required)
+                                    and versions (optional).
+                                  properties:
+                                    maxVersion:
+                                      description: MaxVersion to include.
+                                      type: string
+                                    minVersion:
+                                      description: MinVersion to include.
+                                      type: string
+                                    name:
+                                      description: Name of channel.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                              defaultChannel:
+                                type: string
+                              maxVersion:
+                                description: MaxVersion to include.
+                                type: string
+                              minVersion:
+                                description: MinVersion to include.
+                                type: string
+                              name:
+                                description: Name of package.
+                                type: string
+                              previousVersions:
+                                default: 0
+                                description: |-
+                                  PreviousVersions is the number of older versions (before the channel
+                                  head) to include per channel when no explicit channels or version
+                                  ranges are specified (heads-only mode). Defaults to 0 (head only).
+                                type: integer
+                            required:
+                            - name
+                            type: object
+                            x-kubernetes-validations:
+                            - message: bundles cannot be combined with channels, minVersion,
+                                maxVersion or previousVersions
+                              rule: '!has(self.bundles) || size(self.bundles) == 0
+                                || ((!has(self.channels) || size(self.channels) ==
+                                0) && (!has(self.minVersion) || size(self.minVersion)
+                                == 0) && (!has(self.maxVersion) || size(self.maxVersion)
+                                == 0) && (!has(self.previousVersions) || self.previousVersions
+                                == 0))'
+                          type: array
+                        signatureVerification:
+                          description: |-
+                            SignatureVerification, when set, requires the catalog image to carry a
+                            valid cosign/sigstore signature verifiable against the referenced
+                            public key before it is resolved. Unlike OpenShift release payloads
+                            (which are always verified against embedded Red Hat keys), there is no
+                            single trusted signer for third-party operator catalogs, so
+                            verification here is opt-in and the key is supplied per-catalog.
+                            Unset (the default) means no verification is performed, matching
+                            pre-existing behavior.
+                          properties:
+                            publicKeySecretRef:
+                              description: |-
+                                PublicKeySecretRef references a key within a Secret, in the same
+                                namespace as the ImageSet, whose value is a PEM-encoded cosign public
+                                key used to verify the image's signature.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - publicKeySecretRef
+                          type: object
+                        skipDependencies:
+                          description: SkipDependencies will not include dependencies
+                            if true.
+                          type: boolean
+                        targetCatalog:
+                          description: TargetCatalog replaces TargetName and allows
+                            for specifying the exact URL of the target catalog.
+                          type: string
+                        targetTag:
+                          description: TargetTag is the tag the catalog image will
+                            be built with.
+                          type: string
+                      required:
+                      - catalog
+                      type: object
+                    type: array
+                  platform:
+                    description: Platform defines the configuration for OpenShift
+                      and OKD platform types.
+                    properties:
+                      architectures:
+                        description: |-
+                          Architectures defines one or more architectures
+                          to mirror for the release image. This is defined at the
+                          platform level to enable cross-channel upgrades.
+                        items:
+                          type: string
+                        type: array
+                      channels:
+                        description: |-
+                          Channels defines the configuration for individual
+                          OCP and OKD channels
+                        items:
+                          description: |-
+                            ReleaseChannel defines the configuration for individual
+                            OCP and OKD channels
+                          properties:
+                            full:
+                              description: |-
+                                Full mode set the MinVersion to the
+                                first release in the channel and the MaxVersion
+                                to the last release in the channel.
+                              type: boolean
+                            maxVersion:
+                              description: |-
+                                MaxVersion is maximum version in the
+                                release channel to mirror
+                              type: string
+                            minVersion:
+                              description: |-
+                                MinVersion is minimum version in the
+                                release channel to mirror
+                              type: string
+                            name:
+                              type: string
+                            shortestPath:
+                              description: |-
+                                ShortestPath mode calculates the shortest path
+                                between the min and mav version
+                              type: boolean
+                            skipSignatureVerification:
+                              description: |-
+                                SkipSignatureVerification disables cryptographic verification of the
+                                release payload's GPG signature against the embedded Red Hat release
+                                signing keys before mirroring. Verification is enabled by default;
+                                only disable this for test environments mirroring unpublished or
+                                unsigned release payloads (e.g. CI/nightly builds without a matching
+                                trusted key). Release nodes whose signature cannot be downloaded or
+                                fails verification are skipped (not mirrored) unless this is set.
+                                Signature lookup only queries the official Red Hat release mirror, so
+                                this must be set to true for Type: okd channels and any OCP channel
+                                mirroring unpublished CI/nightly payloads.
+                              type: boolean
+                            type:
+                              default: ocp
+                              description: |-
+                                Type of the platform in the context of this tool.
+                                OCP is the default.
+                              enum:
+                              - ocp
+                              - okd
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      graph:
+                        description: |-
+                          Graph defines whether Cincinnati graph data will
+                          downloaded and publish
+                        type: boolean
+                      kubeVirtContainer:
+                        description: |-
+                          The kubeVirtContainer flag when set to true (default false)
+                          will be used to extract the kubeVirtContainer image
+                          from the release payload file 0000_50_installer_coreos-bootimages
+                        type: boolean
+                      release:
+                        description: |-
+                          This new field will allow the diskToMirror functionality
+                          to copy from a release location on disk
+                        type: string
+                    type: object
+                  requireSignedImages:
+                    description: |-
+                      RequireSignedImages requires every image mirrored for this ImageSet —
+                      release components, operator bundles, additional images, and Helm
+                      images alike — to carry a cosign signature. This is a presence/shape
+                      check: it confirms a well-formed cosign signature exists for the
+                      image's digest (and, when the signature embeds a certificate via the
+                      keyless/Fulcio flow, that the signature cryptographically matches that
+                      embedded certificate's key), but does not verify the image was signed
+                      by any particular trusted key or identity. Unlike
+                      ReleaseChannel.SkipSignatureVerification (checked once against the
+                      source before mirroring) and Operator.SignatureVerification (checked
+                      once against a specific public key), this is re-checked periodically
+                      against the mirrored destination as part of the manager's drift check,
+                      so an image that loses its signature (or never had one) after being
+                      mirrored is caught. Use Operator.SignatureVerification instead when a
+                      specific trusted public key must be enforced.
+                    type: boolean
+                  samples:
+                    description: |-
+                      Samples defines the configuration for Sample content types.
+                      This is currently not implemented.
+                    items:
+                      description: SampleImage defines the configuration for Sample
+                        content types.
+                      properties:
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                type: object
+              source:
+                description: |-
+                  Source overrides where resolution pulls from. Omitted means upstream
+                  (registry.redhat.io, quay.io, the Cincinnati graph API, and catalog
+                  refs exactly as specified in Mirror.Operators[].Catalog). Set this to
+                  resolve against an already-populated local/connected mirror registry
+                  instead of pulling the same content from the public internet again.
+                properties:
+                  authSecret:
+                    description: |-
+                      AuthSecret is a reference to a Secret containing the credentials for
+                      the source registry. The Secret should contain "username" and
+                      "password" or a ".dockerconfigjson".
+                    type: string
+                  caBundle:
+                    description: |-
+                      CABundle references a ConfigMap in the same namespace that contains a
+                      PEM-encoded CA certificate bundle for the source registry.
+                    properties:
+                      configMapName:
+                        description: ConfigMapName is the name of the ConfigMap containing
+                          the CA bundle.
+                        minLength: 1
+                        type: string
+                      key:
+                        description: |-
+                          Key is the key within the ConfigMap that holds the PEM-encoded CA
+                          certificate bundle.  Defaults to "ca-bundle.crt".
+                        type: string
+                    required:
+                    - configMapName
+                    type: object
+                  insecure:
+                    description: |-
+                      Insecure allows connecting to the source registry without TLS or with
+                      self-signed certs.
+                    type: boolean
+                  registry:
+                    description: |-
+                      Registry is the URL of a source registry to resolve against instead of
+                      upstream (e.g. an already-populated local mirror registry).
+                    type: string
+                type: object
+            required:
+            - destination
+            - mirror
+            type: object
+          status:
+            description: MirrorExportStatus defines the observed state of MirrorExport.
+            properties:
+              artifactsConfigMap:
+                description: |-
+                  ArtifactsConfigMap is the name of the ConfigMap (in the same namespace)
+                  containing the rendered artifacts: manifest.json, idms.yaml, itms.yaml,
+                  catalogsource-<slug>.yaml / clustercatalog-<slug>.yaml per operator
+                  entry, and buildspec.json.
+                type: string
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the export's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastRenderedSignature:
+                description: |-
+                  LastRenderedSignature is a hash of the spec content that produced the
+                  current artifacts, used to detect when a re-render is needed.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the generation of the MirrorExport
+                  that was last reconciled.
+                format: int64
+                type: integer
+              totalImages:
+                description: |-
+                  TotalImages is the number of plain images in the last successfully
+                  rendered resolved image manifest.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,921 @@
+# Copyright (C) 2015 The Gravitee team (http://gravitee.io)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+    gravitee.io/operator.version: 4.13.0
+  name: mcpproxies.gravitee.io
+spec:
+  group: gravitee.io
+  names:
+    kind: McpProxy
+    listKind: McpProxyList
+    plural: mcpproxies
+    shortNames:
+      - graviteemcpproxies
+    singular: mcpproxy
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.entityId
+          name: Entity ID
+          type: string
+        - jsonPath: .spec.mode
+          name: Mode
+          type: string
+        - jsonPath: .spec.contextPath
+          name: Context Path
+          type: string
+        - jsonPath: .status.state
+          name: State
+          type: string
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: >-
+            McpProxy is a Gravitee MCP proxy as a Kubernetes resource: either a
+            single upstream MCP
+
+            server...
+          properties:
+            apiVersion:
+              description: APIVersion defines the versioned schema of this representation of
+                an object.
+              type: string
+            kind:
+              description: Kind is a string value representing the REST resource this object
+                represents.
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: McpProxySpec defines the desired state of an McpProxy.
+              properties:
+                contextPath:
+                  pattern: ^/
+                  type: string
+                contextRef:
+                  description: Reference to a ManagementContext that determines which APIM
+                    instance this proxy is created in.
+                  properties:
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                    - name
+                  type: object
+                description:
+                  type: string
+                entityId:
+                  description: >-
+                    Stable identity of the proxy, the name authorization
+                    policies reference: lowercase,
+
+                    dot-separated...
+                  maxLength: 255
+                  pattern: ^mcp-proxy\.[a-z0-9_-]+(\.[a-z0-9_-]+)*$
+                  type: string
+                flowExecution:
+                  properties:
+                    matchRequired:
+                      description: Is match required or not ?
+                      type: boolean
+                    mode:
+                      description: The flow mode to use
+                      type: string
+                  required:
+                    - matchRequired
+                  type: object
+                flows:
+                  description: "Proxy-level flows. The manifest owns them: omitted means none."
+                  items:
+                    description: Flow is a set of policies applied to the requests and responses its
+                      selectors match.
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      name:
+                        type: string
+                      request:
+                        items:
+                          description: FlowStep is one policy execution in a flow phase.
+                          properties:
+                            condition:
+                              type: string
+                            configuration:
+                              description: Policy configuration, free-form per plugin.
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            description:
+                              type: string
+                            enabled:
+                              default: true
+                              type: boolean
+                            name:
+                              type: string
+                            policy:
+                              description: Policy plugin id, e.g. rate-limit.
+                              type: string
+                          required:
+                            - enabled
+                            - name
+                            - policy
+                          type: object
+                        type: array
+                      response:
+                        items:
+                          description: FlowStep is one policy execution in a flow phase.
+                          properties:
+                            condition:
+                              type: string
+                            configuration:
+                              description: Policy configuration, free-form per plugin.
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            description:
+                              type: string
+                            enabled:
+                              default: true
+                              type: boolean
+                            name:
+                              type: string
+                            policy:
+                              description: Policy plugin id, e.g. rate-limit.
+                              type: string
+                          required:
+                            - enabled
+                            - name
+                            - policy
+                          type: object
+                        type: array
+                      selectors:
+                        items:
+                          description: FlowSelector is discriminated by type with exactly one nested block
+                            named after it.
+                          properties:
+                            condition:
+                              description: Required when type is CONDITION.
+                              properties:
+                                condition:
+                                  type: string
+                              required:
+                                - condition
+                              type: object
+                            mcp:
+                              description: Required when type is MCP.
+                              properties:
+                                methods:
+                                  items:
+                                    type: string
+                                  minItems: 1
+                                  type: array
+                              required:
+                                - methods
+                              type: object
+                            type:
+                              description: FlowSelectorType discriminates a flow selector.
+                              enum:
+                                - MCP
+                                - CONDITION
+                              type: string
+                          required:
+                            - type
+                          type: object
+                          x-kubernetes-validations:
+                            - message: mcp must be set when type is MCP
+                              rule: self.type != 'MCP' || has(self.mcp)
+                            - message: mcp must not be set when type is not MCP
+                              rule: self.type == 'MCP' || !has(self.mcp)
+                            - message: condition must be set when type is CONDITION
+                              rule: self.type != 'CONDITION' || has(self.condition)
+                            - message: condition must not be set when type is not CONDITION
+                              rule: self.type == 'CONDITION' || !has(self.condition)
+                        type: array
+                      tags:
+                        items:
+                          type: string
+                        type: array
+                    required:
+                      - enabled
+                      - name
+                    type: object
+                  type: array
+                identityProviders:
+                  items:
+                    description: >-
+                      IdentityProvider is an authorization server an OAUTH2 plan
+                      names, discriminated by type with
+
+                      at...
+                    properties:
+                      auth0:
+                        description: Required when type is OAUTH2_AUTH0.
+                        properties:
+                          audience:
+                            type: string
+                          domain:
+                            type: string
+                        required:
+                          - audience
+                          - domain
+                        type: object
+                      name:
+                        description: Name an OAUTH2 plan references in security.oauth2.provider.
+                        type: string
+                      oauth2Generic:
+                        description: Required when type is OAUTH2_GENERIC.
+                        properties:
+                          clientId:
+                            type: string
+                          clientSecret:
+                            description: A literal, a secret:// URI resolved by the gateway, or a templated
+                              Secret value.
+                            type: string
+                          introspectionEndpoint:
+                            type: string
+                          introspectionEndpointMethod:
+                            description: IntrospectionMethod is the HTTP method of a token introspection
+                              call.
+                            enum:
+                              - GET
+                              - POST
+                            type: string
+                          issuerUrl:
+                            format: uri
+                            type: string
+                          userInfoEndpoint:
+                            type: string
+                        required:
+                          - introspectionEndpoint
+                          - introspectionEndpointMethod
+                          - issuerUrl
+                        type: object
+                      type:
+                        description: IdentityProviderType discriminates the authorization server an
+                          OAUTH2 plan relies on.
+                        enum:
+                          - GRAVITEE_AM
+                          - OAUTH2_GENERIC
+                          - OAUTH2_AUTH0
+                        type: string
+                    required:
+                      - name
+                      - type
+                    type: object
+                    x-kubernetes-validations:
+                      - message: oauth2Generic must be set when type is OAUTH2_GENERIC
+                        rule: self.type != 'OAUTH2_GENERIC' || has(self.oauth2Generic)
+                      - message: oauth2Generic must not be set when type is not OAUTH2_GENERIC
+                        rule: self.type == 'OAUTH2_GENERIC' || !has(self.oauth2Generic)
+                      - message: auth0 must be set when type is OAUTH2_AUTH0
+                        rule: self.type != 'OAUTH2_AUTH0' || has(self.auth0)
+                      - message: auth0 must not be set when type is not OAUTH2_AUTH0
+                        rule: self.type == 'OAUTH2_AUTH0' || !has(self.auth0)
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                mode:
+                  description: PROXY requires the proxy block, STUDIO the studio block. Immutable.
+                  enum:
+                    - PROXY
+                    - STUDIO
+                  type: string
+                name:
+                  description: Display name.
+                  type: string
+                plans:
+                  items:
+                    description: Plan is a consumer plan of the proxy.
+                    properties:
+                      flows:
+                        items:
+                          description: Flow is a set of policies applied to the requests and responses its
+                            selectors match.
+                          properties:
+                            enabled:
+                              default: true
+                              type: boolean
+                            name:
+                              type: string
+                            request:
+                              items:
+                                description: FlowStep is one policy execution in a flow phase.
+                                properties:
+                                  condition:
+                                    type: string
+                                  configuration:
+                                    description: Policy configuration, free-form per plugin.
+                                    type: object
+                                    x-kubernetes-preserve-unknown-fields: true
+                                  description:
+                                    type: string
+                                  enabled:
+                                    default: true
+                                    type: boolean
+                                  name:
+                                    type: string
+                                  policy:
+                                    description: Policy plugin id, e.g. rate-limit.
+                                    type: string
+                                required:
+                                  - enabled
+                                  - name
+                                  - policy
+                                type: object
+                              type: array
+                            response:
+                              items:
+                                description: FlowStep is one policy execution in a flow phase.
+                                properties:
+                                  condition:
+                                    type: string
+                                  configuration:
+                                    description: Policy configuration, free-form per plugin.
+                                    type: object
+                                    x-kubernetes-preserve-unknown-fields: true
+                                  description:
+                                    type: string
+                                  enabled:
+                                    default: true
+                                    type: boolean
+                                  name:
+                                    type: string
+                                  policy:
+                                    description: Policy plugin id, e.g. rate-limit.
+                                    type: string
+                                required:
+                                  - enabled
+                                  - name
+                                  - policy
+                                type: object
+                              type: array
+                            selectors:
+                              items:
+                                description: FlowSelector is discriminated by type with exactly one nested block
+                                  named after it.
+                                properties:
+                                  condition:
+                                    description: Required when type is CONDITION.
+                                    properties:
+                                      condition:
+                                        type: string
+                                    required:
+                                      - condition
+                                    type: object
+                                  mcp:
+                                    description: Required when type is MCP.
+                                    properties:
+                                      methods:
+                                        items:
+                                          type: string
+                                        minItems: 1
+                                        type: array
+                                    required:
+                                      - methods
+                                    type: object
+                                  type:
+                                    description: FlowSelectorType discriminates a flow selector.
+                                    enum:
+                                      - MCP
+                                      - CONDITION
+                                    type: string
+                                required:
+                                  - type
+                                type: object
+                                x-kubernetes-validations:
+                                  - message: mcp must be set when type is MCP
+                                    rule: self.type != 'MCP' || has(self.mcp)
+                                  - message: mcp must not be set when type is not MCP
+                                    rule: self.type == 'MCP' || !has(self.mcp)
+                                  - message: condition must be set when type is CONDITION
+                                    rule: self.type != 'CONDITION' || has(self.condition)
+                                  - message: condition must not be set when type is not CONDITION
+                                    rule: self.type == 'CONDITION' || !has(self.condition)
+                              type: array
+                            tags:
+                              items:
+                                type: string
+                              type: array
+                          required:
+                            - enabled
+                            - name
+                          type: object
+                        type: array
+                      name:
+                        type: string
+                      security:
+                        description: >-
+                          PlanSecurity is the consumer authentication of a plan,
+                          discriminated by type with at most
+
+                          one...
+                        properties:
+                          apiKey:
+                            description: Required when type is API_KEY.
+                            properties:
+                              apiKeyHeader:
+                                description: Custom header carrying the key. Omitted means the gateway default.
+                                type: string
+                              propagateApiKey:
+                                description: Forward the key to the upstream server.
+                                type: boolean
+                              source:
+                                description: APIKeySource is where the gateway reads a consumer's API key.
+                                enum:
+                                  - HEADER
+                                  - BEARER
+                                  - QUERY_PARAMETER
+                                type: string
+                            required:
+                              - source
+                            type: object
+                          oauth2:
+                            description: Required when type is OAUTH2.
+                            properties:
+                              provider:
+                                description: Name of the identityProviders entry that validates tokens.
+                                type: string
+                              scopes:
+                                description: Scopes required on the token. Only a GRAVITEE_AM provider accepts
+                                  them.
+                                items:
+                                  type: string
+                                type: array
+                            required:
+                              - provider
+                            type: object
+                          type:
+                            description: PlanSecurityType discriminates how consumers authenticate against a
+                              plan.
+                            enum:
+                              - KEY_LESS
+                              - API_KEY
+                              - OAUTH2
+                            type: string
+                        required:
+                          - type
+                        type: object
+                        x-kubernetes-validations:
+                          - message: apiKey must be set when type is API_KEY
+                            rule: self.type != 'API_KEY' || has(self.apiKey)
+                          - message: apiKey must not be set when type is not API_KEY
+                            rule: self.type == 'API_KEY' || !has(self.apiKey)
+                          - message: oauth2 must be set when type is OAUTH2
+                            rule: self.type != 'OAUTH2' || has(self.oauth2)
+                          - message: oauth2 must not be set when type is not OAUTH2
+                            rule: self.type == 'OAUTH2' || !has(self.oauth2)
+                    required:
+                      - name
+                      - security
+                    type: object
+                  minItems: 1
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
+                proxy:
+                  description: Required when mode is PROXY.
+                  properties:
+                    serverUrl:
+                      description: Raw URL of the upstream MCP server.
+                      format: uri
+                      type: string
+                    upstreamAuth:
+                      description: Credential the gateway presents to the upstream.
+                      properties:
+                        apiKey:
+                          description: Required when type is API_KEY.
+                          properties:
+                            apiKey:
+                              description: >-
+                                The key: a literal, a secret:// URI resolved by
+                                the gateway, or a templated Secret value
+
+                                ([[ secret...
+                              type: string
+                            apiKeyHeader:
+                              description: Name of the header carrying the key.
+                              type: string
+                          required:
+                            - apiKey
+                            - apiKeyHeader
+                          type: object
+                        basic:
+                          description: Required when type is BASIC.
+                          properties:
+                            password:
+                              description: A literal, a secret:// URI resolved by the gateway, or a templated
+                                Secret value.
+                              type: string
+                            username:
+                              type: string
+                          required:
+                            - password
+                            - username
+                          type: object
+                        bearer:
+                          description: Required when type is BEARER.
+                          properties:
+                            token:
+                              description: "The token: a literal, a secret:// URI resolved by the gateway, or
+                                a templated Secret value."
+                              type: string
+                          required:
+                            - token
+                          type: object
+                        oauth2:
+                          description: Required when type is OAUTH2.
+                          properties:
+                            authorizeUrl:
+                              format: uri
+                              type: string
+                            clientId:
+                              type: string
+                            clientSecret:
+                              description: A literal, a secret:// URI resolved by the gateway, or a templated
+                                Secret value.
+                              type: string
+                            scopes:
+                              items:
+                                type: string
+                              type: array
+                            tokenUrl:
+                              format: uri
+                              type: string
+                          required:
+                            - authorizeUrl
+                            - clientId
+                            - clientSecret
+                            - tokenUrl
+                          type: object
+                        type:
+                          description: UpstreamAuthType discriminates how the gateway authenticates
+                            against an upstream MCP server.
+                          enum:
+                            - NONE
+                            - API_KEY
+                            - BEARER
+                            - BASIC
+                            - OAUTH2
+                          type: string
+                      required:
+                        - type
+                      type: object
+                      x-kubernetes-validations:
+                        - message: apiKey must be set when type is API_KEY
+                          rule: self.type != 'API_KEY' || has(self.apiKey)
+                        - message: apiKey must not be set when type is not API_KEY
+                          rule: self.type == 'API_KEY' || !has(self.apiKey)
+                        - message: bearer must be set when type is BEARER
+                          rule: self.type != 'BEARER' || has(self.bearer)
+                        - message: bearer must not be set when type is not BEARER
+                          rule: self.type == 'BEARER' || !has(self.bearer)
+                        - message: basic must be set when type is BASIC
+                          rule: self.type != 'BASIC' || has(self.basic)
+                        - message: basic must not be set when type is not BASIC
+                          rule: self.type == 'BASIC' || !has(self.basic)
+                        - message: oauth2 must be set when type is OAUTH2
+                          rule: self.type != 'OAUTH2' || has(self.oauth2)
+                        - message: oauth2 must not be set when type is not OAUTH2
+                          rule: self.type == 'OAUTH2' || !has(self.oauth2)
+                  required:
+                    - serverUrl
+                  type: object
+                state:
+                  default: STARTED
+                  description: >-
+                    STARTED starts the proxy and redeploys it when it changed;
+                    STOPPED stops it and keeps later
+
+                    changes...
+                  enum:
+                    - STARTED
+                    - STOPPED
+                  type: string
+                studio:
+                  description: Required when mode is STUDIO.
+                  properties:
+                    enableFGA:
+                      description: Insert the tool-level authorization policy on tools/call.
+                      type: boolean
+                    tools:
+                      items:
+                        description: StudioTool selects one tool a catalog server exposes.
+                        properties:
+                          alias:
+                            description: Name the Studio exposes the tool under.
+                            pattern: ^[a-zA-Z0-9_=-]+$
+                            type: string
+                          serverRef:
+                            description: The CatalogMcpServer exposing the tool. The namespace defaults to
+                              the proxy's.
+                            properties:
+                              kind:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          tool:
+                            description: Name of the tool as the server advertises it (see the server's
+                              status.tools).
+                            type: string
+                        required:
+                          - serverRef
+                          - tool
+                        type: object
+                      minItems: 1
+                      type: array
+                    upstreamAuth:
+                      description: One entry per server a selected tool comes from.
+                      items:
+                        description: StudioUpstreamAuth is the credential the gateway presents to one
+                          catalog server.
+                        properties:
+                          auth:
+                            description: Use type NONE when the server needs no credential.
+                            properties:
+                              apiKey:
+                                description: Required when type is API_KEY.
+                                properties:
+                                  apiKey:
+                                    description: >-
+                                      The key: a literal, a secret:// URI
+                                      resolved by the gateway, or a templated
+                                      Secret value
+
+                                      ([[ secret...
+                                    type: string
+                                  apiKeyHeader:
+                                    description: Name of the header carrying the key.
+                                    type: string
+                                required:
+                                  - apiKey
+                                  - apiKeyHeader
+                                type: object
+                              basic:
+                                description: Required when type is BASIC.
+                                properties:
+                                  password:
+                                    description: A literal, a secret:// URI resolved by the gateway, or a templated
+                                      Secret value.
+                                    type: string
+                                  username:
+                                    type: string
+                                required:
+                                  - password
+                                  - username
+                                type: object
+                              bearer:
+                                description: Required when type is BEARER.
+                                properties:
+                                  token:
+                                    description: "The token: a literal, a secret:// URI resolved by the gateway, or
+                                      a templated Secret value."
+                                    type: string
+                                required:
+                                  - token
+                                type: object
+                              oauth2:
+                                description: Required when type is OAUTH2.
+                                properties:
+                                  authorizeUrl:
+                                    format: uri
+                                    type: string
+                                  clientId:
+                                    type: string
+                                  clientSecret:
+                                    description: A literal, a secret:// URI resolved by the gateway, or a templated
+                                      Secret value.
+                                    type: string
+                                  scopes:
+                                    items:
+                                      type: string
+                                    type: array
+                                  tokenUrl:
+                                    format: uri
+                                    type: string
+                                required:
+                                  - authorizeUrl
+                                  - clientId
+                                  - clientSecret
+                                  - tokenUrl
+                                type: object
+                              type:
+                                description: UpstreamAuthType discriminates how the gateway authenticates
+                                  against an upstream MCP server.
+                                enum:
+                                  - NONE
+                                  - API_KEY
+                                  - BEARER
+                                  - BASIC
+                                  - OAUTH2
+                                type: string
+                            required:
+                              - type
+                            type: object
+                            x-kubernetes-validations:
+                              - message: apiKey must be set when type is API_KEY
+                                rule: self.type != 'API_KEY' || has(self.apiKey)
+                              - message: apiKey must not be set when type is not API_KEY
+                                rule: self.type == 'API_KEY' || !has(self.apiKey)
+                              - message: bearer must be set when type is BEARER
+                                rule: self.type != 'BEARER' || has(self.bearer)
+                              - message: bearer must not be set when type is not BEARER
+                                rule: self.type == 'BEARER' || !has(self.bearer)
+                              - message: basic must be set when type is BASIC
+                                rule: self.type != 'BASIC' || has(self.basic)
+                              - message: basic must not be set when type is not BASIC
+                                rule: self.type == 'BASIC' || !has(self.basic)
+                              - message: oauth2 must be set when type is OAUTH2
+                                rule: self.type != 'OAUTH2' || has(self.oauth2)
+                              - message: oauth2 must not be set when type is not OAUTH2
+                                rule: self.type == 'OAUTH2' || !has(self.oauth2)
+                          serverRef:
+                            properties:
+                              kind:
+                                type: string
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                        required:
+                          - auth
+                          - serverRef
+                        type: object
+                      type: array
+                  required:
+                    - tools
+                  type: object
+              required:
+                - contextPath
+                - entityId
+                - mode
+                - name
+                - plans
+              type: object
+              x-kubernetes-validations:
+                - message: proxy must be set when mode is PROXY
+                  rule: self.mode != 'PROXY' || has(self.proxy)
+                - message: proxy must not be set when mode is not PROXY
+                  rule: self.mode == 'PROXY' || !has(self.proxy)
+                - message: studio must be set when mode is STUDIO
+                  rule: self.mode != 'STUDIO' || has(self.studio)
+                - message: studio must not be set when mode is not STUDIO
+                  rule: self.mode == 'STUDIO' || !has(self.studio)
+                - message: mode is immutable
+                  rule: self.mode == oldSelf.mode
+                - message: entityId is immutable
+                  rule: self.entityId == oldSelf.entityId
+            status:
+              description: McpProxyStatus defines the observed state of a McpProxy.
+              properties:
+                conditions:
+                  default: []
+                  description: Conditions describe the current conditions of the McpProxy.
+                  items:
+                    description: Condition contains details for one aspect of the current state of
+                      this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: lastTransitionTime is the last time the condition transitioned from
+                          one status to another.
+                        format: date-time
+                        type: string
+                      message:
+                        description: message is a human readable message indicating details about the
+                          transition.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: observedGeneration represents the .metadata.generation that the
+                          condition was set based upon.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: reason contains a programmatic identifier indicating the reason for
+                          the condition's last transition.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    type: object
+                  maxItems: 8
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
+                environmentId:
+                  description: The environment ID defined in the management context
+                  type: string
+                errors:
+                  description: >-
+                    When the proxy has been created regardless of errors, this
+                    field is
+
+                    used to persist the error...
+                  properties:
+                    severe:
+                      description: >-
+                        severe errors do not pass admission and will block
+                        reconcile
+
+                        hence, this field should always be...
+                      items:
+                        type: string
+                      type: array
+                    warning:
+                      description: |-
+                        warning errors do not block object reconciliation,
+                        most of the time because the value is ignored or...
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                hrid:
+                  description: >-
+                    The human-readable ID the platform addresses this proxy by,
+                    derived from the
+
+                    resource namespace and...
+                  type: string
+                id:
+                  description: >-
+                    The ID of the MCP proxy in the Gravitee API Management
+                    instance, also the id of the API
+
+                    behind it
+                  type: string
+                organizationId:
+                  description: The organization ID defined in the management context
+                  type: string
+                state:
+                  description: The lifecycle state the platform observes.
+                  type: string
+                tools:
+                  description: The tools a Studio exposes, with their catalog identities.
+                  items:
+                    description: StudioToolStatus is a tool a Studio exposes, with the catalog
+                      identity a policy names.
+                    properties:
+                      alias:
+                        type: string
+                      entityId:
+                        type: string
+                      server:
+                        description: HRID of the catalog server the tool comes from.
+                        type: string
+                      tool:
+                        type: string
+                    type: object
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

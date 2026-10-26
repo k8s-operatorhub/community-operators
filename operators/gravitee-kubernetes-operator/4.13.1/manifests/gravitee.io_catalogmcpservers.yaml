@@ -1,0 +1,329 @@
+# Copyright (C) 2015 The Gravitee team (http://gravitee.io)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+    gravitee.io/operator.version: 4.13.1
+  name: catalogmcpservers.gravitee.io
+spec:
+  group: gravitee.io
+  names:
+    kind: CatalogMcpServer
+    listKind: CatalogMcpServerList
+    plural: catalogmcpservers
+    shortNames:
+      - graviteecatalogmcpservers
+    singular: catalogmcpserver
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.entityId
+          name: Entity ID
+          type: string
+        - jsonPath: .spec.connection.endpoint
+          name: Endpoint
+          type: string
+        - jsonPath: .status.lastSyncedAt
+          name: Synced
+          type: string
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: >-
+            CatalogMcpServer is an upstream MCP server registered in the
+            Gravitee AI Catalog as a
+
+            Kubernetes...
+          properties:
+            apiVersion:
+              description: APIVersion defines the versioned schema of this representation of
+                an object.
+              type: string
+            kind:
+              description: Kind is a string value representing the REST resource this object
+                represents.
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: CatalogMcpServerSpec defines the desired state of a
+                CatalogMcpServer.
+              properties:
+                connection:
+                  description: Connection is where the upstream MCP server answers and how the
+                    platform authenticates to it.
+                  properties:
+                    auth:
+                      description: Authentication used to discover the server's capabilities. Omitted
+                        means none.
+                      properties:
+                        header:
+                          description: Required when type is HEADER.
+                          properties:
+                            name:
+                              description: Name of the header, e.g. Authorization.
+                              type: string
+                            value:
+                              description: >-
+                                Full header value: `Bearer <token>` for a bearer
+                                token, `Basic <base64>` for basic
+
+                                credentials, or...
+                              type: string
+                          required:
+                            - name
+                            - value
+                          type: object
+                        oauth2:
+                          description: Required when type is OAUTH2.
+                          properties:
+                            clientId:
+                              type: string
+                            clientSecret:
+                              description: Client secret, a literal or a templated Secret value. Never
+                                returned by the platform.
+                              type: string
+                            scope:
+                              type: string
+                            tokenUrl:
+                              description: Token endpoint of the authorization server.
+                              format: uri
+                              type: string
+                          required:
+                            - clientId
+                            - clientSecret
+                            - tokenUrl
+                          type: object
+                        type:
+                          description: AuthType discriminates how the platform authenticates against the
+                            upstream server.
+                          enum:
+                            - NONE
+                            - HEADER
+                            - OAUTH2
+                          type: string
+                      required:
+                        - type
+                      type: object
+                      x-kubernetes-validations:
+                        - message: header must be set when type is HEADER
+                          rule: self.type != 'HEADER' || has(self.header)
+                        - message: header must not be set when type is not HEADER
+                          rule: self.type == 'HEADER' || !has(self.header)
+                        - message: oauth2 must be set when type is OAUTH2
+                          rule: self.type != 'OAUTH2' || has(self.oauth2)
+                        - message: oauth2 must not be set when type is not OAUTH2
+                          rule: self.type == 'OAUTH2' || !has(self.oauth2)
+                    endpoint:
+                      description: URL of the upstream MCP server.
+                      format: uri
+                      type: string
+                    transport:
+                      default: HTTP
+                      description: MCP transport of the upstream server.
+                      enum:
+                        - HTTP
+                      type: string
+                  required:
+                    - endpoint
+                  type: object
+                contextRef:
+                  description: Reference to a ManagementContext that determines which APIM
+                    instance this server is registered in.
+                  properties:
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                    - name
+                  type: object
+                description:
+                  type: string
+                entityId:
+                  description: >-
+                    Stable catalog identity of the server, the name
+                    authorization policies reference:
+
+                    lowercase,...
+                  maxLength: 255
+                  pattern: ^mcp-server\.[a-z0-9_-]+(\.[a-z0-9_-]+)*$
+                  type: string
+              required:
+                - connection
+                - entityId
+              type: object
+              x-kubernetes-validations:
+                - message: entityId is immutable
+                  rule: self.entityId == oldSelf.entityId
+            status:
+              description: CatalogMcpServerStatus defines the observed state of a
+                CatalogMcpServer.
+              properties:
+                conditions:
+                  default: []
+                  description: Conditions describe the current conditions of the CatalogMcpServer.
+                  items:
+                    description: Condition contains details for one aspect of the current state of
+                      this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: lastTransitionTime is the last time the condition transitioned from
+                          one status to another.
+                        format: date-time
+                        type: string
+                      message:
+                        description: message is a human readable message indicating details about the
+                          transition.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: observedGeneration represents the .metadata.generation that the
+                          condition was set based upon.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: reason contains a programmatic identifier indicating the reason for
+                          the condition's last transition.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    type: object
+                  maxItems: 8
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
+                environmentId:
+                  description: The environment ID defined in the management context
+                  type: string
+                errors:
+                  description: >-
+                    When the server has been created regardless of errors, this
+                    field is
+
+                    used to persist the error...
+                  properties:
+                    severe:
+                      description: >-
+                        severe errors do not pass admission and will block
+                        reconcile
+
+                        hence, this field should always be...
+                      items:
+                        type: string
+                      type: array
+                    warning:
+                      description: |-
+                        warning errors do not block object reconciliation,
+                        most of the time because the value is ignored or...
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                hrid:
+                  description: >-
+                    The human-readable ID the platform addresses this server by,
+                    derived from the
+
+                    resource namespace...
+                  type: string
+                id:
+                  description: The ID of the catalog server in the Gravitee API Management
+                    instance
+                  type: string
+                lastSyncedAt:
+                  description: When the platform last discovered the server, as an RFC 3339
+                    date-time.
+                  type: string
+                organizationId:
+                  description: The organization ID defined in the management context
+                  type: string
+                prompts:
+                  items:
+                    description: Prompt is a prompt the upstream server exposes, with the catalog
+                      identity a policy names.
+                    properties:
+                      entityId:
+                        type: string
+                      name:
+                        type: string
+                    type: object
+                  type: array
+                protocolVersion:
+                  description: MCP protocol version negotiated with the server.
+                  type: string
+                resources:
+                  items:
+                    description: Resource is a resource the upstream server exposes, with the
+                      catalog identity a policy names.
+                    properties:
+                      entityId:
+                        type: string
+                      name:
+                        type: string
+                      uri:
+                        type: string
+                    type: object
+                  type: array
+                serverInfo:
+                  description: ServerInfo is what the upstream server says about itself.
+                  properties:
+                    name:
+                      type: string
+                    version:
+                      type: string
+                  type: object
+                tools:
+                  items:
+                    description: Tool is a tool the upstream server exposes, with the catalog
+                      identity a policy names.
+                    properties:
+                      entityId:
+                        type: string
+                      name:
+                        type: string
+                    type: object
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

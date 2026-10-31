@@ -1,0 +1,1579 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankoapplications.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoApplication
+    listKind: HankoApplicationList
+    plural: hankoapplications
+    shortNames:
+    - happ
+    singular: hankoapplication
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.realmRef
+      name: Realm
+      type: string
+    - jsonPath: .spec.clientID
+      name: ClientID
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HankoApplication represents an OIDC or qualified SAML application
+          in a realm.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: HankoApplicationSpec defines the desired application identity.
+            properties:
+              attributes:
+                additionalProperties:
+                  maxLength: 4096
+                  type: string
+                description: |-
+                  Attributes sets arbitrary Keycloak client attributes (single string value per
+                  key). The full map is the desired state and replaces unmanaged keys set
+                  directly in Keycloak on every reconcile. Keys reserved by the operator for
+                  other spec fields (login_theme, post.logout.redirect.uris) are rejected.
+                maxProperties: 64
+                type: object
+                x-kubernetes-validations:
+                - message: native map keys require 1..255 characters
+                  rule: self.all(k, size(k) > 0 && size(k) <= 255)
+              clientID:
+                description: ClientID is the Keycloak client identifier.
+                maxLength: 255
+                minLength: 1
+                pattern: ^[^\x00-\x1F\x7F]+$
+                type: string
+              clientSecretProjections:
+                description: |-
+                  ClientSecretProjections copies the operator-managed client secret into
+                  dedicated, pre-provisioned Secrets in workload namespaces. Projections are
+                  reconciled on every rotation and cleared with this application. Existing
+                  Secrets not explicitly pre-authorized for this application are never
+                  adopted or overwritten.
+                items:
+                  description: |-
+                    ApplicationSecretProjection selects a dedicated workload Secret that receives
+                    the confidential OIDC client secret under the client_secret key.
+                  properties:
+                    name:
+                      description: Name is the dedicated Secret name in the target
+                        namespace.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                      type: string
+                    namespace:
+                      description: Namespace is the workload namespace that receives
+                        the projected Secret.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - namespace
+                - name
+                x-kubernetes-list-type: map
+              identityMappings:
+                description: |-
+                  IdentityMappings maps claims received from an upstream OIDC identity provider
+                  to Keycloak realm roles, roles owned by this client, or user attributes.
+                  The mapper itself is realm-scoped in Keycloak but is lifecycle-owned by this application.
+                items:
+                  description: |-
+                    ApplicationIdentityMapping describes an inbound OIDC broker mapper owned by
+                    a HankoApplication.
+                  properties:
+                    claim:
+                      description: Claim is the upstream OIDC claim to inspect or
+                        import, for example "groups".
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    identityProvider:
+                      description: IdentityProvider is the Keycloak identity-provider
+                        alias, for example "entra".
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    keycloakName:
+                      description: |-
+                        KeycloakName explicitly adopts an existing mapper by name. When omitted,
+                        the operator derives an application-namespaced mapper name. Use this only
+                        for deliberate migration of a pre-existing mapper.
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    matchValue:
+                      description: |-
+                        MatchValue is required for role targets and is the exact claim value that
+                        grants the role. For array claims, Keycloak matches when the array contains it.
+                        It is omitted for userAttribute targets, which import the complete claim value.
+                      maxLength: 4096
+                      type: string
+                    name:
+                      description: |-
+                        Name is unique within this application and is used to derive a stable
+                        operator-owned Keycloak mapper name.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    syncMode:
+                      default: FORCE
+                      description: SyncMode controls updates when an already-linked
+                        user logs in again.
+                      enum:
+                      - IMPORT
+                      - FORCE
+                      - LEGACY
+                      - INHERIT
+                      type: string
+                    target:
+                      description: Target selects exactly one Keycloak destination.
+                      properties:
+                        clientRole:
+                          description: |-
+                            ClientRole grants a role owned by this HankoApplication. The role should
+                            also be declared in spec.roles.
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^[^\x00-\x1F\x7F]+$
+                          type: string
+                        realmRole:
+                          description: RealmRole grants an existing realm role when
+                            the claim matches.
+                          maxLength: 255
+                          type: string
+                        userAttribute:
+                          description: |-
+                            UserAttribute imports the upstream claim into this Keycloak user attribute.
+                            Because Keycloak users are realm-scoped, the persisted attribute is global;
+                            spec.tokenClaims controls which applications receive it in tokens.
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^[^\x00-\x1F\x7F]+$
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of realmRole, clientRole or userAttribute
+                          must be set
+                        rule: '(has(self.realmRole) ? 1 : 0) + (has(self.clientRole)
+                          ? 1 : 0) + (has(self.userAttribute) ? 1 : 0) == 1'
+                      - message: reserved platform, fleet and cluster roles cannot
+                          be granted by an application identity mapping
+                        rule: '!has(self.realmRole) || (self.realmRole != ''HANKO_PLATFORM''
+                          && !self.realmRole.startsWith(''HANKO_PLATFORM_'') && !self.realmRole.startsWith(''HANKO_FLEET_'')
+                          && !self.realmRole.startsWith(''HANKO_CLUSTER_''))'
+                  required:
+                  - claim
+                  - identityProvider
+                  - name
+                  - target
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              mode:
+                default: Manage
+                description: |-
+                  Mode controls the operator's write authority over the underlying Keycloak client.
+
+                  Manage: the operator creates, updates and deletes the client, and owns its
+                  lifecycle (client secret, roles, finalizer-gated deletion).
+
+                  Observe: the operator only reads the client to report status. It never creates,
+                  updates, or deletes the client in Keycloak, and never reads or stores its secret.
+                  Objects carrying the hanko.sh/imported-by label are always treated as Observe,
+                  regardless of this field, for backward compatibility with pre-existing imports.
+                enum:
+                - Manage
+                - Observe
+                type: string
+              postLogoutRedirectURIs:
+                description: PostLogoutRedirectURIs is the list of allowed URIs after
+                  logout.
+                items:
+                  maxLength: 2048
+                  minLength: 1
+                  pattern: ^[^\x00-\x1F\x7F]+$
+                  type: string
+                maxItems: 64
+                type: array
+              protocol:
+                default: oidc
+                description: |-
+                  Protocol defaults to OIDC for existing manifests. An owned client cannot
+                  change protocol without administrator-reviewed deletion and recreation.
+                enum:
+                - oidc
+                - saml
+                type: string
+              realmRef:
+                description: RealmRef references the HankoRealm this application belongs
+                  to.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+              realmRoleScopes:
+                description: |-
+                  RealmRoleScopes is the exact set of realm roles allowed into tokens issued
+                  to this client while Keycloak fullScopeAllowed remains disabled. When the
+                  field is omitted, existing realm-role scope mappings remain unmanaged.
+                items:
+                  maxLength: 255
+                  minLength: 1
+                  pattern: ^[^\x00-\x1F\x7F]+$
+                  type: string
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: set
+              redirectURIs:
+                description: RedirectURIs is the list of allowed redirect URIs after
+                  authentication.
+                items:
+                  maxLength: 255
+                  minLength: 1
+                  pattern: ^[^\x00-\x1F\x7F]+$
+                  type: string
+                maxItems: 64
+                type: array
+              roles:
+                description: |-
+                  Roles lists client roles to create in Keycloak alongside this application.
+                  Roles are scoped to this client and deleted automatically when the client is deleted.
+                items:
+                  description: ApplicationRole describes a Keycloak client role managed
+                    by the operator.
+                  properties:
+                    description:
+                      description: Description is an optional human-readable description.
+                      maxLength: 255
+                      type: string
+                    name:
+                      description: Name is the Keycloak client role name.
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+              runtimeBindings:
+                description: |-
+                  RuntimeBindings delivers proven application metadata and optional OIDC
+                  credentials to preauthorized, pre-existing workload targets. Manage only.
+                items:
+                  description: ApplicationRuntimeBinding identifies pre-existing workload-owned
+                    outputs.
+                  properties:
+                    credentials:
+                      description: ApplicationRuntimeCredentialTarget selects the
+                        optional client_secret output.
+                      properties:
+                        secretRef:
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                      required:
+                      - secretRef
+                      type: object
+                    name:
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    publicMetadata:
+                      description: ApplicationRuntimeMetadataTarget selects the identity.json
+                        ConfigMap.
+                      properties:
+                        configMapRef:
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                      required:
+                      - configMapRef
+                      type: object
+                    workload:
+                      description: ApplicationRuntimeWorkload is an authorization
+                        anchor, not workload federation.
+                      properties:
+                        namespace:
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        serviceAccountRef:
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                          type: string
+                      required:
+                      - namespace
+                      - serviceAccountRef
+                      type: object
+                  required:
+                  - name
+                  - publicMetadata
+                  - workload
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              saml:
+                description: SAML is the bounded SP-initiated contract. ClientID is
+                  the SP entity ID.
+                properties:
+                  assertionConsumerServices:
+                    description: |-
+                      AssertionConsumerServices is the exact set of HTTP-POST ACS destinations.
+                      HTTPS is required. Wildcards, userinfo, query and fragments are forbidden.
+                    items:
+                      maxLength: 255
+                      pattern: ^https://([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(:[0-9]{1,5})?(/[^\s?#@\\*]*)?$
+                      type: string
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: set
+                  nameIDFormat:
+                    default: persistent
+                    description: NameIDFormat is forced by the IdP independently of
+                      request preferences.
+                    enum:
+                    - persistent
+                    - transient
+                    - email
+                    - unspecified
+                    type: string
+                  requireSignedAssertions:
+                    default: true
+                    description: |-
+                      RequireSignedAssertions must be true. Response signing is also enforced.
+                      This field does not require SP-signed authentication requests.
+                    enum:
+                    - true
+                    type: boolean
+                required:
+                - assertionConsumerServices
+                type: object
+              secretRotationPolicy:
+                description: |-
+                  SecretRotationPolicy controls rotation for confidential web and m2m
+                  clients. It is ignored for public SPA clients and Observe-mode objects.
+                properties:
+                  enabled:
+                    description: Enabled activates automatic rotation.
+                    type: boolean
+                  forceRotateAt:
+                    description: ForceRotateAt, when set, triggers an immediate rotation
+                      on the next reconcile.
+                    format: date-time
+                    maxLength: 64
+                    type: string
+                  intervalDays:
+                    description: IntervalDays is the rotation period in days.
+                    minimum: 1
+                    type: integer
+                required:
+                - enabled
+                type: object
+              theme:
+                description: Theme references a HankoTheme to apply to this application's
+                  login page.
+                maxLength: 253
+                type: string
+              tokenClaims:
+                description: |-
+                  TokenClaims exposes a Keycloak user attribute or a fixed value as a claim only
+                  in tokens issued to this application. These are client-scoped protocol mappers.
+                items:
+                  description: |-
+                    ApplicationTokenClaim describes a client-scoped OIDC protocol mapper. Only
+                    the typed mapper forms below are supported; arbitrary Keycloak mapper
+                    implementations and reserved identity/authorization claims fail closed.
+                  properties:
+                    addToAccessToken:
+                      type: boolean
+                    addToIDToken:
+                      description: |-
+                        Token destinations default to true when omitted. Introspection defaults to
+                        the access-token setting.
+                      type: boolean
+                    addToIntrospection:
+                      type: boolean
+                    addToUserInfo:
+                      type: boolean
+                    claim:
+                      description: |-
+                        Claim is the claim name emitted in tokens. Dot notation creates nested claims.
+                        The reserved value "aud" with a fixed Value uses Keycloak's native Audience
+                        mapper so existing access-token audiences are preserved.
+                      maxLength: 255
+                      minLength: 1
+                      type: string
+                    jsonType:
+                      default: String
+                      description: JSONType controls conversion of the emitted value.
+                      enum:
+                      - String
+                      - long
+                      - int
+                      - boolean
+                      - JSON
+                      type: string
+                    keycloakName:
+                      description: |-
+                        KeycloakName explicitly adopts an existing client protocol mapper by name.
+                        When omitted, the operator derives a stable application-scoped name.
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    multivalued:
+                      description: Multivalued emits all values of a user attribute
+                        as an array.
+                      type: boolean
+                    name:
+                      description: Name is unique within this application.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    realmRolePrefix:
+                      description: |-
+                        RealmRolePrefix, when set, restricts and strips a prefix from the projected
+                        realm-role names. Only meaningful together with realmRoles.
+                      maxLength: 255
+                      pattern: ^[^\x00-\x1F\x7F]*$
+                      type: string
+                    realmRoles:
+                      description: |-
+                        RealmRoles projects the caller's realm roles into this claim as a
+                        multivalued array (Keycloak's realm-role user-model mapper). It is the
+                        substrate for hierarchical-org role projection (HKX-09): a member inherits
+                        realm roles from their organization group, and this claim carries them to
+                        the consuming application (e.g. Trunx reads "trunx_roles"). Exactly one of
+                        userAttribute, value or realmRoles must be set.
+                      type: boolean
+                    userAttribute:
+                      description: |-
+                        UserAttribute reads the value from a Keycloak user attribute.
+                        Exactly one of userAttribute and value must be set.
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    value:
+                      description: |-
+                        Value emits a fixed application-specific claim value. A pointer allows an
+                        explicitly configured empty string to remain distinguishable from omission.
+                      maxLength: 16384
+                      type: string
+                  required:
+                  - claim
+                  - name
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of userAttribute, value or realmRoles must
+                      be set
+                    rule: '[has(self.userAttribute), has(self.value), has(self.realmRoles)].exists_one(x,
+                      x)'
+                  - message: reserved identity and authorization claims cannot be
+                      overridden
+                    rule: self.claim != 'sub' && self.claim != 'iss' && self.claim
+                      != 'exp' && self.claim != 'iat' && self.claim != 'nbf' && self.claim
+                      != 'jti' && self.claim != 'azp' && self.claim != 'typ' && self.claim
+                      != 'sid' && self.claim != 'scope' && self.claim != 'session_state'
+                      && self.claim != 'nonce' && self.claim != 'auth_time' && self.claim
+                      != 'acr' && self.claim != 'amr' && self.claim != 'at_hash' &&
+                      self.claim != 'c_hash' && self.claim != 's_hash' && self.claim
+                      != 'client_id' && self.claim != 'hanko_token_use' && self.claim
+                      != 'realm_access' && !self.claim.startsWith('realm_access.')
+                      && self.claim != 'resource_access' && !self.claim.startsWith('resource_access.')
+                      && self.claim != 'authorization' && !self.claim.startsWith('authorization.')
+                      && self.claim != 'permissions' && !self.claim.startsWith('permissions.')
+                      && self.claim != 'https://hanko.sh/authorization' && !self.claim.startsWith('https://hanko.sh/authorization.')
+                      && self.claim != 'cnf' && !self.claim.startsWith('cnf.') &&
+                      self.claim != 'act' && !self.claim.startsWith('act.') && self.claim
+                      != 'may_act' && !self.claim.startsWith('may_act.') && self.claim
+                      != 'authorization_details' && !self.claim.startsWith('authorization_details.')
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              type:
+                description: Type is the application type.
+                enum:
+                - spa
+                - web
+                - m2m
+                type: string
+              webOrigins:
+                description: |-
+                  WebOrigins explicitly selects the native OIDC CORS entry set. Omission retains
+                  the legacy "+" default, which derives origins from redirect URIs. An
+                  explicit empty array disables CORS origins. HTTP(S) entries and "+"
+                  are accepted, including legacy callback paths and terminal path wildcards.
+                  Credentials, queries, fragments and wildcard authorities are rejected.
+                items:
+                  maxLength: 255
+                  minLength: 1
+                  pattern: ^(\+|https?://[^/?#@\s\\*]+(/[^?#@\s\\*]*)?(/\*)?)$
+                  type: string
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: set
+            required:
+            - clientID
+            - realmRef
+            type: object
+            x-kubernetes-validations:
+            - message: runtimeBindings require Manage mode
+              rule: '!has(self.runtimeBindings) || size(self.runtimeBindings) == 0
+                || !has(self.mode) || self.mode == ''Manage'''
+            - message: runtime credentials require confidential OIDC web or m2m clients
+              rule: '!has(self.runtimeBindings) || self.runtimeBindings.all(b, !has(b.credentials)
+                || ((!has(self.protocol) || self.protocol == ''oidc'') && (!has(self.type)
+                || self.type == ''web'' || self.type == ''m2m'')))'
+            - message: clientSecretProjections require a confidential web or m2m client
+              rule: '!has(self.clientSecretProjections) || size(self.clientSecretProjections)
+                == 0 || (has(self.type) && (self.type == ''web'' || self.type == ''m2m''))'
+            - message: clientSecretProjections require Manage mode
+              rule: '!has(self.clientSecretProjections) || !has(self.mode) || self.mode
+                != ''Observe'''
+            - message: built-in Keycloak clients cannot be managed as HankoApplication
+              rule: self.clientID.trim() != 'account' && self.clientID.trim() != 'account-console'
+                && self.clientID.trim() != 'admin-cli' && self.clientID.trim() !=
+                'broker' && self.clientID.trim() != 'realm-management' && self.clientID.trim()
+                != 'security-admin-console'
+            - message: saml configuration is required only for protocol saml
+              rule: '(!has(self.protocol) || self.protocol == ''oidc'') ? !has(self.saml)
+                : has(self.saml)'
+            - message: SAML rejects OIDC types, callbacks, claims, mappings, scopes,
+                rotation and secret projections
+              rule: '!has(self.protocol) || self.protocol != ''saml'' || (!has(self.type)
+                && !has(self.webOrigins) && (!has(self.redirectURIs) || size(self.redirectURIs)
+                == 0) && (!has(self.postLogoutRedirectURIs) || size(self.postLogoutRedirectURIs)
+                == 0) && (!has(self.tokenClaims) || size(self.tokenClaims) == 0) &&
+                (!has(self.identityMappings) || size(self.identityMappings) == 0)
+                && !has(self.realmRoleScopes) && !has(self.secretRotationPolicy) &&
+                (!has(self.clientSecretProjections) || size(self.clientSecretProjections)
+                == 0))'
+            - message: native attributes cannot override protocol, SAML, ownership
+                or managed theme/logout settings
+              rule: '!has(self.attributes) || self.attributes.all(k, !k.matches(''(?i)^(saml|hanko[.]).*'')
+                && !k.matches(''(?i)^(protocol|login_theme|post[.]logout[.]redirect[.]uris)$'')
+                && !k.matches(''(?i).*(private|password|secret|credential|access_token|bearer).*''))'
+          status:
+            description: HankoApplicationStatus describes the observed state of the
+              application.
+            properties:
+              adoptionCandidate:
+                description: AdoptionCandidate is bounded review evidence, never execution
+                  authority.
+                properties:
+                  approvable:
+                    type: boolean
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  complete:
+                    type: boolean
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  diff:
+                    items:
+                      properties:
+                        classification:
+                          enum:
+                          - supported-typed-native
+                          - preserved-readonly-native
+                          - unsupported
+                          - conflicting
+                          - security-sensitive-excluded
+                          type: string
+                        code:
+                          enum:
+                          - equal
+                          - would-manage
+                          - would-change
+                          - would-preserve
+                          - provider-native-readonly
+                          - unsupported
+                          - credential-excluded
+                          - recreation-required
+                          - ownership-transition
+                          type: string
+                        current:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        desired:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        domain:
+                          maxLength: 64
+                          type: string
+                        field:
+                          maxLength: 64
+                          type: string
+                        identity:
+                          maxLength: 128
+                          type: string
+                        object:
+                          maxLength: 255
+                          type: string
+                        roundTrip:
+                          enum:
+                          - lossless-represented
+                          - preserved-native
+                          - lossy
+                          - unsupported
+                          type: string
+                      required:
+                      - classification
+                      - code
+                      - domain
+                      - field
+                      - identity
+                      - object
+                      - roundTrip
+                      type: object
+                    maxItems: 256
+                    type: array
+                  diffHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  findings:
+                    items:
+                      properties:
+                        blocking:
+                          type: boolean
+                        code:
+                          maxLength: 512
+                          type: string
+                        domain:
+                          maxLength: 64
+                          type: string
+                        message:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - blocking
+                      - code
+                      - domain
+                      - message
+                      type: object
+                    maxItems: 32
+                    type: array
+                  observationHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  providerIdentity:
+                    description: AdoptionProviderIdentity excludes AdminRef, credentials
+                      and credential hashes.
+                    properties:
+                      caIdentity:
+                        description: CAIdentity binds the public trust bundle and
+                          Secret UID.
+                        maxLength: 255
+                        type: string
+                      caReference:
+                        maxLength: 255
+                        type: string
+                      instance:
+                        description: AdoptionTargetIdentity identifies a current object,
+                          never write authority.
+                        properties:
+                          generation:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          importRef:
+                            description: ImportRef binds the discovery latch without
+                              consuming it.
+                            maxLength: 255
+                            type: string
+                          kind:
+                            maxLength: 64
+                            type: string
+                          name:
+                            maxLength: 255
+                            type: string
+                          namespace:
+                            maxLength: 255
+                            type: string
+                          tenantRef:
+                            description: TenantRef binds connection-selecting target
+                              metadata without acquiring it.
+                            maxLength: 255
+                            type: string
+                          uid:
+                            maxLength: 128
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - namespace
+                        - uid
+                        type: object
+                      objectIDs:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 512
+                        type: array
+                        x-kubernetes-list-type: set
+                      origin:
+                        maxLength: 2048
+                        type: string
+                      realmID:
+                        maxLength: 128
+                        type: string
+                      trust:
+                        description: Unknown is reserved for incomplete diagnostic
+                          evidence.
+                        enum:
+                        - public-ca
+                        - private-ca
+                        - explicit-http
+                        - unknown
+                        type: string
+                    required:
+                    - instance
+                    - origin
+                    - realmID
+                    - trust
+                    type: object
+                  target:
+                    description: AdoptionTargetIdentity identifies a current object,
+                      never write authority.
+                    properties:
+                      generation:
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      importRef:
+                        description: ImportRef binds the discovery latch without consuming
+                          it.
+                        maxLength: 255
+                        type: string
+                      kind:
+                        maxLength: 64
+                        type: string
+                      name:
+                        maxLength: 255
+                        type: string
+                      namespace:
+                        maxLength: 255
+                        type: string
+                      tenantRef:
+                        description: TenantRef binds connection-selecting target metadata
+                          without acquiring it.
+                        maxLength: 255
+                        type: string
+                      uid:
+                        maxLength: 128
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - namespace
+                    - uid
+                    type: object
+                  truncated:
+                    type: boolean
+                required:
+                - approvable
+                - candidateHash
+                - complete
+                - contractVersion
+                - diffHash
+                - observationHash
+                - providerIdentity
+                - target
+                - truncated
+                type: object
+              adoptionReceipt:
+                description: |-
+                  AdoptionReceiptStatus reports a live provider checkpoint, never write or
+                  deletion authority. A failed status update can be recovered from the provider.
+                properties:
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  state:
+                    enum:
+                    - Pending
+                    - Verified
+                    - Partial
+                    - Conflict
+                    type: string
+                required:
+                - candidateHash
+                - contractVersion
+                - state
+                type: object
+              appliedGeneration:
+                description: |-
+                  AppliedGeneration is the latest Manage generation proven by matching
+                  provider read-back. Observe clears applied evidence and cannot advance it.
+                format: int64
+                minimum: 0
+                type: integer
+              appliedPlanHash:
+                description: |-
+                  AppliedPlanHash identifies the latest Manage plan proven by matching read-back.
+                  Observe clears applied evidence and cannot claim provider application.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              backendKind:
+                maxLength: 32
+                type: string
+              capabilities:
+                description: ApplicationCapabilitySnapshot names qualified application
+                  semantics only.
+                properties:
+                  clientRoles:
+                    type: boolean
+                  confidentialClient:
+                    type: boolean
+                  oidc:
+                    type: boolean
+                  protocolMappers:
+                    type: boolean
+                  publicClient:
+                    type: boolean
+                  saml:
+                    type: boolean
+                  samlACS:
+                    type: boolean
+                  samlAssertionSigning:
+                    type: boolean
+                  samlMetadata:
+                    type: boolean
+                  samlResponseSigning:
+                    type: boolean
+                required:
+                - clientRoles
+                - confidentialClient
+                - oidc
+                - protocolMappers
+                - publicClient
+                - saml
+                - samlACS
+                - samlAssertionSigning
+                - samlMetadata
+                - samlResponseSigning
+                type: object
+              capabilityEvidence:
+                description: CapabilityEvidence names static adapter qualification,
+                  not runtime discovery.
+                properties:
+                  qualificationWindow:
+                    maxLength: 64
+                    type: string
+                  source:
+                    maxLength: 64
+                    type: string
+                type: object
+              clientSecret:
+                description: |-
+                  ClientSecret references the K8s Secret holding the OIDC client secret.
+                  Only set for confidential clients (web, m2m).
+                properties:
+                  secretRef:
+                    description: SecretKeySelector selects a key of a Secret.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        maxLength: 253
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        maxLength: 253
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretRef
+                type: object
+              conditions:
+                description: Conditions holds standard Kubernetes condition objects.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              contractVersion:
+                description: ContractVersion identifies canonical evidence semantics,
+                  not an executable API.
+                maxLength: 64
+                type: string
+              driftState:
+                description: |-
+                  DriftState is the comparison for ObservationPlanHash. Failure conditions
+                  describe the current attempt; an older observation is historical evidence.
+                enum:
+                - Unknown
+                - InSync
+                - Drifted
+                type: string
+              evaluatedGeneration:
+                description: |-
+                  EvaluatedGeneration is the latest generation whose execution semantics
+                  were fully evaluated or definitively refused. It does not prove application.
+                format: int64
+                minimum: 0
+                type: integer
+              evaluatedPlanHash:
+                description: |-
+                  EvaluatedPlanHash identifies the locally compiled provider-bound plan.
+                  It is absent for rejected evaluation and is never execution authority.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              findings:
+                items:
+                  description: AuthorizationFinding is a machine-readable portability
+                    or provider-native gap.
+                  properties:
+                    classification:
+                      enum:
+                      - lossless
+                      - lossy
+                      - unsupported
+                      type: string
+                    code:
+                      maxLength: 64
+                      type: string
+                    message:
+                      maxLength: 256
+                      type: string
+                    objectKind:
+                      maxLength: 64
+                      type: string
+                    objectName:
+                      maxLength: 255
+                      type: string
+                    readOnly:
+                      type: boolean
+                  required:
+                  - classification
+                  - code
+                  - message
+                  - objectKind
+                  - objectName
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - classification
+                - objectKind
+                - objectName
+                - code
+                x-kubernetes-list-type: map
+              intentHash:
+                description: IntentHash identifies normalized portable semantics of
+                  EvaluatedGeneration.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              lastReconciled:
+                description: LastReconciled is the timestamp of the last successful
+                  reconciliation.
+                format: date-time
+                maxLength: 64
+                type: string
+              lastRotated:
+                description: LastRotated is the timestamp of the last confidential
+                  client secret rotation.
+                format: date-time
+                maxLength: 64
+                type: string
+              managedClientSecretProjections:
+                description: |-
+                  ManagedClientSecretProjections records the exact workload Secrets whose
+                  client_secret value is lifecycle-managed by this application.
+                items:
+                  description: |-
+                    ApplicationSecretProjection selects a dedicated workload Secret that receives
+                    the confidential OIDC client secret under the client_secret key.
+                  properties:
+                    name:
+                      description: Name is the dedicated Secret name in the target
+                        namespace.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                      type: string
+                    namespace:
+                      description: Namespace is the workload namespace that receives
+                        the projected Secret.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                maxItems: 128
+                type: array
+                x-kubernetes-list-map-keys:
+                - namespace
+                - name
+                x-kubernetes-list-type: map
+              managedIdentityMappings:
+                description: |-
+                  ManagedIdentityMappings records realm-scoped identity-provider mappers
+                  lifecycle-owned by this application.
+                items:
+                  description: |-
+                    ManagedIdentityMappingReference reports the desired identity-provider mapper's
+                    reconciliation state. KeycloakID is set once the operator owns an external mapper.
+                  properties:
+                    conditions:
+                      description: Conditions reports this mapper's individual reconciliation
+                        state.
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            maxLength: 64
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      maxItems: 32
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
+                    identityProvider:
+                      maxLength: 255
+                      type: string
+                    keycloakID:
+                      maxLength: 128
+                      type: string
+                    name:
+                      maxLength: 63
+                      type: string
+                  required:
+                  - identityProvider
+                  - keycloakID
+                  - name
+                  type: object
+                maxItems: 128
+                type: array
+              managedTokenClaims:
+                description: ManagedTokenClaims records client-scoped protocol mappers
+                  managed for this application.
+                items:
+                  description: |-
+                    ManagedTokenClaimReference reports the desired client protocol mapper's
+                    reconciliation state. KeycloakID is set once the operator owns an external mapper.
+                  properties:
+                    conditions:
+                      description: Conditions reports this mapper's individual reconciliation
+                        state.
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            maxLength: 64
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      maxItems: 32
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
+                    keycloakID:
+                      maxLength: 128
+                      type: string
+                    name:
+                      maxLength: 63
+                      type: string
+                  required:
+                  - keycloakID
+                  - name
+                  type: object
+                maxItems: 128
+                type: array
+              nextRotation:
+                description: NextRotation is the next scheduled secret rotation, when
+                  configured.
+                format: date-time
+                maxLength: 64
+                type: string
+              observationComplete:
+                description: |-
+                  ObservationComplete distinguishes full supported-contract read-back from
+                  partial coverage. A partial observation can prove drift but never equality.
+                type: boolean
+              observationGeneration:
+                description: |-
+                  ObservationGeneration and ObservationPlanHash bind the latest successful
+                  bounded read to its evaluated input. They remain unchanged on read failure.
+                format: int64
+                minimum: 0
+                type: integer
+              observationPlanHash:
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the latest metadata.generation processed into status.
+                  AppliedGeneration separately proves successful execution and read-back.
+                format: int64
+                type: integer
+              observedStateHash:
+                description: |-
+                  ObservedStateHash identifies safe normalized provider semantics, including
+                  observation coverage. It is neither an intent/plan identity nor a provider ID.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              oidcEndpoints:
+                description: OIDCEndpoints holds the Keycloak OIDC endpoint URLs for
+                  this application.
+                properties:
+                  authorization:
+                    maxLength: 4096
+                    type: string
+                  issuer:
+                    maxLength: 4096
+                    type: string
+                  jwks:
+                    maxLength: 4096
+                    type: string
+                  token:
+                    maxLength: 4096
+                    type: string
+                  userInfo:
+                    maxLength: 4096
+                    type: string
+                type: object
+              phase:
+                description: Phase summarises the reconciliation state.
+                enum:
+                - Pending
+                - Reconciling
+                - Ready
+                - Error
+                - Conflict
+                type: string
+              protocol:
+                description: |-
+                  Protocol is the actual protocol detected by a successful provider read.
+                  A mismatch is reported; this field never authorizes protocol conversion.
+                enum:
+                - oidc
+                - saml
+                - unsupported
+                type: string
+              runtimeBindings:
+                description: RuntimeBindings records bounded delivery evidence, never
+                  write authority.
+                items:
+                  description: ApplicationRuntimeBindingStatus contains public delivery
+                    evidence only.
+                  properties:
+                    bindingRevision:
+                      maxLength: 71
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
+                    conditions:
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            maxLength: 64
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      maxItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
+                    configMapRef:
+                      maxLength: 253
+                      type: string
+                    metadataHash:
+                      maxLength: 71
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
+                    name:
+                      maxLength: 63
+                      type: string
+                    namespace:
+                      maxLength: 63
+                      type: string
+                    secretRef:
+                      maxLength: 253
+                      type: string
+                    serviceAccountRef:
+                      maxLength: 253
+                      type: string
+                    serviceAccountUID:
+                      maxLength: 128
+                      type: string
+                    sourceAppliedPlanHash:
+                      maxLength: 71
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
+                    sourceGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                  required:
+                  - configMapRef
+                  - name
+                  - namespace
+                  - serviceAccountRef
+                  type: object
+                  x-kubernetes-validations:
+                  - message: runtime delivery conditions must be bounded Ready evidence
+                    rule: '!has(self.conditions) || self.conditions.all(c, size(c.message)
+                      <= 256 && c.type == ''Ready'')'
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              samlEndpoints:
+                description: SAMLEndpoints is absent for OIDC applications. No full
+                  XML is stored.
+                properties:
+                  issuer:
+                    maxLength: 2048
+                    type: string
+                  metadata:
+                    maxLength: 2048
+                    type: string
+                  responseBinding:
+                    enum:
+                    - urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST
+                    type: string
+                  sso:
+                    maxLength: 2048
+                    type: string
+                required:
+                - issuer
+                - metadata
+                - responseBinding
+                - sso
+                type: object
+            type: object
+        type: object
+    selectableFields:
+    - jsonPath: .spec.realmRef
+    served: true
+    storage: true
+    subresources:
+      status: {}

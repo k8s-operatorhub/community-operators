@@ -8,6 +8,7 @@ on:
 
 permissions:
   actions: read
+  contents: read
   issues: write
   pull-requests: write
 
@@ -19,104 +20,64 @@ jobs:
   pr:
     runs-on: ubuntu-latest
     steps:
-
-      - name: 'Download artifact'
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Validate triggering pull request
+        id: validate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          script: |
-            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               run_id: ${{github.event.workflow_run.id }},
-            });
-            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
-              return artifact.name == "pr"
-            })[0];
-            var download = await github.rest.actions.downloadArtifact({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               artifact_id: matchArtifact.id,
-               archive_format: 'zip',
-            });
-            var fs = require('fs');
-            fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
-      - run: unzip -o pr.zip -d pr_data
-      - name: 'Read PR number'
-        id: pr-number
-        run: |
-          PR=$(tr -dc [0-9] <./pr_data/NR)
-          [ -z "$PR" ] && echo "Invalid PR number" && exit 1
-          echo "pr=${PR}" >> $GITHUB_OUTPUT
-          [ -f ./pr_data/CI_YAML_ONLY ] && echo "ci_yaml_only=$(cat ./pr_data/CI_YAML_ONLY)" >> $GITHUB_OUTPUT || echo "ci_yaml_only=0" >> $GITHUB_OUTPUT
-
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        id: pr-labels
-        continue-on-error: true
-        with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: | 
-            const labels = await github.rest.issues.listLabelsOnIssue({
-              issue_number: ${{ steps.pr-number.outputs.pr }},
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            })
-            return labels.data
+          script: |
+            const { resolveTrustedPullRequest } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/workflow-run-security.js`
+            );
+            const result = await resolveTrustedPullRequest({
+              github,
+              context,
+              expectedWorkflowName: "Operator test",
+            });
+            core.setOutput("pr", result.number);
+            core.setOutput("head_sha", result.headSha);
     outputs:
-      pr: "${{ steps.pr-number.outputs.pr }}"
-      ci_yaml_only: "${{ steps.pr-number.outputs.ci_yaml_only }}"
+      pr: "${{ steps.validate.outputs.pr }}"
+      head_sha: "${{ steps.validate.outputs.head_sha }}"
 
   post-comments:
     runs-on: ubuntu-latest
-    if: always()
+    if: needs.pr.result == 'success'
     needs: [pr]
     steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
       - name: 'Download and post PR comments from artifacts'
-        if: needs.pr.outputs.pr != '0'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         continue-on-error: true
         env:
           PR: "${{ needs.pr.outputs.pr }}"
+          RUN_ID: "${{ github.event.workflow_run.id }}"
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = require('path');
-            const { execSync } = require('child_process');
-
-            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner, repo: context.repo.repo,
-              run_id: ${{ github.event.workflow_run.id }},
+            const { postWorkflowComments } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/workflow-run-security.js`
+            );
+            await postWorkflowComments({
+              github,
+              context,
+              prNumber: Number(process.env.PR),
+              runId: Number(process.env.RUN_ID),
+              workspace: process.env.GITHUB_WORKSPACE,
             });
-
-            for (const name of ['pr_comments', 'pr_comments_test']) {
-              const match = artifacts.data.artifacts.find(a => a.name === name);
-              if (!match) continue;
-              const dl = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner, repo: context.repo.repo,
-                artifact_id: match.id, archive_format: 'zip',
-              });
-              fs.writeFileSync(`${name}.zip`, Buffer.from(dl.data));
-              execSync(`unzip -o ${name}.zip -d comments`);
-            }
-
-            const dir = './comments';
-            if (fs.existsSync(dir)) {
-              for (const file of fs.readdirSync(dir).sort()) {
-                if (!file.endsWith('.md')) continue;
-                const body = fs.readFileSync(path.join(dir, file), 'utf8').trim();
-                if (!body) continue;
-                await github.rest.issues.createComment({
-                  issue_number: parseInt(process.env.PR),
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body,
-                });
-              }
-            }
 
   on-success:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success' && needs.pr.result == 'success'
     needs: [pr]
     steps:
 
@@ -199,7 +160,7 @@ jobs:
 
   on-failure:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'failure'
+    if: github.event.workflow_run.conclusion == 'failure' && needs.pr.result == 'success'
     needs: [pr]
     steps:
       - name: "Removing package-validated label"

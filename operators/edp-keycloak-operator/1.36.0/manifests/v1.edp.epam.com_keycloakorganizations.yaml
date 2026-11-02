@@ -1,0 +1,222 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  creationTimestamp: null
+  name: keycloakorganizations.v1.edp.epam.com
+spec:
+  group: v1.edp.epam.com
+  names:
+    kind: KeycloakOrganization
+    listKind: KeycloakOrganizationList
+    plural: keycloakorganizations
+    singular: keycloakorganization
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Reconciliation status
+      jsonPath: .status.value
+      name: Status
+      type: string
+    - description: Keycloak organization ID
+      jsonPath: .status.organizationId
+      name: Organization ID
+      type: string
+    - description: Keycloak realm name
+      jsonPath: .spec.realmName
+      name: Realm
+      type: string
+    - description: Keycloak instance name
+      jsonPath: .spec.keycloakRef.name
+      name: Keycloak
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KeycloakOrganization is the Schema for the organizations API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: KeycloakOrganizationSpec defines the desired state of Organization.
+            properties:
+              alias:
+                description: |-
+                  Alias is the unique alias for the organization.
+                  The alias should be unique across Organizations.
+                  Alias is immutable after creation.
+                type: string
+                x-kubernetes-validations:
+                - message: alias is immutable
+                  rule: self == oldSelf
+              attributes:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: Attributes is a map of custom attributes for the organization.
+                nullable: true
+                type: object
+              description:
+                description: Description is an optional description of the organization.
+                type: string
+              domains:
+                description: |-
+                  Domains is a list of email domains associated with the organization.
+                  Each domain should be unique across Organizations.
+
+                  Deprecated: Use DomainsV2 instead. The operator copies domains to domainsV2 once and then
+                  reads only domainsV2; later edits of domains are ignored.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              domainsV2:
+                description: |-
+                  DomainsV2 is a list of email domains associated with the organization, with per-domain settings.
+                  Each domain should be unique across Organizations.
+                  Settings left out keep the value stored in Keycloak.
+                items:
+                  description: OrgDomain defines an email domain of an organization.
+                  properties:
+                    autoRedirect:
+                      description: |-
+                        AutoRedirect sends users of the domain to identityProviderAlias at login.
+                        Requires Keycloak 26.8 or later. Has no effect without identityProviderAlias.
+                        Omitted: the value stored in Keycloak is kept.
+                      type: boolean
+                    identityProviderAlias:
+                      description: |-
+                        IdentityProviderAlias routes users of the domain to an identity provider.
+                        Requires Keycloak 26.8 or later. Must be the alias of an entry of spec.identityProviders.
+                        Omitted: the value stored in Keycloak is kept. Empty string: the routing is cleared.
+                      type: string
+                    name:
+                      description: Name is the domain name.
+                      minLength: 1
+                      type: string
+                    verified:
+                      description: 'Verified marks the domain as verified. Omitted:
+                        the value stored in Keycloak is kept.'
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                minItems: 1
+                type: array
+              identityProviders:
+                description: |-
+                  IdentityProviders is a list of identity providers associated with the organization.
+                  Before Keycloak 26.8 an identity provider belongs to one organization only; from 26.8 it can belong to several.
+                  Omit the field to leave the organization's identity provider links unmanaged; set it to an empty list to
+                  unlink every identity provider.
+                  A list links exactly the listed identity providers and unlinks the rest.
+                items:
+                  description: OrgIdentityProvider defines an identity provider for
+                    an organization.
+                  properties:
+                    alias:
+                      description: Alias is the unique identifier for the identity
+                        provider within the organization.
+                      type: string
+                    autoMembership:
+                      description: |-
+                        AutoMembership makes users who authenticate through the identity provider members of the organization.
+                        Requires Keycloak 26.8 or later. Omitted: the value stored in Keycloak is kept.
+                      type: boolean
+                    membershipType:
+                      description: |-
+                        MembershipType is MANAGED or UNMANAGED. MANAGED requires autoMembership true, and only one
+                        organization can hold MANAGED for an identity provider.
+                        Requires Keycloak 26.8 or later. Omitted: the value stored in Keycloak is kept.
+                      enum:
+                      - MANAGED
+                      - UNMANAGED
+                      type: string
+                  required:
+                  - alias
+                  type: object
+                nullable: true
+                type: array
+              name:
+                description: |-
+                  Name is the unique name of the organization.
+                  The name should be unique across Organizations.
+                type: string
+              realmRef:
+                description: RealmRef is reference to Realm custom resource.
+                properties:
+                  kind:
+                    default: KeycloakRealm
+                    description: Kind specifies the kind of the Keycloak resource.
+                    enum:
+                    - KeycloakRealm
+                    - ClusterKeycloakRealm
+                    type: string
+                  name:
+                    description: Name specifies the name of the Keycloak resource.
+                    type: string
+                required:
+                - name
+                type: object
+              redirectUrl:
+                description: RedirectURL is the optional redirect URL for the organization.
+                type: string
+            required:
+            - alias
+            - name
+            - realmRef
+            type: object
+            x-kubernetes-validations:
+            - message: one of domains or domainsV2 must be set
+              rule: has(self.domains) || has(self.domainsV2)
+          status:
+            description: KeycloakOrganizationStatus defines the observed state of
+              Organization.
+            properties:
+              error:
+                description: |-
+                  Error is the error message if the reconciliation failed.
+
+                  Deprecated: Not written by the operator; status.value holds the error message.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the generation last successfully
+                  reconciled to Keycloak.
+                format: int64
+                type: integer
+              organizationId:
+                description: OrganizationID is the unique identifier of the organization
+                  in Keycloak.
+                type: string
+              value:
+                description: Value contains the current reconciliation status.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

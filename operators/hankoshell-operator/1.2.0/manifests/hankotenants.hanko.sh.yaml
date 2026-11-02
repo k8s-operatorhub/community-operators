@@ -1,0 +1,557 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankotenants.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoTenant
+    listKind: HankoTenantList
+    plural: hankotenants
+    shortNames:
+    - ht2
+    singular: hankotenant
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.hubTenantID
+      name: TenantID
+      type: string
+    - jsonPath: .status.bundleVersion
+      name: Bundle
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HankoTenant represents a registered SaaS tenant synced from hankoShell
+          Hub.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: HankoTenantSpec defines the desired state of a tenant.
+            properties:
+              clusterName:
+                description: |-
+                  ClusterName is the optional human-readable cluster name sent at initial
+                  enrollment. It does not rename an existing Hub identity. The cluster UID
+                  is discovered from the kube-system Namespace, never supplied by a user.
+                maxLength: 80
+                minLength: 1
+                type: string
+              hubEndpoint:
+                default: https://hub.hanko.sh
+                description: HubEndpoint is the hankoShell Hub base URL. Must be an
+                  HTTPS URL.
+                maxLength: 2048
+                pattern: ^https://[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?(:[0-9]+)?(/[^\s]*)?$
+                type: string
+              hubEnrollSecretRef:
+                description: |-
+                  HubEnrollSecretRef points to a Secret with key enroll_token holding a
+                  single-use hankoShell Hub enrollment token. When the hub token Secret is
+                  absent and no cluster identity is known, the operator exchanges this token
+                  for a bounded credential that never leaves the cluster.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              hubEnrollmentEndpoint:
+                description: |-
+                  HubEnrollmentEndpoint is the public, bootstrap-only Hub base URL used to
+                  exchange a single-use enrollment token. When omitted, HubEndpoint is used
+                  for backward compatibility. Bundle and status traffic always use
+                  HubEndpoint, which may therefore be a private Continuum address.
+                maxLength: 2048
+                pattern: ^https://[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?(:[0-9]+)?(/[^\s]*)?$
+                type: string
+              hubTenantID:
+                description: |-
+                  HubTenantID is the tenant identifier assigned by hankoShell Hub. May be
+                  left empty when HubEnrollSecretRef is set: it is then learned during
+                  enrollment and stored alongside the bounded operator credential.
+                maxLength: 128
+                pattern: ^[^\x00-\x1F\x7F]*$
+                type: string
+              hubTokenSecretRef:
+                description: |-
+                  HubTokenSecretRef points to the Secret holding hub_token, tenant_id,
+                  cluster_id and expires_at. The operator rotates this bounded credential
+                  transactionally. When the Secret does not exist and HubEnrollSecretRef is
+                  set, the operator creates it at enrollment only if status.clusterID is
+                  also absent. A known identity requires credential recovery, not enrollment.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              hubTransport:
+                default: direct
+                description: |-
+                  HubTransport declares the authenticated network transport used for Hub
+                  bundle and status synchronization. It is reported in fleet heartbeats so
+                  the public operator route is not closed before every spoke has migrated.
+                  Empty is treated as direct for backward compatibility with existing CRs.
+                enum:
+                - direct
+                - continuum
+                type: string
+              isolationMode:
+                default: realm
+                description: IsolationMode defines how Keycloak resources are isolated
+                  for this tenant.
+                enum:
+                - realm
+                - keycloak
+                - cluster
+                type: string
+              keycloakSecretRef:
+                description: |-
+                  KeycloakSecretRef points to a Secret with keys HANKO_KEYCLOAK_URL,
+                  HANKO_KC_CLIENT_ID, HANKO_KC_CLIENT_SECRET for dedicated Keycloak instances.
+                  Required for keycloak and cluster isolation modes.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              realmRef:
+                description: RealmRef is the HankoRealm name for realm-mode isolation.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+            required:
+            - hubTokenSecretRef
+            type: object
+          status:
+            description: HankoTenantStatus describes the observed state of the tenant.
+            properties:
+              bundleVersion:
+                description: BundleVersion is the version of the last successfully
+                  applied bundle.
+                maxLength: 128
+                type: string
+              clusterID:
+                maxLength: 128
+                type: string
+              conditions:
+                description: Conditions holds standard Kubernetes condition objects.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              connectedHub:
+                description: ConnectedHub is the Hub endpoint this tenant is currently
+                  syncing from.
+                maxLength: 2048
+                type: string
+              fleetPlan:
+                description: |-
+                  FleetPlan is the durable signed-plan high-water mark. Its presence forbids
+                  legacy HMAC fallback, including after restart or trust configuration loss.
+                properties:
+                  appliedIdentity:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  cache:
+                    description: FleetPlanReference binds an immutable envelope to
+                      its acknowledged acceptance.
+                    properties:
+                      acceptedAt:
+                        format: date-time
+                        maxLength: 64
+                        type: string
+                      identity:
+                        maxLength: 71
+                        pattern: ^sha256:[a-f0-9]{64}$
+                        type: string
+                      name:
+                        maxLength: 63
+                        minLength: 1
+                        type: string
+                      sequence:
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      uid:
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - acceptedAt
+                    - identity
+                    - name
+                    - sequence
+                    - uid
+                    type: object
+                  expired:
+                    type: boolean
+                  expiresAt:
+                    format: date-time
+                    maxLength: 64
+                    type: string
+                  hubEndpointHash:
+                    description: HubEndpointHash pins the last locally accepted credential
+                      destination.
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  identity:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  journal:
+                    description: |-
+                      Journal retains the last sixteen accepted transitions, not provider
+                      completion attestations. Superseded objects are never pruned by rollback.
+                    items:
+                      properties:
+                        acceptedAt:
+                          format: date-time
+                          maxLength: 64
+                          type: string
+                        identity:
+                          maxLength: 71
+                          pattern: ^sha256:[a-f0-9]{64}$
+                          type: string
+                        rollbackOf:
+                          maxLength: 71
+                          pattern: ^sha256:[a-f0-9]{64}$
+                          type: string
+                        sequence:
+                          format: int64
+                          minimum: 1
+                          type: integer
+                      required:
+                      - acceptedAt
+                      - identity
+                      - sequence
+                      type: object
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  keyID:
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  previousCache:
+                    description: FleetPlanReference binds an immutable envelope to
+                      its acknowledged acceptance.
+                    properties:
+                      acceptedAt:
+                        format: date-time
+                        maxLength: 64
+                        type: string
+                      identity:
+                        maxLength: 71
+                        pattern: ^sha256:[a-f0-9]{64}$
+                        type: string
+                      name:
+                        maxLength: 63
+                        minLength: 1
+                        type: string
+                      sequence:
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      uid:
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - acceptedAt
+                    - identity
+                    - name
+                    - sequence
+                    - uid
+                    type: object
+                  previousIdentity:
+                    description: |-
+                      PreviousIdentity is evidence only; rollback also requires a retained,
+                      independently reverified envelope and a new monotonic signed plan.
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  rollbackReference:
+                    description: FleetPlanReference binds an immutable envelope to
+                      its acknowledged acceptance.
+                    properties:
+                      acceptedAt:
+                        format: date-time
+                        maxLength: 64
+                        type: string
+                      identity:
+                        maxLength: 71
+                        pattern: ^sha256:[a-f0-9]{64}$
+                        type: string
+                      name:
+                        maxLength: 63
+                        minLength: 1
+                        type: string
+                      sequence:
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      uid:
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - acceptedAt
+                    - identity
+                    - name
+                    - sequence
+                    - uid
+                    type: object
+                  sequence:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  tenantUID:
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  verifiedAt:
+                    description: |-
+                      VerifiedAt detects wall-clock regression across restarts. Expired is
+                      sticky for this identity; moving the clock back cannot revive it.
+                    format: date-time
+                    maxLength: 64
+                    type: string
+                required:
+                - expiresAt
+                - identity
+                - keyID
+                - sequence
+                - tenantUID
+                type: object
+              fleetRollout:
+                description: FleetRollout is bounded delivery evidence, not provider
+                  convergence.
+                properties:
+                  applied:
+                    format: int32
+                    maximum: 200
+                    minimum: 0
+                    type: integer
+                  findings:
+                    items:
+                      properties:
+                        index:
+                          description: Index is the zero-based position in the fixed
+                            kind-array order.
+                          format: int32
+                          maximum: 199
+                          minimum: 0
+                          type: integer
+                        reason:
+                          enum:
+                          - FleetCapabilityUnsupported
+                          - FleetPermissionDenied
+                          - FleetDependencyRefused
+                          - FleetCapabilityInventoryUnavailable
+                          type: string
+                      required:
+                      - index
+                      - reason
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - index
+                    x-kubernetes-list-type: map
+                  identity:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  omitted:
+                    format: int32
+                    maximum: 200
+                    minimum: 0
+                    type: integer
+                  pending:
+                    format: int32
+                    maximum: 200
+                    minimum: 0
+                    type: integer
+                  refused:
+                    format: int32
+                    maximum: 200
+                    minimum: 0
+                    type: integer
+                  selectionHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  sequence:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  state:
+                    enum:
+                    - Pending
+                    - Applied
+                    - Partial
+                    - Refused
+                    - Paused
+                    type: string
+                required:
+                - applied
+                - observedGeneration
+                - omitted
+                - pending
+                - refused
+                - state
+                type: object
+                x-kubernetes-validations:
+                - message: rollout evidence exceeds the plan object budget
+                  rule: self.applied + self.refused + self.pending <= 200
+              lastReconciled:
+                description: LastReconciled is the timestamp of the last reconciliation
+                  attempt.
+                format: date-time
+                maxLength: 64
+                type: string
+              lastSync:
+                description: LastSync is the timestamp of the last successful bundle
+                  sync.
+                format: date-time
+                maxLength: 64
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: Phase summarises the reconciliation state.
+                enum:
+                - Pending
+                - Synced
+                - Error
+                type: string
+              tenantID:
+                description: |-
+                  TenantID and ClusterID are non-secret Hub identities resolved from the
+                  bounded operator credential. Mesh registration consumers use them instead
+                  of reading the credential Secret.
+                maxLength: 128
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,1156 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankoresourceservers.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoResourceServer
+    listKind: HankoResourceServerList
+    plural: hankoresourceservers
+    shortNames:
+    - hrs
+    singular: hankoresourceserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.realmRef
+      name: Realm
+      type: string
+    - jsonPath: .spec.audience
+      name: Audience
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HankoResourceServer is the provider-neutral aggregate for one
+          protected API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              HankoResourceServerSpec defines the portable desired authorization model.
+              Internal scope and resource references are checked at admission time. Realm,
+              role, application, and service-account existence is checked fail-closed by
+              the reconciler because structural CRD validation cannot dereference objects.
+            properties:
+              applicationRef:
+                description: ApplicationRef names the HankoApplication backing this
+                  resource server.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+              audience:
+                description: Audience is the immutable identifier of the protected
+                  API.
+                maxLength: 2048
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: audience is immutable
+                  optionalOldSelf: true
+                  rule: '!oldSelf.hasValue() || self == oldSelf.value()'
+              displayName:
+                description: DisplayName is the human-readable protected API name.
+                maxLength: 255
+                type: string
+              mode:
+                default: Manage
+                description: Mode controls provider write authority.
+                enum:
+                - Manage
+                - Observe
+                type: string
+              permissions:
+                description: Permissions is a name-keyed set of allow-only grants.
+                items:
+                  description: AuthorizationPermission grants scopes over optional
+                    resources to principals.
+                  properties:
+                    delegation:
+                      description: |-
+                        Delegation constrains this grant to an explicit actor and subject identity.
+                        Current Keycloak profiles refuse this capability before provider writes.
+                        Omitting it preserves ordinary authorization semantics.
+                      properties:
+                        actor:
+                          description: Actor is the software identity acting on behalf
+                            of Subject.
+                          properties:
+                            kind:
+                              enum:
+                              - application
+                              - service_account
+                              type: string
+                            ref:
+                              maxLength: 253
+                              pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                              type: string
+                          required:
+                          - kind
+                          - ref
+                          type: object
+                        maxDepth:
+                          default: 1
+                          description: MaxDepth bounds the complete delegation chain,
+                            including this actor.
+                          format: int32
+                          maximum: 4
+                          minimum: 1
+                          type: integer
+                        maxTTLSeconds:
+                          default: 120
+                          description: MaxTTLSeconds also remains bounded by both
+                            input token expirations.
+                          format: int32
+                          maximum: 600
+                          minimum: 1
+                          type: integer
+                        subject:
+                          description: Subject is the software identity whose authority
+                            is delegated.
+                          properties:
+                            kind:
+                              enum:
+                              - application
+                              - service_account
+                              type: string
+                            ref:
+                              maxLength: 253
+                              pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                              type: string
+                          required:
+                          - kind
+                          - ref
+                          type: object
+                        taskAuthorization:
+                          description: |-
+                            TaskAuthorization requires issuer-created approval and online recipient checks.
+                            Omission preserves existing software delegation. No task reference is stored here.
+                          enum:
+                          - required
+                          type: string
+                      required:
+                      - actor
+                      - subject
+                      type: object
+                      x-kubernetes-validations:
+                      - message: delegation actor and subject must be different identities
+                        rule: self.actor.kind != self.subject.kind || self.actor.ref
+                          != self.subject.ref
+                      - message: task authorization supports one hop
+                        rule: '!has(self.taskAuthorization) || !has(self.maxDepth)
+                          || self.maxDepth == 1'
+                    name:
+                      maxLength: 255
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9:._/-]*$
+                      type: string
+                    principals:
+                      items:
+                        description: |-
+                          AuthorizationPrincipal is a portable role, workload or organization principal. Ref is a
+                          namespaced Hanko object name; provider IDs are never accepted in desired state.
+                        properties:
+                          includeDescendants:
+                            description: |-
+                              IncludeDescendants explicitly includes current declared and independently
+                              owned HankoOrganization descendants. Omitted/false is direct-only; foreign
+                              provider subgroups are excluded. Only valid for kind organization.
+                            type: boolean
+                          kind:
+                            enum:
+                            - realm_role
+                            - application
+                            - service_account
+                            - organization
+                            type: string
+                          ref:
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                            type: string
+                        required:
+                        - kind
+                        - ref
+                        type: object
+                        x-kubernetes-validations:
+                        - message: includeDescendants is only valid for organization
+                            principals
+                          rule: '!has(self.includeDescendants) || !self.includeDescendants
+                            || self.kind == ''organization'''
+                      maxItems: 128
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - kind
+                      - ref
+                      x-kubernetes-list-type: map
+                    resources:
+                      items:
+                        maxLength: 255
+                        type: string
+                      maxItems: 8
+                      type: array
+                      x-kubernetes-list-type: set
+                    scopes:
+                      items:
+                        maxLength: 255
+                        type: string
+                      maxItems: 8
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - name
+                  - principals
+                  - scopes
+                  type: object
+                  x-kubernetes-validations:
+                  - message: delegation requires explicit declared resources
+                    rule: '!has(self.delegation) || (has(self.resources) && size(self.resources)
+                      > 0)'
+                maxItems: 128
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              realmRef:
+                description: RealmRef references the HankoRealm containing every referenced
+                  principal.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+              resources:
+                description: Resources is a name-keyed set of protected resource objects.
+                items:
+                  description: AuthorizationResource is a protected resource and its
+                    scope bindings.
+                  properties:
+                    displayName:
+                      maxLength: 255
+                      type: string
+                    name:
+                      maxLength: 255
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9:._/-]*$
+                      type: string
+                    scopes:
+                      items:
+                        maxLength: 255
+                        type: string
+                      maxItems: 8
+                      type: array
+                      x-kubernetes-list-type: set
+                    type:
+                      maxLength: 255
+                      type: string
+                    uris:
+                      items:
+                        maxLength: 255
+                        minLength: 1
+                        pattern: ^[^\x00-\x1F\x7F]+$
+                        type: string
+                      maxItems: 32
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              scopes:
+                description: Scopes is a name-keyed set of portable authorization
+                  scopes.
+                items:
+                  description: AuthorizationScope is a scope owned by one resource
+                    server.
+                  properties:
+                    description:
+                      maxLength: 255
+                      type: string
+                    name:
+                      maxLength: 255
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9:._/-]*$
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+            required:
+            - applicationRef
+            - audience
+            - realmRef
+            type: object
+            x-kubernetes-validations:
+            - message: every resource scope must reference a declared scope
+              rule: '!has(self.resources) || self.resources.all(r, !has(r.scopes)
+                || (has(self.scopes) && r.scopes.all(scopeName, self.scopes.exists(s,
+                s.name == scopeName))))'
+            - message: every permission scope must reference a declared scope
+              rule: '!has(self.permissions) || self.permissions.all(p, has(self.scopes)
+                && p.scopes.all(scopeName, self.scopes.exists(s, s.name == scopeName)))'
+            - message: every permission resource must reference a declared resource
+              rule: '!has(self.permissions) || self.permissions.all(p, !has(p.resources)
+                || (has(self.resources) && p.resources.all(resourceName, self.resources.exists(r,
+                r.name == resourceName))))'
+          status:
+            description: HankoResourceServerStatus describes provider observations
+              only.
+            properties:
+              adoptionCandidate:
+                description: AdoptionCandidate is bounded review evidence, never execution
+                  authority.
+                properties:
+                  approvable:
+                    type: boolean
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  complete:
+                    type: boolean
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  diff:
+                    items:
+                      properties:
+                        classification:
+                          enum:
+                          - supported-typed-native
+                          - preserved-readonly-native
+                          - unsupported
+                          - conflicting
+                          - security-sensitive-excluded
+                          type: string
+                        code:
+                          enum:
+                          - equal
+                          - would-manage
+                          - would-change
+                          - would-preserve
+                          - provider-native-readonly
+                          - unsupported
+                          - credential-excluded
+                          - recreation-required
+                          - ownership-transition
+                          type: string
+                        current:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        desired:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        domain:
+                          maxLength: 64
+                          type: string
+                        field:
+                          maxLength: 64
+                          type: string
+                        identity:
+                          maxLength: 128
+                          type: string
+                        object:
+                          maxLength: 255
+                          type: string
+                        roundTrip:
+                          enum:
+                          - lossless-represented
+                          - preserved-native
+                          - lossy
+                          - unsupported
+                          type: string
+                      required:
+                      - classification
+                      - code
+                      - domain
+                      - field
+                      - identity
+                      - object
+                      - roundTrip
+                      type: object
+                    maxItems: 256
+                    type: array
+                  diffHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  findings:
+                    items:
+                      properties:
+                        blocking:
+                          type: boolean
+                        code:
+                          maxLength: 512
+                          type: string
+                        domain:
+                          maxLength: 64
+                          type: string
+                        message:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - blocking
+                      - code
+                      - domain
+                      - message
+                      type: object
+                    maxItems: 32
+                    type: array
+                  observationHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  providerIdentity:
+                    description: AdoptionProviderIdentity excludes AdminRef, credentials
+                      and credential hashes.
+                    properties:
+                      caIdentity:
+                        description: CAIdentity binds the public trust bundle and
+                          Secret UID.
+                        maxLength: 255
+                        type: string
+                      caReference:
+                        maxLength: 255
+                        type: string
+                      instance:
+                        description: AdoptionTargetIdentity identifies a current object,
+                          never write authority.
+                        properties:
+                          generation:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          importRef:
+                            description: ImportRef binds the discovery latch without
+                              consuming it.
+                            maxLength: 255
+                            type: string
+                          kind:
+                            maxLength: 64
+                            type: string
+                          name:
+                            maxLength: 255
+                            type: string
+                          namespace:
+                            maxLength: 255
+                            type: string
+                          tenantRef:
+                            description: TenantRef binds connection-selecting target
+                              metadata without acquiring it.
+                            maxLength: 255
+                            type: string
+                          uid:
+                            maxLength: 128
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - namespace
+                        - uid
+                        type: object
+                      objectIDs:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 512
+                        type: array
+                        x-kubernetes-list-type: set
+                      origin:
+                        maxLength: 2048
+                        type: string
+                      realmID:
+                        maxLength: 128
+                        type: string
+                      trust:
+                        description: Unknown is reserved for incomplete diagnostic
+                          evidence.
+                        enum:
+                        - public-ca
+                        - private-ca
+                        - explicit-http
+                        - unknown
+                        type: string
+                    required:
+                    - instance
+                    - origin
+                    - realmID
+                    - trust
+                    type: object
+                  target:
+                    description: AdoptionTargetIdentity identifies a current object,
+                      never write authority.
+                    properties:
+                      generation:
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      importRef:
+                        description: ImportRef binds the discovery latch without consuming
+                          it.
+                        maxLength: 255
+                        type: string
+                      kind:
+                        maxLength: 64
+                        type: string
+                      name:
+                        maxLength: 255
+                        type: string
+                      namespace:
+                        maxLength: 255
+                        type: string
+                      tenantRef:
+                        description: TenantRef binds connection-selecting target metadata
+                          without acquiring it.
+                        maxLength: 255
+                        type: string
+                      uid:
+                        maxLength: 128
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - namespace
+                    - uid
+                    type: object
+                  truncated:
+                    type: boolean
+                required:
+                - approvable
+                - candidateHash
+                - complete
+                - contractVersion
+                - diffHash
+                - observationHash
+                - providerIdentity
+                - target
+                - truncated
+                type: object
+              adoptionReceipt:
+                description: AdoptionReceipt reports provider-journal verification,
+                  never ownership authority.
+                properties:
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  state:
+                    enum:
+                    - Pending
+                    - Verified
+                    - Partial
+                    - Conflict
+                    type: string
+                required:
+                - candidateHash
+                - contractVersion
+                - state
+                type: object
+              appliedGeneration:
+                description: |-
+                  AppliedGeneration is the latest Manage generation proven by matching
+                  provider read-back. Observe clears applied evidence and cannot advance it.
+                format: int64
+                minimum: 0
+                type: integer
+              appliedPlanHash:
+                description: |-
+                  AppliedPlanHash identifies the latest Manage plan proven by acceptable
+                  bounded provider read-back, at AppliedGeneration.
+                  Observe and external annotations do not authorize an applied plan.
+                maxLength: 71
+                type: string
+              authorizationExplanation:
+                description: AuthorizationExplanation is structural provider evidence,
+                  never a per-user decision or execution authority.
+                properties:
+                  complete:
+                    type: boolean
+                  explanationHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  paths:
+                    items:
+                      description: |-
+                        AuthorizationExplanationPath is one observed resource/scope/policy allow
+                        alternative. Different proven origins remain separate even when access overlaps.
+                      properties:
+                        action:
+                          maxLength: 255
+                          minLength: 1
+                          type: string
+                        ancestry:
+                          description: Ordered HankoOrganization refs, at most 32
+                            edges. No provider paths or IDs.
+                          items:
+                            maxLength: 255
+                            type: string
+                          maxItems: 33
+                          type: array
+                        delegation:
+                          description: |-
+                            Delegation is projected only after current native grant read-back. It
+                            contains namespace-local references and bounds, never token subjects.
+                          properties:
+                            actor:
+                              description: Actor is the software identity acting on
+                                behalf of Subject.
+                              properties:
+                                kind:
+                                  enum:
+                                  - application
+                                  - service_account
+                                  type: string
+                                ref:
+                                  maxLength: 253
+                                  pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                                  type: string
+                              required:
+                              - kind
+                              - ref
+                              type: object
+                            maxDepth:
+                              default: 1
+                              description: MaxDepth bounds the complete delegation
+                                chain, including this actor.
+                              format: int32
+                              maximum: 4
+                              minimum: 1
+                              type: integer
+                            maxTTLSeconds:
+                              default: 120
+                              description: MaxTTLSeconds also remains bounded by both
+                                input token expirations.
+                              format: int32
+                              maximum: 600
+                              minimum: 1
+                              type: integer
+                            subject:
+                              description: Subject is the software identity whose
+                                authority is delegated.
+                              properties:
+                                kind:
+                                  enum:
+                                  - application
+                                  - service_account
+                                  type: string
+                                ref:
+                                  maxLength: 253
+                                  pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                                  type: string
+                              required:
+                              - kind
+                              - ref
+                              type: object
+                            taskAuthorization:
+                              description: |-
+                                TaskAuthorization requires issuer-created approval and online recipient checks.
+                                Omission preserves existing software delegation. No task reference is stored here.
+                              enum:
+                              - required
+                              type: string
+                          required:
+                          - actor
+                          - subject
+                          type: object
+                          x-kubernetes-validations:
+                          - message: delegation actor and subject must be different
+                              identities
+                            rule: self.actor.kind != self.subject.kind || self.actor.ref
+                              != self.subject.ref
+                          - message: task authorization supports one hop
+                            rule: '!has(self.taskAuthorization) || !has(self.maxDepth)
+                              || self.maxDepth == 1'
+                        organizationRef:
+                          maxLength: 255
+                          type: string
+                        permission:
+                          maxLength: 255
+                          minLength: 1
+                          type: string
+                        relationship:
+                          enum:
+                          - direct
+                          - descendant
+                          - generic
+                          - mapped_role
+                          - mapped_composite_role
+                          - mapped_client_role
+                          - delegated
+                          type: string
+                        resource:
+                          maxLength: 255
+                          minLength: 1
+                          type: string
+                        roleChain:
+                          description: Ordered proven role mappings/composite edges,
+                            at most 32 edges.
+                          items:
+                            properties:
+                              client:
+                                description: Declared clientID, never a provider UUID.
+                                maxLength: 255
+                                type: string
+                              kind:
+                                enum:
+                                - realm_role
+                                - client_role
+                                type: string
+                              ref:
+                                description: Declared HankoRole ref or declared domain
+                                  role name.
+                                maxLength: 255
+                                minLength: 1
+                                type: string
+                            required:
+                            - kind
+                            - ref
+                            type: object
+                          maxItems: 33
+                          type: array
+                        sourceKind:
+                          enum:
+                          - organization
+                          - realm_role
+                          - application
+                          - service_account
+                          type: string
+                        sourceRef:
+                          maxLength: 255
+                          minLength: 1
+                          type: string
+                      required:
+                      - action
+                      - permission
+                      - relationship
+                      - resource
+                      - sourceKind
+                      - sourceRef
+                      type: object
+                    maxItems: 256
+                    type: array
+                  source:
+                    description: Applied requires matching current Manage read-back.
+                      Observed proves no application.
+                    enum:
+                    - Applied
+                    - Observed
+                    type: string
+                  sourceGeneration:
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  sourceObservationHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  sourcePlanHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  truncated:
+                    type: boolean
+                required:
+                - complete
+                - explanationHash
+                - paths
+                - source
+                - sourceGeneration
+                - sourceObservationHash
+                - sourcePlanHash
+                - truncated
+                type: object
+              backendKind:
+                maxLength: 32
+                type: string
+              capabilities:
+                description: AuthorizationCapabilitySnapshot records the provider
+                  contract used during reconciliation.
+                properties:
+                  applicationPrincipals:
+                    type: boolean
+                  boundedDelegation:
+                    description: |-
+                      BoundedDelegation includes provider enforcement of actor/subject authority,
+                      audience, chain depth, lifetime and replay constraints, not just RFC 8693.
+                    type: boolean
+                  nativePermissionClaim:
+                    type: boolean
+                  organizationDescendants:
+                    type: boolean
+                  organizationPrincipals:
+                    type: boolean
+                  resourceObjects:
+                    type: boolean
+                  resourceURIMatching:
+                    type: boolean
+                  rolePrincipals:
+                    type: boolean
+                  scopeGrants:
+                    type: boolean
+                  serviceAccountPrincipals:
+                    type: boolean
+                  umaRPT:
+                    type: boolean
+                required:
+                - applicationPrincipals
+                - nativePermissionClaim
+                - resourceObjects
+                - resourceURIMatching
+                - rolePrincipals
+                - scopeGrants
+                - serviceAccountPrincipals
+                - umaRPT
+                type: object
+              capabilityEvidence:
+                description: CapabilityEvidence names static adapter qualification,
+                  not runtime discovery.
+                properties:
+                  qualificationWindow:
+                    maxLength: 64
+                    type: string
+                  source:
+                    maxLength: 64
+                    type: string
+                type: object
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 8
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              contractVersion:
+                description: ContractVersion identifies canonical evidence semantics,
+                  not an executable API.
+                maxLength: 64
+                type: string
+              driftState:
+                description: |-
+                  DriftState is the comparison for ObservationPlanHash. Failure conditions
+                  describe the current attempt; an older observation is historical evidence.
+                enum:
+                - Unknown
+                - InSync
+                - Drifted
+                type: string
+              evaluatedGeneration:
+                description: |-
+                  EvaluatedGeneration is the latest generation whose execution semantics
+                  were fully evaluated or definitively refused. It does not prove application.
+                format: int64
+                minimum: 0
+                type: integer
+              evaluatedPlanHash:
+                description: |-
+                  EvaluatedPlanHash identifies the locally compiled provider-bound plan.
+                  It is absent for rejected evaluation and is never execution authority.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              findings:
+                items:
+                  description: AuthorizationFinding is a machine-readable portability
+                    or provider-native gap.
+                  properties:
+                    classification:
+                      enum:
+                      - lossless
+                      - lossy
+                      - unsupported
+                      type: string
+                    code:
+                      maxLength: 64
+                      type: string
+                    message:
+                      maxLength: 256
+                      type: string
+                    objectKind:
+                      maxLength: 64
+                      type: string
+                    objectName:
+                      maxLength: 255
+                      type: string
+                    readOnly:
+                      type: boolean
+                  required:
+                  - classification
+                  - code
+                  - message
+                  - objectKind
+                  - objectName
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - classification
+                - objectKind
+                - objectName
+                - code
+                x-kubernetes-list-type: map
+              intentHash:
+                description: IntentHash identifies normalized portable semantics of
+                  EvaluatedGeneration.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              lastReconciled:
+                format: date-time
+                maxLength: 64
+                type: string
+              managedObjects:
+                description: AuthorizationManagedObjects stores only provider IDs
+                  proven to be owned by this CR.
+                properties:
+                  permissions:
+                    items:
+                      description: AuthorizationManagedReference binds a portable
+                        name to one provider-generated ID.
+                      properties:
+                        id:
+                          maxLength: 128
+                          type: string
+                        name:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - id
+                      - name
+                      type: object
+                    maxItems: 128
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  policies:
+                    items:
+                      description: AuthorizationManagedReference binds a portable
+                        name to one provider-generated ID.
+                      properties:
+                        id:
+                          maxLength: 128
+                          type: string
+                        name:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - id
+                      - name
+                      type: object
+                    maxItems: 256
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  resources:
+                    items:
+                      description: AuthorizationManagedReference binds a portable
+                        name to one provider-generated ID.
+                      properties:
+                        id:
+                          maxLength: 128
+                          type: string
+                        name:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - id
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  scopes:
+                    items:
+                      description: AuthorizationManagedReference binds a portable
+                        name to one provider-generated ID.
+                      properties:
+                        id:
+                          maxLength: 128
+                          type: string
+                        name:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - id
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                type: object
+              observationComplete:
+                description: |-
+                  ObservationComplete distinguishes full supported-contract read-back from
+                  partial coverage. A partial observation can prove drift but never equality.
+                type: boolean
+              observationGeneration:
+                description: |-
+                  ObservationGeneration and ObservationPlanHash bind the latest successful
+                  bounded read to its evaluated input. They remain unchanged on read failure.
+                format: int64
+                minimum: 0
+                type: integer
+              observationPlanHash:
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the latest generation processed into this status,
+                  including failures; it does not mean successfully applied.
+                format: int64
+                minimum: 0
+                type: integer
+              observedStateHash:
+                description: |-
+                  ObservedStateHash identifies safe normalized provider semantics, including
+                  observation coverage. It is neither an intent/plan identity nor a provider ID.
+                maxLength: 71
+                pattern: ^sha256:[a-f0-9]{64}$
+                type: string
+              phase:
+                enum:
+                - Pending
+                - Reconciling
+                - Ready
+                - Error
+                type: string
+              providerResourceServerID:
+                maxLength: 128
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

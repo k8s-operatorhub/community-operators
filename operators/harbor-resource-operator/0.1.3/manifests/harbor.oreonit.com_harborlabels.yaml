@@ -1,0 +1,233 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: harborlabels.harbor.oreonit.com
+spec:
+  group: harbor.oreonit.com
+  names:
+    kind: HarborLabel
+    listKind: HarborLabelList
+    plural: harborlabels
+    shortNames:
+    - hlabel
+    singular: harborlabel
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scope
+      name: Scope
+      type: string
+    - jsonPath: .status.labelID
+      name: ID
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HarborLabel manages a global or project label in Harbor.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of HarborLabel
+            properties:
+              adoptExisting:
+                description: adoptExisting takes over a label of the same name in
+                  the same scope.
+                type: boolean
+              color:
+                description: 'color as #RRGGBB. Unset leaves the color as Harbor has
+                  it.'
+                pattern: ^#[0-9A-Fa-f]{6}$
+                type: string
+              connectionRef:
+                description: connectionRef selects the Harbor instance.
+                properties:
+                  name:
+                    description: name of the HarborConnection.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: |-
+                      namespace of the HarborConnection. Defaults to the namespace of the
+                      referencing resource. A cross-namespace reference is only honoured when
+                      the connection's spec.allowedNamespaces permits it.
+                    type: string
+                required:
+                - name
+                type: object
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  deletionPolicy controls whether the label is deleted with this object.
+                  Deleting a label removes it from every artifact that carries it.
+                enum:
+                - Retain
+                - Delete
+                type: string
+              description:
+                description: description shown in Harbor. Unset leaves it as Harbor
+                  has it.
+                type: string
+              name:
+                description: name of the label in Harbor. Defaults to metadata.name.
+                maxLength: 128
+                type: string
+              projectName:
+                description: |-
+                  projectName is the name of an existing Harbor project not managed by
+                  this operator.
+                minLength: 1
+                type: string
+              projectRef:
+                description: |-
+                  projectRef names a HarborProject in this namespace. The resource waits
+                  until that project is Ready.
+                properties:
+                  name:
+                    description: name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              scope:
+                default: project
+                description: scope is project (default) or global. Global labels need
+                  a system administrator connection.
+                enum:
+                - global
+                - project
+                type: string
+              syncPeriod:
+                description: syncPeriod overrides the connection's drift-correction
+                  interval.
+                type: string
+            required:
+            - connectionRef
+            type: object
+            x-kubernetes-validations:
+            - message: project labels need exactly one of projectRef or projectName
+              rule: self.scope != 'project' || (has(self.projectRef) != has(self.projectName))
+            - message: global labels take no project
+              rule: self.scope != 'global' || (!has(self.projectRef) && !has(self.projectName))
+            - message: scope is immutable
+              rule: self.scope == oldSelf.scope
+            - message: the project cannot change; create a new object instead
+              rule: has(self.projectRef) == has(oldSelf.projectRef) && (!has(self.projectRef)
+                || self.projectRef.name == oldSelf.projectRef.name) && has(self.projectName)
+                == has(oldSelf.projectName) && (!has(self.projectName) || self.projectName
+                == oldSelf.projectName)
+          status:
+            description: status defines the observed state of HarborLabel
+            properties:
+              conditions:
+                description: 'conditions: Ready=True when the label matches the spec.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              labelID:
+                description: labelID in Harbor.
+                format: int64
+                type: integer
+              observedGeneration:
+                description: observedGeneration is the spec generation the status
+                  reflects.
+                format: int64
+                type: integer
+              projectID:
+                description: projectID for project labels.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

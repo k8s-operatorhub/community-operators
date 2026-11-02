@@ -1,0 +1,1270 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborConnection",
+          "metadata": {
+            "name": "prod-harbor",
+            "namespace": "harbor-system"
+          },
+          "spec": {
+            "allowedNamespaces": [
+              "*"
+            ],
+            "credentialsSecretRef": {
+              "name": "prod-harbor-admin"
+            },
+            "syncPeriod": "10m",
+            "url": "https://harbor.example.com"
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborGarbageCollection",
+          "metadata": {
+            "name": "harbor-gc",
+            "namespace": "harbor-system"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "deleteUntagged": true,
+            "deletionPolicy": "Retain",
+            "schedule": "0 0 4 * * 0",
+            "workers": 2
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborImmutableRule",
+          "metadata": {
+            "name": "release-tags",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "repositories": {
+              "pattern": "**"
+            },
+            "tags": {
+              "decoration": "matches",
+              "pattern": "v*.*.*"
+            }
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborLabel",
+          "metadata": {
+            "name": "release-candidate",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "color": "#2E7D32",
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "description": "Artifacts promoted to staging",
+            "name": "release-candidate",
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "scope": "project"
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborProject",
+          "metadata": {
+            "name": "team-payments",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "deletionPolicy": "Retain",
+            "metadata": {
+              "autoScan": true,
+              "preventVulnerable": true,
+              "reuseSystemCVEAllowlist": true,
+              "severity": "critical"
+            },
+            "name": "payments",
+            "public": false,
+            "storageQuotaBytes": 53687091200
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborProjectMember",
+          "metadata": {
+            "name": "payments-developers",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "group": {
+              "name": "payments-developers",
+              "type": "oidc"
+            },
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "role": "developer"
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborRegistry",
+          "metadata": {
+            "name": "edge-eu-west",
+            "namespace": "platform"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "credentialsSecretRef": {
+              "name": "edge-eu-west-creds"
+            },
+            "description": "Edge site EU West",
+            "type": "harbor",
+            "url": "https://harbor.eu-west.example.com"
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborReplicationPolicy",
+          "metadata": {
+            "name": "releases-to-edge",
+            "namespace": "platform"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "destNamespace": "payments",
+            "destRegistryRef": {
+              "name": "edge-eu-west"
+            },
+            "direction": "push",
+            "filters": [
+              {
+                "type": "name",
+                "value": "payments/**"
+              },
+              {
+                "decoration": "matches",
+                "type": "tag",
+                "value": "v*"
+              }
+            ],
+            "override": true,
+            "singleActiveReplication": true,
+            "trigger": {
+              "cron": "0 0 2 * * *",
+              "type": "scheduled"
+            }
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborRetentionPolicy",
+          "metadata": {
+            "name": "payments-retention",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "rules": [
+              {
+                "count": 10,
+                "repositories": {
+                  "pattern": "**"
+                },
+                "tags": {
+                  "pattern": "**",
+                  "untagged": false
+                },
+                "template": "latestPushedK"
+              },
+              {
+                "tags": {
+                  "pattern": "v*.*.*"
+                },
+                "template": "always"
+              }
+            ],
+            "schedule": "0 0 3 * * *"
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborRobotAccount",
+          "metadata": {
+            "name": "payments-ci",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "description": "CI pipeline push",
+            "duration": 90,
+            "level": "project",
+            "name": "ci",
+            "permissions": [
+              {
+                "access": [
+                  {
+                    "action": "push",
+                    "resource": "repository"
+                  },
+                  {
+                    "action": "pull",
+                    "resource": "repository"
+                  },
+                  {
+                    "action": "read",
+                    "resource": "artifact"
+                  }
+                ]
+              }
+            ],
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "rotation": {
+              "beforeExpiry": "168h"
+            },
+            "secret": {
+              "name": "payments-ci-regcred",
+              "type": "kubernetes.io/dockerconfigjson"
+            }
+          }
+        },
+        {
+          "apiVersion": "harbor.oreonit.com/v1alpha1",
+          "kind": "HarborWebhook",
+          "metadata": {
+            "name": "ci-notifications",
+            "namespace": "team-payments"
+          },
+          "spec": {
+            "connectionRef": {
+              "name": "prod-harbor",
+              "namespace": "harbor-system"
+            },
+            "description": "Tell CI about pushes and scan results",
+            "eventTypes": [
+              "PUSH_ARTIFACT",
+              "SCANNING_COMPLETED",
+              "SCANNING_FAILED"
+            ],
+            "name": "ci-notifications",
+            "projectRef": {
+              "name": "team-payments"
+            },
+            "targets": [
+              {
+                "address": "https://ci.example.com/hooks/harbor",
+                "authHeaderSecretRef": {
+                  "key": "authorization",
+                  "name": "ci-webhook-auth"
+                },
+                "payloadFormat": "CloudEvents",
+                "type": "http"
+              }
+            ]
+          }
+        }
+      ]
+    capabilities: Seamless Upgrades
+    categories: Integration & Delivery, Developer Tools
+    containerImage: ghcr.io/oreondev/harbor-resource-operator:0.1.3
+    createdAt: "2026-11-02T11:24:17Z"
+    description: Manage Harbor projects, robot accounts, replication, retention and
+      webhooks as Kubernetes resources. Does not install Harbor.
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "true"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/oreondev/harbor-resource-operator
+    support: https://github.com/oreondev/harbor-resource-operator/issues
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/arch.ppc64le: supported
+    operatorframework.io/arch.s390x: supported
+    operatorframework.io/os.linux: supported
+  name: harbor-resource-operator.v0.1.3
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: HarborConnection points the operator at one Harbor instance and
+        the credentials to use.
+      displayName: Harbor Connection
+      kind: HarborConnection
+      name: harborconnections.harbor.oreonit.com
+      resources:
+      - kind: Secret
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: |-
+          allowedNamespaces lists namespaces whose resources may reference this
+          connection. "*" allows every namespace. The connection's own namespace
+          is always allowed.
+        displayName: Allowed Namespaces
+        path: allowedNamespaces
+      - description: |-
+          caBundleSecretRef names a Secret in this namespace with key "ca.crt"
+          holding PEM certificates to trust for the Harbor URL.
+        displayName: CA Bundle Secret
+        path: caBundleSecretRef
+      - description: |-
+          credentialsSecretRef names a Secret in this namespace with keys
+          "username" and "password". Use a system robot account with the
+          permissions the operator needs rather than the admin user.
+        displayName: Credentials Secret
+        path: credentialsSecretRef
+      - description: insecureSkipTLSVerify disables TLS certificate verification.
+          Not for production.
+        displayName: Skip TLS Verification
+        path: insecureSkipTLSVerify
+      - description: requestsPerSecond caps the request rate the operator sends to
+          this Harbor.
+        displayName: Requests Per Second
+        path: requestsPerSecond
+      - description: |-
+          syncPeriod is the default interval at which resources using this
+          connection are re-read from Harbor and drift is corrected.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: |-
+          url of the Harbor instance, for example https://harbor.example.com.
+          The API path /api/v2.0 is appended by the operator.
+        displayName: URL
+        path: url
+      statusDescriptors:
+      - description: 'conditions: Ready=True when Harbor answered with the expected
+          credentials.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborGarbageCollection manages Harbor's garbage collection schedule.
+      displayName: Harbor Garbage Collection
+      kind: HarborGarbageCollection
+      name: harborgarbagecollections.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: connectionRef selects the Harbor instance. Needs a system administrator
+          connection.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deleteUntagged also deletes untagged artifacts.
+        displayName: Delete Untagged
+        path: deleteUntagged
+      - description: |-
+          deletionPolicy Retain (default) leaves the schedule in Harbor when this
+          object is deleted; Delete sets the schedule to None.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: |-
+          schedule is Hourly, Daily, Weekly, None, or a six-field cron expression
+          (seconds first) such as "0 0 3 * * 6".
+        displayName: Schedule
+        path: schedule
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: workers run garbage collection in parallel, 1 to 5.
+        displayName: Workers
+        path: workers
+      statusDescriptors:
+      - description: 'conditions: Ready=True when Harbor''s schedule matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborImmutableRule manages a tag immutability rule in a Harbor
+        project.
+      displayName: Harbor Immutable Rule
+      kind: HarborImmutableRule
+      name: harborimmutablerules.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: adoptExisting takes over an existing rule with the same selectors.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deletionPolicy controls whether the rule is deleted with this
+          object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: disabled keeps the rule in Harbor without enforcing it.
+        displayName: Disabled
+        path: disabled
+      - description: |-
+          projectName is the name of an existing Harbor project not managed by
+          this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. The resource waits
+          until that project is Ready.
+        displayName: Project
+        path: projectRef
+      - description: repositories selects the repositories the rule applies to. Defaults
+          to all.
+        displayName: Repositories
+        path: repositories
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: tags selects the tags made immutable, for example pattern "v*".
+        displayName: Tags
+        path: tags
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the rule matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborLabel manages a global or project label in Harbor.
+      displayName: Harbor Label
+      kind: HarborLabel
+      name: harborlabels.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: adoptExisting takes over a label of the same name in the same
+          scope.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: 'color as #RRGGBB. Unset leaves the color as Harbor has it.'
+        displayName: Color
+        path: color
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: |-
+          deletionPolicy controls whether the label is deleted with this object.
+          Deleting a label removes it from every artifact that carries it.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: description shown in Harbor. Unset leaves it as Harbor has it.
+        displayName: Description
+        path: description
+      - description: name of the label in Harbor. Defaults to metadata.name.
+        displayName: Name
+        path: name
+      - description: |-
+          projectName is the name of an existing Harbor project not managed by
+          this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. The resource waits
+          until that project is Ready.
+        displayName: Project
+        path: projectRef
+      - description: scope is project (default) or global. Global labels need a system
+          administrator connection.
+        displayName: Scope
+        path: scope
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the label matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborProjectMember grants a user or group a role in a Harbor project.
+      displayName: Harbor Project Member
+      kind: HarborProjectMember
+      name: harborprojectmembers.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: adoptExisting takes over an existing membership of the same user
+          or group.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deletionPolicy controls whether the membership is removed with
+          this object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: group is a user group.
+        displayName: Group
+        path: group
+      - description: |-
+          projectName is the name of an existing Harbor project not managed by
+          this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. The resource waits
+          until that project is Ready.
+        displayName: Project
+        path: projectRef
+      - description: role granted in the project.
+        displayName: Role
+        path: role
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: |-
+          user is the Harbor username. With LDAP or OIDC authentication the user
+          must have logged in to Harbor at least once.
+        displayName: User
+        path: user
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the membership matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: 'HarborProject manages a Harbor project: visibility, storage quota,
+        scanning, CVE allowlist and proxy cache.'
+      displayName: Harbor Project
+      kind: HarborProject
+      name: harborprojects.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborRegistry
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: |-
+          adoptExisting allows taking over a project of the same name that already
+          exists in Harbor. Without it, an existing project is reported as a conflict.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: cveAllowlist is the project level CVE allowlist. When set, it
+          is managed in full.
+        displayName: CVE Allowlist
+        path: cveAllowlist
+      - description: |-
+          deletionPolicy controls whether the Harbor project is deleted with this object.
+          Harbor refuses to delete projects that still hold repositories; the
+          operator never deletes repositories.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: metadata holds scanning, content trust and allowlist settings.
+        displayName: Project Settings
+        path: metadata
+      - description: name of the project in Harbor. Defaults to metadata.name.
+        displayName: Name
+        path: name
+      - description: proxyCache makes the project a proxy cache for an upstream registry.
+        displayName: Proxy Cache
+        path: proxyCache
+      - description: public makes the project readable without authentication.
+        displayName: Public
+        path: public
+      - description: storageQuotaBytes caps the project storage. -1 means unlimited.
+        displayName: Storage Quota (bytes)
+        path: storageQuotaBytes
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the Harbor project matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborRegistry manages a registry endpoint that replication policies
+        and proxy cache projects use.
+      displayName: Harbor Registry
+      kind: HarborRegistry
+      name: harborregistries.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: Secret
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: adoptExisting takes over an endpoint of the same name.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: createEvenIfUnhealthy creates the endpoint even when the ping
+          fails.
+        displayName: Create Even If Unhealthy
+        path: createEvenIfUnhealthy
+      - description: credentialType is basic or oauth.
+        displayName: Credential Type
+        path: credentialType
+      - description: |-
+          credentialsSecretRef names a Secret in this namespace with keys
+          "accessKey" and "accessSecret". Omit for anonymous access.
+        displayName: Credentials Secret
+        path: credentialsSecretRef
+      - description: deletionPolicy controls whether the Harbor endpoint is deleted
+          with this object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: description shown in Harbor.
+        displayName: Description
+        path: description
+      - description: insecure skips TLS verification when Harbor talks to the remote
+          registry.
+        displayName: Insecure
+        path: insecure
+      - description: name of the endpoint in Harbor. Defaults to metadata.name.
+        displayName: Name
+        path: name
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: |-
+          type is Harbor's adapter name, for example harbor, docker-hub,
+          docker-registry, aws-ecr, azure-acr, google-gcr, github-ghcr, quay,
+          gitlab, jfrog-artifactory, huawei-SWR, ali-acr, tencent-tcr, volcengine-cr.
+        displayName: Type
+        path: type
+      - description: url of the remote registry.
+        displayName: URL
+        path: url
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the endpoint exists and matches
+          the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborReplicationPolicy manages a push or pull replication policy.
+      displayName: Harbor Replication Policy
+      kind: HarborReplicationPolicy
+      name: harborreplicationpolicies.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborRegistry
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: adoptExisting takes over a policy of the same name.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: copyByChunk transfers blobs in chunks.
+        displayName: Copy By Chunk
+        path: copyByChunk
+      - description: deletionPolicy controls whether the Harbor policy is deleted
+          with this object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: description shown in Harbor.
+        displayName: Description
+        path: description
+      - description: destNamespace is the target project or namespace. Empty keeps
+          the source path.
+        displayName: Destination Namespace
+        path: destNamespace
+      - description: |-
+          destNamespaceReplaceCount is how many leading path components destNamespace
+          replaces. -1 is Harbor's legacy mode.
+        displayName: Destination Path Components Replaced
+        path: destNamespaceReplaceCount
+      - description: destRegistryRef names the HarborRegistry to push to. Required
+          for push.
+        displayName: Destination Registry
+        path: destRegistryRef
+      - description: direction is push (local to destRegistryRef) or pull (srcRegistryRef
+          to local).
+        displayName: Direction
+        path: direction
+      - description: enabled enables the policy.
+        displayName: Enabled
+        path: enabled
+      - description: executeOnCreate starts one execution right after the policy is
+          created.
+        displayName: Execute On Create
+        path: executeOnCreate
+      - description: filters are managed in full.
+        displayName: Filters
+        path: filters
+      - description: name of the policy in Harbor. Defaults to metadata.name.
+        displayName: Name
+        path: name
+      - description: override replaces artifacts that already exist at the destination.
+        displayName: Override
+        path: override
+      - description: replicateDeletion propagates deletions.
+        displayName: Replicate Deletion
+        path: replicateDeletion
+      - description: singleActiveReplication skips a run while the previous one is
+          still active.
+        displayName: Single Active Replication
+        path: singleActiveReplication
+      - description: speedKBps limits bandwidth. 0 means unlimited.
+        displayName: Speed Limit (KB/s)
+        path: speedKBps
+      - description: srcRegistryRef names the HarborRegistry to pull from. Required
+          for pull.
+        displayName: Source Registry
+        path: srcRegistryRef
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: trigger says when the policy runs.
+        displayName: Trigger
+        path: trigger
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the policy exists and matches the
+          spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborRetentionPolicy manages the tag retention policy of a Harbor
+        project.
+      displayName: Harbor Retention Policy
+      kind: HarborRetentionPolicy
+      name: harborretentionpolicies.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - description: adoptExisting takes over the project's existing retention policy.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deletionPolicy controls whether the policy is deleted with this
+          object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: |-
+          projectName is the name of an existing Harbor project not managed by
+          this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. The resource waits
+          until that project is Ready.
+        displayName: Project
+        path: projectRef
+      - description: 'rules are combined with OR: an artifact kept by any rule is
+          retained.'
+        displayName: Rules
+        path: rules
+      - description: |-
+          schedule is a six-field cron expression (seconds first), for example
+          "0 0 2 * * *". Empty means the policy only runs when triggered by hand.
+        displayName: Schedule
+        path: schedule
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the policy matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborRobotAccount manages a Harbor robot account and writes its
+        credentials to a Secret.
+      displayName: Harbor Robot Account
+      kind: HarborRobotAccount
+      name: harborrobotaccounts.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      - kind: Secret
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: |-
+          adoptExisting takes over a robot of the same name. Because Harbor never
+          reveals an existing secret, adoption refreshes the secret.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deletionPolicy controls whether the Harbor robot is deleted with
+          this object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: description shown in Harbor.
+        displayName: Description
+        path: description
+      - description: disabled disables the robot in Harbor without deleting it.
+        displayName: Disabled
+        path: disabled
+      - description: duration in days before the robot expires. -1 means never.
+        displayName: Duration
+        path: duration
+      - description: level is project or system.
+        displayName: Level
+        path: level
+      - description: |-
+          name of the robot without Harbor's prefix. Defaults to metadata.name.
+          Harbor stores it as robot$<name> (system) or robot$<project>+<name> (project).
+        displayName: Name
+        path: name
+      - description: |-
+          permissions granted to the robot. For project level robots a single
+          entry without namespace is usual.
+        displayName: Permissions
+        path: permissions
+      - description: |-
+          projectName is the Harbor project name for project level robots when the
+          project is not managed by this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. Required for project
+          level robots unless projectName is set.
+        displayName: Project
+        path: projectRef
+      - description: rotation controls automatic secret refresh.
+        displayName: Rotation
+        path: rotation
+      - description: secret describes the Kubernetes Secret that receives the credentials.
+        displayName: Credentials Secret
+        path: secret
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the robot exists and the Secret
+          is written.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: HarborWebhook manages a webhook policy in a Harbor project.
+      displayName: Harbor Webhook
+      kind: HarborWebhook
+      name: harborwebhooks.harbor.oreonit.com
+      resources:
+      - kind: HarborConnection
+        name: ""
+        version: v1alpha1
+      - kind: HarborProject
+        name: ""
+        version: v1alpha1
+      - kind: Secret
+        name: ""
+        version: v1
+      specDescriptors:
+      - description: adoptExisting takes over a webhook policy of the same name.
+        displayName: Adopt Existing
+        path: adoptExisting
+      - description: connectionRef selects the Harbor instance.
+        displayName: Harbor Connection
+        path: connectionRef
+      - description: deletionPolicy controls whether the webhook is deleted with this
+          object.
+        displayName: Deletion Policy
+        path: deletionPolicy
+      - description: description shown in Harbor.
+        displayName: Description
+        path: description
+      - description: enabled turns the webhook on or off. Defaults to true.
+        displayName: Enabled
+        path: enabled
+      - description: |-
+          eventTypes Harbor notifies about, for example PUSH_ARTIFACT,
+          PULL_ARTIFACT, DELETE_ARTIFACT, SCANNING_COMPLETED, SCANNING_FAILED,
+          QUOTA_EXCEED, QUOTA_WARNING, REPLICATION, TAG_RETENTION.
+        displayName: Event Types
+        path: eventTypes
+      - description: name of the webhook policy in Harbor. Defaults to metadata.name.
+        displayName: Name
+        path: name
+      - description: |-
+          projectName is the name of an existing Harbor project not managed by
+          this operator.
+        displayName: Existing Project Name
+        path: projectName
+      - description: |-
+          projectRef names a HarborProject in this namespace. The resource waits
+          until that project is Ready.
+        displayName: Project
+        path: projectRef
+      - description: syncPeriod overrides the connection's drift-correction interval.
+        displayName: Sync Period
+        path: syncPeriod
+      - description: targets receive the events.
+        displayName: Targets
+        path: targets
+      statusDescriptors:
+      - description: 'conditions: Ready=True when the webhook matches the spec.'
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+  description: |
+    The Harbor Resource Operator manages objects **inside** a running
+    [Harbor](https://goharbor.io) through its REST API, so Harbor configuration
+    can be kept next to the workloads that use it:
+
+    - projects, with quotas and scanning settings
+    - robot accounts, with the token written to a Kubernetes Secret and rotated before it expires
+    - replication endpoints and replication policies
+    - project members, labels, immutable tag rules, webhooks and tag retention
+    - the garbage collection schedule
+
+    It does **not** install, upgrade or back up Harbor. Install Harbor with the
+    [official Helm chart](https://github.com/goharbor/harbor-helm) first.
+
+    ### Getting started
+
+    1. Create a Secret with a Harbor user that may manage the kinds you use, in
+       the namespace of the HarborConnection:
+
+       ```
+       kubectl create namespace harbor-system
+       kubectl -n harbor-system create secret generic prod-harbor-admin \
+         --from-literal=username=<harbor user> --from-literal=password=<password>
+       ```
+
+    2. Create a `HarborConnection` that points at Harbor and names that Secret
+       in `credentialsSecretRef`. Its `allowedNamespaces` controls which
+       namespaces may use it.
+    3. Create projects, robot accounts and the other kinds in those namespaces,
+       each with a `connectionRef` to the connection.
+
+    The examples reference Secrets that you create yourself:
+    `prod-harbor-admin` (Harbor credentials, keys `username` and `password`),
+    `edge-eu-west-creds` (remote registry, keys `accessKey` and `accessSecret`)
+    and `ci-webhook-auth` (webhook `Authorization` header, key `authorization`).
+    Credentials are never logged or written to status or events.
+
+    Supported: Harbor 2.12 to 2.15, Kubernetes 1.34 and later. The operator
+    watches all namespaces.
+
+    This is an independent community project. It is not affiliated with or
+    endorsed by the Harbor project or the CNCF.
+  displayName: Harbor Resource Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCI+CiAgPHJlY3QgeD0iNCIgeT0iNCIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiIHJ4PSIyNCIgZmlsbD0iIzFkNGY5MSIvPgogIDxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTY0IDI2IEw5NiA0NCBMOTYgODQgTDY0IDEwMiBMMzIgODQgTDMyIDQ0IFoiLz4KICAgIDxwYXRoIGQ9Ik01MCA1MCBMNTAgNzggTTc4IDUwIEw3OCA3OCBNNTAgNjQgTDc4IDY0Ii8+CiAgPC9nPgo8L3N2Zz4K
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - harbor.oreonit.com
+          resources:
+          - harborconnections
+          - harborgarbagecollections
+          - harborimmutablerules
+          - harborlabels
+          - harborprojectmembers
+          - harborprojects
+          - harborregistries
+          - harborreplicationpolicies
+          - harborretentionpolicies
+          - harborrobotaccounts
+          - harborwebhooks
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - harbor.oreonit.com
+          resources:
+          - harborconnections/finalizers
+          - harborgarbagecollections/finalizers
+          - harborimmutablerules/finalizers
+          - harborlabels/finalizers
+          - harborprojectmembers/finalizers
+          - harborprojects/finalizers
+          - harborregistries/finalizers
+          - harborreplicationpolicies/finalizers
+          - harborretentionpolicies/finalizers
+          - harborrobotaccounts/finalizers
+          - harborwebhooks/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - harbor.oreonit.com
+          resources:
+          - harborconnections/status
+          - harborgarbagecollections/status
+          - harborimmutablerules/status
+          - harborlabels/status
+          - harborprojectmembers/status
+          - harborprojects/status
+          - harborregistries/status
+          - harborreplicationpolicies/status
+          - harborretentionpolicies/status
+          - harborrobotaccounts/status
+          - harborwebhooks/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: harbor-resource-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: harbor-resource-operator
+          control-plane: controller-manager
+        name: harbor-resource-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: harbor-resource-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: harbor-resource-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: ghcr.io/oreondev/harbor-resource-operator:0.1.3
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                ports:
+                - containerPort: 8081
+                  name: health
+                  protocol: TCP
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: harbor-resource-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: harbor-resource-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - harbor
+  - registry
+  - container registry
+  - robot account
+  - replication
+  - gitops
+  links:
+  - name: Source Code
+    url: https://github.com/oreondev/harbor-resource-operator
+  - name: Documentation
+    url: https://github.com/oreondev/harbor-resource-operator#readme
+  - name: Harbor Helm chart
+    url: https://github.com/goharbor/harbor-helm
+  - name: Oreon IT
+    url: https://www.oreonit.com
+  maintainers:
+  - email: fahri.cap@oreonit.com
+    name: Fahri Cap
+  maturity: alpha
+  minKubeVersion: 1.34.0
+  provider:
+    name: Oreon IT
+    url: https://www.oreonit.com
+  version: 0.1.3

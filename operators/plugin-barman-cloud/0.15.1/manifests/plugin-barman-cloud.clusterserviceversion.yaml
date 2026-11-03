@@ -1,0 +1,416 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "barmancloud.cnpg.io/v1",
+          "kind": "ObjectStore",
+          "metadata": {
+            "name": "objectstore-sample"
+          },
+          "spec": {
+            "configuration": {
+              "destinationPath": "s3://my-bucket/backups/",
+              "s3Credentials": {
+                "accessKeyId": {
+                  "key": "ACCESS_KEY_ID",
+                  "name": "aws-credentials"
+                },
+                "secretAccessKey": {
+                  "key": "ACCESS_SECRET_KEY",
+                  "name": "aws-credentials"
+                }
+              },
+              "wal": {
+                "compression": "gzip"
+              }
+            },
+            "retentionPolicy": "30d"
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: Database
+    containerImage: ghcr.io/cloudnative-pg/plugin-barman-cloud@sha256:c75acad19a36e8176cfe2885761ff1b836c6ef977d7257e298c99a28b5c302ef
+    createdAt: "2026-11-03T13:56:09Z"
+    description: Backup and recovery plugin for CloudNativePG, enabling online continuous physical backups of PostgreSQL clusters to object storage.
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/cloudnative-pg/plugin-barman-cloud
+    support: Community
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+  name: plugin-barman-cloud.v0.15.1-dev62
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - description: Defines an object storage destination (Amazon S3, Azure Blob Storage, Google Cloud Storage or compatible) and the barman-cloud settings CloudNativePG clusters use for base backups, WAL archiving and recovery.
+        displayName: Object Store
+        kind: ObjectStore
+        name: objectstores.barmancloud.cnpg.io
+        specDescriptors:
+          - description: The barman-cloud configuration, including the destination path, endpoint, credentials, and WAL and base backup options.
+            displayName: Configuration
+            path: configuration
+          - description: Retention policy for backups and WALs, expressed as XXu, where u is d (days), w (weeks) or m (months).
+            displayName: Retention Policy
+            path: retentionPolicy
+          - description: Configuration of the sidecar that runs in the PostgreSQL instance pods.
+            displayName: Instance Sidecar Configuration
+            path: instanceSidecarConfiguration
+        statusDescriptors:
+          - description: Recovery window of each server (first recoverability point, last successful and last failed backup).
+            displayName: Server Recovery Window
+            path: serverRecoveryWindow
+        version: v1
+    required:
+      - description: Provided by CloudNativePG. A PostgreSQL cluster whose backups and recovery are handled by the plugin.
+        displayName: Cluster
+        kind: Cluster
+        name: clusters.postgresql.cnpg.io
+        version: v1
+      - description: Provided by CloudNativePG. A backup of a cluster, executed by the plugin through the barman-cloud suite.
+        displayName: Backup
+        kind: Backup
+        name: backups.postgresql.cnpg.io
+        version: v1
+  description: |
+    The Barman Cloud Plugin for [CloudNativePG](https://cloudnative-pg.io/)
+    enables online continuous physical backups of PostgreSQL clusters to object
+    storage, using the `barman-cloud` suite from the
+    [Barman](https://docs.pgbarman.org/release/latest/) project.
+
+    It replaces the in-tree object storage support previously provided by the
+    `.spec.backup.barmanObjectStore` section of the `Cluster` resource. Backups
+    taken with the in-tree approach remain fully compatible.
+
+    ## Features
+
+    - Physical online backup and restore of the data directory
+    - Write-Ahead Log (WAL) archiving and restore
+    - Full cluster recovery and Point-in-Time Recovery (PITR)
+    - Replica cluster bootstrap and WAL restore from the archive
+
+    Supported object stores: Amazon S3 (and S3-compatible storage), Google Cloud
+    Storage and Microsoft Azure Blob Storage.
+
+    ## Requirements
+
+    - The CloudNativePG operator, version 1.30 or later.
+    - The plugin **must** be installed in the same namespace as the
+      CloudNativePG operator.
+
+    ## Post-installation: TLS certificates
+
+    The plugin and the CloudNativePG operator communicate over mutual TLS.
+    After installing the plugin, create the following secrets in the
+    plugin's namespace:
+
+    - `barman-cloud-server-tls`: server certificate, valid for the
+      `barman-cloud` DNS name
+    - `barman-cloud-client-tls`: client certificate used by the
+      CloudNativePG operator
+
+    The plugin starts serving requests as soon as both secrets exist; no
+    restart is needed. The recommended way to create and renew them is
+    [cert-manager](https://cert-manager.io/):
+
+    ```yaml
+    apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      name: selfsigned-issuer
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: barman-cloud-server
+    spec:
+      secretName: barman-cloud-server-tls
+      commonName: barman-cloud
+      dnsNames:
+        - barman-cloud
+      usages:
+        - server auth
+      issuerRef:
+        name: selfsigned-issuer
+        kind: Issuer
+        group: cert-manager.io
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: barman-cloud-client
+    spec:
+      secretName: barman-cloud-client-tls
+      commonName: barman-cloud-client
+      usages:
+        - client auth
+      issuerRef:
+        name: selfsigned-issuer
+        kind: Issuer
+        group: cert-manager.io
+    ```
+
+    Apply it with `kubectl apply -n <plugin namespace> -f <file>`.
+
+    ## Documentation
+
+    See the [Barman Cloud Plugin documentation](https://cloudnative-pg.io/plugin-barman-cloud/)
+    for configuration, usage, and migration from the in-tree backup support.
+  displayName: Barman Cloud Plugin for CloudNativePG
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHJvbGU9ImltZyIgdmlld0JveD0iMTc0LjgzIDE2Mi4zMyA3MjkuMzQgNzYyLjg0Ij48dGl0bGU+Q2xvdWROYXRpdmVQRyBJY29uIC0gQ29sb3I8L3RpdGxlPjxkZWZzPjxyYWRpYWxHcmFkaWVudCBpZD0icmFkaWFsLWdyYWRpZW50IiBjeD0iLTQ5NS4wMSIgY3k9Ii01MDQuNjQiIHI9IjIzNTQuOTEiIGZ4PSItNDk1LjAxIiBmeT0iLTUwNC42NCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzczMmRkOSIvPjxzdG9wIG9mZnNldD0iLjEyIiBzdG9wLWNvbG9yPSIjNjkyYWNhIi8+PHN0b3Agb2Zmc2V0PSIuMzQiIHN0b3AtY29sb3I9IiM1MDI0YTUiLz48c3RvcCBvZmZzZXQ9Ii42NSIgc3RvcC1jb2xvcj0iIzI5MWI2OSIvPjxzdG9wIG9mZnNldD0iLjgxIiBzdG9wLWNvbG9yPSIjMTIxNjQ2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTIxNjQ2Ii8+PC9yYWRpYWxHcmFkaWVudD48c3R5bGU+LmNscy0xe2ZpbGw6dXJsKCNyYWRpYWwtZ3JhZGllbnQpfS5jbHMtMntmaWxsOiMxMjE2NDZ9PC9zdHlsZT48L2RlZnM+PHBhdGggZD0iTTgyOC40MyA4NDIuNjRjLTYuOTgtMTYuOTctMTIuMTMtMzQuNzQtMTcuMzYtNTIuMzgtNS45Ni0yMC4wOS0xMC44OS00MC40OC0xNi43OC02MC41OS0xLjc0LTUuOTItNC42OS0xMS42OC04LjA4LTE2Ljg2LTMuMzgtNS4xNi02Ljg3LTQuMzgtOC42NiAxLjQ1LTQuNzkgMTUuNjMtOC44OCAzMS40OS0xNC4yMyA0Ni45Mi05LjY2IDI3Ljg0LTIyLjgzIDUzLjc1LTQwLjg2IDc3LjQ0LTguOTkgMTEuODItMTkuMDYgMjIuNzgtMjkuNDcgMzMuMzUtNS4yMSA1LjI5LTEwLjUxIDEwLjQ5LTE1LjgyIDE1LjY4LTQuNjUgNC41NC05LjUzIDkuMy02LjI0IDE2LjE5IDIuNTUgNS4zNSA4LjIyIDUuODUgMTMuNDcgNS44My43NiAwIDEuNTEtLjAyIDIuMjQtLjAzIDI2Ljg4LS40NSA1My43Ni4yOSA4MC42NC42IDE4Ljc3LjIxIDM3LjU1Ljk4IDU2LjMuNTYgNy45MS0uMTggMTYuNi4wOCAyMy4wNC02LjQxIDcuMjMtNy4yOSA4LjQxLTEyLjg0IDMuMTktMjEuNzQtNy42NS0xMy4wNC0xNS42NS0yNi4wOS0yMS4zNy00MHoiIGNsYXNzPSJjbHMtMiIvPjxwYXRoIGQ9Ik04ODEuMDQgNjIwLjA5Yy0zLjUtLjg1LTYuOTEtMS43OS0xMC4yMy0yLjg3LTM0LjQyLTExLTU4LjIxLTMzLjM1LTg0LjM3LTU4LjUyLTMuOTktMy44Ni01LjMtOC4yNi01LjAzLTEzLjc4IDEuNDgtMjUuNzItMS42Mi01MS4xMi02LjE1LTc2LjM0LTYuMzctMzUuMTktMTYuOTItNjkuMjEtMzEuMjgtMTAyLjAxLTMuMjMtNy4zNi03LjU0LTEzLjg3LTkuNzgtMjEuNjgtLjIyLS44NS0uNC0xLjg0LjE4LTIuNTEuNjMtLjc2IDEuODgtLjU4IDIuODMtLjIyIDguMzUgMy40MSAyMS42MyA0MS4xNiAzMi4zNiAzMS41MSAyLjI5LTIuMDYgMy4xNC01LjIxIDMuNzMtOC4yMSA5LjExLTQ0Ljk3LTIuMzgtMTE0LjI2LTQyLjU1LTE0Mi4wOS0xOC40NS0xMi43OS0zOC42OS0yNS4yMi02MC44MS0zMC4yLTExLjMxLTIuNTEtMjMuNjEtMi4zOC0zNC4wMiAyLjc0LTUuMTYgMi41MS05LjgzIDYuMjQtMTUuNDQgNy41OC0xMC4wMSAyLjQ3LTE5Ljk3LTMuMTQtMjkuODUtNi4xNS0xMS45OC0zLjU5LTI1LjA0LTMuNDEtMzYuODkuNTgtOS41MSAzLjE5LTE5LjAzIDguODQtMjguOSA3LTEzLjY5LTIuNTYtMjMuNTYtMTguMzYtMzcuNzQtMjMuMi0xNy4wMS01LjgzLTM1LjktNS44My01My4zMi0xLjkzLTUwIDExLjIyLTk2Ljk0IDQ2LjMyLTEzMS45IDgyLjQ0LTM4LjM3IDM5LjYzLTUzLjYzIDkyLjA1LTE5LjcgMTM5Ljg5IDEyLjEyIDE3LjEgMjkuOTMgMzAuNDMgNTAuMjYgMzUuNjggMy45NSAxLjAzIDguMTIgMS44NCAxMS40IDQuMjYgMTIuOTMgOS42LTE0LjM2IDM1LjMyLTIwLjIgNDMuNjctMTIuNTcgMTguMDktMjQuMjggMzYuODUtMzIuOTkgNTcuMTMtMTYuMTYgMzcuNTYtMjMuMiA3NS4zNS0yOC44NiAxMTUuNTctOS43OCA2OS41Ni0yMi44OSAxNDEuMDYtNTUuNDMgMjAzLjg5LTUuMjUgMTAuMS0xMS44IDIwLjE1LTE1LjkzIDMwLjc0LS45OSAyLjUxLTEuMyA1LjQ3IDAgNy44MS43NiAxLjM1IDIuMDIgMi4zOCAzLjM3IDMuMSA3LjI3IDQuMDQgMTguMzEgMy4xNCAyNi4zNCAzLjE5IDI0LjIzLjA5IDQ4LjQ3LjE4IDcyLjc1LjIyIDEyLjM0LjA0IDI0LjY4LjA5IDM3LjAzLjA5IDguODkgMCAyMS45NSAyLjI0IDMwLjAzLTIuMDIgNS4yMS0yLjc0IDguMDgtOC41NyA5LjUxLTE0LjMyIDIuMTEtOC40NCAzLjQ2LTE3LjEgNS43LTI1LjU0IDYuOTEtMjUuODEgMTYuNzQtNTAuMzUgMjkuMzUtNzMuOTYgMjAuMDItMzcuNDcgNDAuOTMtNzkuODQgMy43Ny0xMTQuMDQtOS43OC04Ljk4LTIxLjA1LTE2LjExLTMxLjU1LTI0LjE5LTIuMDItMS41Ny0zLjk5LTQuNzYtMS44OC02LjE5LjgxLS41OCAxLjkzLS40NSAyLjk2LS4yMiA0MC41MyA4LjQ4IDc4IDUyLjAxIDc1LjQ5IDkzLjcxLTEuMzUgMjEuNzctMTAuMSA0MS4yOS0xNi43NCA2MS40OC02LjczIDIwLjUxLTE0LjYzIDQwLjgtMTYuNTIgNjIuNjEtLjc2IDguNjItMS42NiAxNy4zMi0xLjc1IDI1Ljk5LS4xMyAxMS4yMiA0LjA4IDE3LjAxIDE2LjgzIDE3LjA1IDQ2LjYzLjA5IDkzLjI2LjgxIDEzOS44OSAxLjI2IDExLjg1LjEzIDM2LjE3IDQuMDQgNDAuOTMtMTEuMjYgMS43NS01LjY1LS40OS0xMS43MS0zLjQxLTE2LjgzLTIuOTItNS4xMi02LjY0LTkuOTItOC4yMS0xNS42Mi0yLjg3LTEwLjE5IDEuNjItMjAuOTEgNi4zNy0zMC4zOCA1LjUyLTEwLjk1IDEyLjM5LTIxLjIzIDE3Ljg2LTMyLjE4IDYuNDItMTEuNTggMTMuOTYtMjIuMzUgMTkuNzUtMzQuMzMgNi4xLTEyLjUyIDExLjA0LTI1LjU4IDE1LjEyLTM4Ljg3IDUuNTItMTcuODIgOS41MS0zNi4wOCAxMi42Ni01NC40NC42Ny0zLjk4IDEuMTEtNy45OSAxLjU4LTExLjk5LjI0LTIuMDEuNDktNC4wMy43OC02LjAzLjMzLTIuMjUuODItNC45MiAzLjc0LTQuNzEgMTcuNCAxLjIzLTguNzIgMTAwLjgtMTAuOTkgMTA2Ljg4LTUuMzQgMTQuMjctMTEuNzYgMjguMTQtMTkuMyA0MS40Mi05LjQ3IDE2LjY1LTI2Ljg4IDMxLjc4LTIyLjYyIDUyLjgyIDEuNTMgNy40NSAzLjMyIDE4LjEzIDEwLjA1IDIyLjg0IDkuMjQgNi41MSAyMS4xNC00LjMxIDI3LjY5LTEwLjE5IDEwLjMyLTkuMjkgMTguNjItMjAuMzcgMjcuMzMtMzEuMTUgMjMuOTctMjkuNjIgNDIuNDEtNjMuMzMgNTUuODMtOTguOTEgMTQuNTktMzguODcgMjEuMDktNzcuNTEgMjYuMjEtMTE4LjQ0LjMxLTIuMzMuODEtNC45OCAyLjc4LTYuMjQgMi4yNC0xLjQ0IDUuMTYtLjM2IDcuNTguNzIgMjkuNjIgMTMuMSA2MS42MiAyMy43IDkzLjg0IDIwLjYgMy45NS0uNCA4Ljg5LTIuMDYgOC45OC02LjAxLjA5LTMuOTEtNC43MS01Ljc5LTguNTMtNi42OXptLTE1Ny41Ny0yMC4yNGMtLjMxIDEuMTItMS4xNyAyLjExLTIuMTUgMi43NC0xLjg5IDEuMTctNC40IDEuNDgtNi41NSAxLjcxLTE0LjM2IDEuNDgtMjguNS0yLjkyLTQxLjQyLTguNzUtMi4wNi0uOS00LjEzLTEuODQtNi4xOS0yLjg3LTE5LjctOS43OC0zOC4wMS0yMy43NC01My4xNC0zOS43Mi0xMi44NC0xMy41NS0yMi45OC0yOS42Mi0yOS45My00Ni45NC0xLjQ4LTMuNjgtMy4yMy03LjYzLTQuMDgtMTEuNTMtLjcyLTMuMzItLjI3LTcuMjMgMi4yOS05LjUyIDEuNjItMS40NCAzLjgxLTEuOTcgNS45Mi0yLjQyIDcuMDUtMS4zOSAxNC41NC0yLjE1IDIxLjY4LTEuNTMgMi45Mi4xOCA1Ljk3Ljk0IDguMDMgMi45NiAxLjg0IDEuNzUgMi43NCA0LjIyIDMuNTUgNi42NCAzLjUgMTAuNSA2LjQyIDIxLjMyIDExLjQgMzEuMjggNS4wMyAxMC4xIDExLjY3IDE5LjU3IDE4LjU4IDI4LjQ1IDIuNTEgMy4yMyA1LjEyIDYuMzcgNy44MSA5LjQ3IDEzLjMzIDE1LjMgMzAuODMgMjguOTkgNTEuMyAzMi45LjgxLjE4IDEuNjIuMzEgMi40Ny40NSAyLjgzLjQgNS43OS42NyA4LjIxIDIuMjQgMS4xNy43NiAyLjIgMS45OCAyLjMzIDMuMzcgMCAuMzYgMCAuNzItLjA5IDEuMDh6IiBjbGFzcz0iY2xzLTIiLz48Zz48cGF0aCBkPSJNODI4LjQzIDg0Mi42NGMtNi45OC0xNi45Ny0xMi4xMy0zNC43NC0xNy4zNi01Mi4zOC01Ljk2LTIwLjA5LTEwLjg5LTQwLjQ4LTE2Ljc4LTYwLjU5LTEuNzQtNS45Mi00LjY5LTExLjY4LTguMDgtMTYuODYtMy4zOC01LjE2LTYuODctNC4zOC04LjY2IDEuNDUtNC43OSAxNS42My04Ljg4IDMxLjQ5LTE0LjIzIDQ2LjkyLTkuNjYgMjcuODQtMjIuODMgNTMuNzUtNDAuODYgNzcuNDQtOC45OSAxMS44Mi0xOS4wNiAyMi43OC0yOS40NyAzMy4zNS01LjIxIDUuMjktMTAuNTEgMTAuNDktMTUuODIgMTUuNjgtNC42NSA0LjU0LTkuNTMgOS4zLTYuMjQgMTYuMTkgMi41NSA1LjM1IDguMjIgNS44NSAxMy40NyA1LjgzLjc2IDAgMS41MS0uMDIgMi4yNC0uMDMgMjYuODgtLjQ1IDUzLjc2LjI5IDgwLjY0LjYgMTguNzcuMjEgMzcuNTUuOTggNTYuMy41NiA3LjkxLS4xOCAxNi42LjA4IDIzLjA0LTYuNDEgNy4yMy03LjI5IDguNDEtMTIuODQgMy4xOS0yMS43NC03LjY1LTEzLjA0LTE1LjY1LTI2LjA5LTIxLjM3LTQweiIgY2xhc3M9ImNscy0xIi8+PHBhdGggZD0iTTg4MS4wNCA2MjAuMDljLTMuNS0uODUtNi45MS0xLjc5LTEwLjIzLTIuODctMzQuNDItMTEtNTguMjEtMzMuMzUtODQuMzctNTguNTItMy45OS0zLjg2LTUuMy04LjI2LTUuMDMtMTMuNzggMS40OC0yNS43Mi0xLjYyLTUxLjEyLTYuMTUtNzYuMzQtNi4zNy0zNS4xOS0xNi45Mi02OS4yMS0zMS4yOC0xMDIuMDEtMy4yMy03LjM2LTcuNTQtMTMuODctOS43OC0yMS42OC0uMjItLjg1LS40LTEuODQuMTgtMi41MS42My0uNzYgMS44OC0uNTggMi44My0uMjIgOC4zNSAzLjQxIDIxLjYzIDQxLjE2IDMyLjM2IDMxLjUxIDIuMjktMi4wNiAzLjE0LTUuMjEgMy43My04LjIxIDkuMTEtNDQuOTctMi4zOC0xMTQuMjYtNDIuNTUtMTQyLjA5LTE4LjQ1LTEyLjc5LTM4LjY5LTI1LjIyLTYwLjgxLTMwLjItMTEuMzEtMi41MS0yMy42MS0yLjM4LTM0LjAyIDIuNzQtNS4xNiAyLjUxLTkuODMgNi4yNC0xNS40NCA3LjU4LTEwLjAxIDIuNDctMTkuOTctMy4xNC0yOS44NS02LjE1LTExLjk4LTMuNTktMjUuMDQtMy40MS0zNi44OS41OC05LjUxIDMuMTktMTkuMDMgOC44NC0yOC45IDctMTMuNjktMi41Ni0yMy41Ni0xOC4zNi0zNy43NC0yMy4yLTE3LjAxLTUuODMtMzUuOS01LjgzLTUzLjMyLTEuOTMtNTAgMTEuMjItOTYuOTQgNDYuMzItMTMxLjkgODIuNDQtMzguMzcgMzkuNjMtNTMuNjMgOTIuMDUtMTkuNyAxMzkuODkgMTIuMTIgMTcuMSAyOS45MyAzMC40MyA1MC4yNiAzNS42OCAzLjk1IDEuMDMgOC4xMiAxLjg0IDExLjQgNC4yNiAxMi45MyA5LjYtMTQuMzYgMzUuMzItMjAuMiA0My42Ny0xMi41NyAxOC4wOS0yNC4yOCAzNi44NS0zMi45OSA1Ny4xMy0xNi4xNiAzNy41Ni0yMy4yIDc1LjM1LTI4Ljg2IDExNS41Ny05Ljc4IDY5LjU2LTIyLjg5IDE0MS4wNi01NS40MyAyMDMuODktNS4yNSAxMC4xLTExLjggMjAuMTUtMTUuOTMgMzAuNzQtLjk5IDIuNTEtMS4zIDUuNDcgMCA3LjgxLjc2IDEuMzUgMi4wMiAyLjM4IDMuMzcgMy4xIDcuMjcgNC4wNCAxOC4zMSAzLjE0IDI2LjM0IDMuMTkgMjQuMjMuMDkgNDguNDcuMTggNzIuNzUuMjIgMTIuMzQuMDQgMjQuNjguMDkgMzcuMDMuMDkgOC44OSAwIDIxLjk1IDIuMjQgMzAuMDMtMi4wMiA1LjIxLTIuNzQgOC4wOC04LjU3IDkuNTEtMTQuMzIgMi4xMS04LjQ0IDMuNDYtMTcuMSA1LjctMjUuNTQgNi45MS0yNS44MSAxNi43NC01MC4zNSAyOS4zNS03My45NiAyMC4wMi0zNy40NyA0MC45My03OS44NCAzLjc3LTExNC4wNC05Ljc4LTguOTgtMjEuMDUtMTYuMTEtMzEuNTUtMjQuMTktMi4wMi0xLjU3LTMuOTktNC43Ni0xLjg4LTYuMTkuODEtLjU4IDEuOTMtLjQ1IDIuOTYtLjIyIDQwLjUzIDguNDggNzggNTIuMDEgNzUuNDkgOTMuNzEtMS4zNSAyMS43Ny0xMC4xIDQxLjI5LTE2Ljc0IDYxLjQ4LTYuNzMgMjAuNTEtMTQuNjMgNDAuOC0xNi41MiA2Mi42MS0uNzYgOC42Mi0xLjY2IDE3LjMyLTEuNzUgMjUuOTktLjEzIDExLjIyIDQuMDggMTcuMDEgMTYuODMgMTcuMDUgNDYuNjMuMDkgOTMuMjYuODEgMTM5Ljg5IDEuMjYgMTEuODUuMTMgMzYuMTcgNC4wNCA0MC45My0xMS4yNiAxLjc1LTUuNjUtLjQ5LTExLjcxLTMuNDEtMTYuODMtMi45Mi01LjEyLTYuNjQtOS45Mi04LjIxLTE1LjYyLTIuODctMTAuMTkgMS42Mi0yMC45MSA2LjM3LTMwLjM4IDUuNTItMTAuOTUgMTIuMzktMjEuMjMgMTcuODYtMzIuMTggNi40Mi0xMS41OCAxMy45Ni0yMi4zNSAxOS43NS0zNC4zMyA2LjEtMTIuNTIgMTEuMDQtMjUuNTggMTUuMTItMzguODcgNS41Mi0xNy44MiA5LjUxLTM2LjA4IDEyLjY2LTU0LjQ0LjY3LTMuOTggMS4xMS03Ljk5IDEuNTgtMTEuOTkuMjQtMi4wMS40OS00LjAzLjc4LTYuMDMuMzMtMi4yNS44Mi00LjkyIDMuNzQtNC43MSAxNy40IDEuMjMtOC43MiAxMDAuOC0xMC45OSAxMDYuODgtNS4zNCAxNC4yNy0xMS43NiAyOC4xNC0xOS4zIDQxLjQyLTkuNDcgMTYuNjUtMjYuODggMzEuNzgtMjIuNjIgNTIuODIgMS41MyA3LjQ1IDMuMzIgMTguMTMgMTAuMDUgMjIuODQgOS4yNCA2LjUxIDIxLjE0LTQuMzEgMjcuNjktMTAuMTkgMTAuMzItOS4yOSAxOC42Mi0yMC4zNyAyNy4zMy0zMS4xNSAyMy45Ny0yOS42MiA0Mi40MS02My4zMyA1NS44My05OC45MSAxNC41OS0zOC44NyAyMS4wOS03Ny41MSAyNi4yMS0xMTguNDQuMzEtMi4zMy44MS00Ljk4IDIuNzgtNi4yNCAyLjI0LTEuNDQgNS4xNi0uMzYgNy41OC43MiAyOS42MiAxMy4xIDYxLjYyIDIzLjcgOTMuODQgMjAuNiAzLjk1LS40IDguODktMi4wNiA4Ljk4LTYuMDEuMDktMy45MS00LjcxLTUuNzktOC41My02LjY5em0tMTU3LjU3LTIwLjI0Yy0uMzEgMS4xMi0xLjE3IDIuMTEtMi4xNSAyLjc0LTEuODkgMS4xNy00LjQgMS40OC02LjU1IDEuNzEtMTQuMzYgMS40OC0yOC41LTIuOTItNDEuNDItOC43NS0yLjA2LS45LTQuMTMtMS44NC02LjE5LTIuODctMTkuNy05Ljc4LTM4LjAxLTIzLjc0LTUzLjE0LTM5LjcyLTEyLjg0LTEzLjU1LTIyLjk4LTI5LjYyLTI5LjkzLTQ2Ljk0LTEuNDgtMy42OC0zLjIzLTcuNjMtNC4wOC0xMS41My0uNzItMy4zMi0uMjctNy4yMyAyLjI5LTkuNTIgMS42Mi0xLjQ0IDMuODEtMS45NyA1LjkyLTIuNDIgNy4wNS0xLjM5IDE0LjU0LTIuMTUgMjEuNjgtMS41MyAyLjkyLjE4IDUuOTcuOTQgOC4wMyAyLjk2IDEuODQgMS43NSAyLjc0IDQuMjIgMy41NSA2LjY0IDMuNSAxMC41IDYuNDIgMjEuMzIgMTEuNCAzMS4yOCA1LjAzIDEwLjEgMTEuNjcgMTkuNTcgMTguNTggMjguNDUgMi41MSAzLjIzIDUuMTIgNi4zNyA3LjgxIDkuNDcgMTMuMzMgMTUuMyAzMC44MyAyOC45OSA1MS4zIDMyLjkuODEuMTggMS42Mi4zMSAyLjQ3LjQ1IDIuODMuNCA1Ljc5LjY3IDguMjEgMi4yNCAxLjE3Ljc2IDIuMiAxLjk4IDIuMzMgMy4zNyAwIC4zNiAwIC43Mi0uMDkgMS4wOHoiIGNsYXNzPSJjbHMtMSIvPjwvZz48L3N2Zz4K
+      mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - barmancloud.cnpg.io
+              resources:
+                - objectstores
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - barmancloud.cnpg.io
+              resources:
+                - objectstores/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - barmancloud.cnpg.io
+              resources:
+                - objectstores/status
+              verbs:
+                - get
+                - patch
+                - update
+            - apiGroups:
+                - postgresql.cnpg.io
+              resources:
+                - backups
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - postgresql.cnpg.io
+              resources:
+                - clusters/finalizers
+              verbs:
+                - update
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - rolebindings
+                - roles
+              verbs:
+                - create
+                - get
+                - list
+                - patch
+                - update
+                - watch
+          serviceAccountName: plugin-barman-cloud
+      deployments:
+        - label:
+            app: barman-cloud
+          name: barman-cloud
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: barman-cloud
+            strategy:
+              type: Recreate
+            template:
+              metadata:
+                labels:
+                  app: barman-cloud
+              spec:
+                containers:
+                  - args:
+                      - operator
+                      - --server-cert=/server/tls.crt
+                      - --server-key=/server/tls.key
+                      - --client-cert=/client/tls.crt
+                      - --server-address=:9090
+                      - --leader-elect
+                      - --log-level=debug
+                    env:
+                      - name: RELATED_IMAGE_SIDECAR
+                        value: ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar@sha256:2287a793a804db751edd0d07d44cd549e357677e98a800eb12e2cf7c0d53f9b0
+                      - name: SIDECAR_IMAGE
+                        value: ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar@sha256:2287a793a804db751edd0d07d44cd549e357677e98a800eb12e2cf7c0d53f9b0
+                    image: ghcr.io/cloudnative-pg/plugin-barman-cloud@sha256:c75acad19a36e8176cfe2885761ff1b836c6ef977d7257e298c99a28b5c302ef
+                    name: barman-cloud
+                    ports:
+                      - containerPort: 9090
+                        protocol: TCP
+                    readinessProbe:
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+                      tcpSocket:
+                        port: 9090
+                    resources: {}
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                      runAsGroup: 10001
+                      runAsUser: 10001
+                      seccompProfile:
+                        type: RuntimeDefault
+                    volumeMounts:
+                      - mountPath: /server
+                        name: server
+                      - mountPath: /client
+                        name: client
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: plugin-barman-cloud
+                volumes:
+                  - name: server
+                    secret:
+                      optional: true
+                      secretName: barman-cloud-server-tls
+                  - name: client
+                    secret:
+                      optional: true
+                      secretName: barman-cloud-client-tls
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: plugin-barman-cloud
+    strategy: deployment
+  installModes:
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: true
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - postgresql
+    - postgres
+    - cloudnativepg
+    - cloudnative-pg
+    - cnpg
+    - cnpg-i
+    - plugin
+    - barman
+    - barman-cloud
+    - backup
+    - recovery
+    - pitr
+    - wal
+    - object-storage
+    - s3
+    - azure-blob-storage
+    - google-cloud-storage
+  links:
+    - name: Documentation
+      url: https://cloudnative-pg.io/plugin-barman-cloud/
+    - name: Source Code
+      url: https://github.com/cloudnative-pg/plugin-barman-cloud
+    - name: CloudNativePG
+      url: https://cloudnative-pg.io/
+  maintainers:
+    - email: gabriele.bartolini@enterprisedb.com
+      name: Gabriele Bartolini
+    - email: francesco.canovai@enterprisedb.com
+      name: Francesco Canovai
+    - email: leonardo.cecchi@enterprisedb.com
+      name: Leonardo Cecchi
+    - email: niccolo.fei@enterprisedb.com
+      name: Niccolò Fei
+    - email: marco.nenciarini@enterprisedb.com
+      name: Marco Nenciarini
+    - email: armando.ruocco@enterprisedb.com
+      name: Armando Ruocco
+  maturity: stable
+  minKubeVersion: 1.31.0
+  provider:
+    name: The CloudNativePG Contributors
+    url: https://cloudnative-pg.io
+  relatedImages:
+    - image: ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar@sha256:2287a793a804db751edd0d07d44cd549e357677e98a800eb12e2cf7c0d53f9b0
+      name: sidecar
+    - image: ghcr.io/cloudnative-pg/plugin-barman-cloud@sha256:c75acad19a36e8176cfe2885761ff1b836c6ef977d7257e298c99a28b5c302ef
+      name: barman-cloud
+    - image: ghcr.io/cloudnative-pg/plugin-barman-cloud@sha256:c75acad19a36e8176cfe2885761ff1b836c6ef977d7257e298c99a28b5c302ef
+      name: plugin-barman-cloud-c75acad19a36e8176cfe2885761ff1b836c6ef977d7257e298c99a28b5c302ef-annotation
+  version: 0.15.1-dev62

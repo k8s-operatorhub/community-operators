@@ -1,0 +1,340 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: rupturainstances.ruptura.io
+  labels:
+    app.kubernetes.io/name: ruptura
+    app.kubernetes.io/component: operator
+spec:
+  group: ruptura.io
+  scope: Namespaced
+  names:
+    plural: rupturainstances
+    singular: rupturainstance
+    kind: RupturaInstance
+    shortNames: ["ri", "ruptura"]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Edition
+          type: string
+          jsonPath: .spec.edition
+        - name: Ready
+          type: integer
+          jsonPath: .status.readyReplicas
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Message
+          type: string
+          jsonPath: .status.message
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              properties:
+                image:
+                  type: string
+                  description: "Ruptura engine image. Default: the engine version matching this operator."
+                replicas:
+                  type: integer
+                  minimum: 1
+                  maximum: 1
+                  default: 1
+                  description: "Must be 1 — BadgerDB is single-writer."
+                storageSize:
+                  type: string
+                  default: "10Gi"
+                  description: "PVC size for BadgerDB persistence."
+                apiKeyRef:
+                  type: string
+                  description: "Name of a Secret with an 'api-key' key. Becomes RUPTURA_API_KEY."
+                edition:
+                  type: string
+                  enum: [community, autopilot]
+                  default: community
+                  description: "Feature tier. Keep community."
+                ingestRPS:
+                  type: integer
+                  minimum: 1
+                  maximum: 100000
+                  description: "Token-bucket rate limit for the OTLP ingest server (req/s)."
+                resources:
+                  type: object
+                  properties:
+                    requests:
+                      type: object
+                      properties:
+                        cpu: {type: string}
+                        memory: {type: string}
+                    limits:
+                      type: object
+                      properties:
+                        cpu: {type: string}
+                        memory: {type: string}
+                deployment:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum: [Deployment]
+                      default: Deployment
+                level:
+                  type: object
+                  description: "What this instance watches."
+                  properties:
+                    scope:
+                      type: string
+                      enum: [container, pod, workload, namespace, service, node, cluster, application, customResource]
+                      default: workload
+                    selector:
+                      type: object
+                      properties:
+                        matchLabels:
+                          type: object
+                          additionalProperties: {type: string}
+                input:
+                  type: object
+                  description: "How much telemetry this instance collects."
+                  properties:
+                    profile:
+                      type: string
+                      enum: [minimal, standard, full, deep]
+                      default: standard
+                    prometheus:
+                      type: object
+                      description: "Prometheus compatible query endpoint that failure modes read. Default on OpenShift: the cluster Thanos querier."
+                      required: [url]
+                      properties:
+                        url:
+                          type: string
+                          pattern: '^https?://.+'
+                        tls:
+                          type: object
+                          properties:
+                            ca:
+                              type: object
+                              description: "Extra CA that signs the Prometheus server certificate."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                                configMapKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            cert:
+                              type: object
+                              description: "Client certificate for mutual TLS, with key."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                                configMapKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            key:
+                              type: object
+                              description: "Client private key, from a Secret."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            serverName: {type: string}
+                        authorization:
+                          type: object
+                          description: "Exactly one method. Without this block no credential is sent."
+                          minProperties: 1
+                          maxProperties: 1
+                          properties:
+                            bearerToken:
+                              type: object
+                              description: "Bearer token, from a Secret."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            basicAuth:
+                              type: object
+                              required: [username, password]
+                              properties:
+                                username:
+                                  type: object
+                                  description: "Username."
+                                  minProperties: 1
+                                  maxProperties: 1
+                                  properties:
+                                    secretKeyRef:
+                                      type: object
+                                      required: [name, key]
+                                      properties:
+                                        name: {type: string, minLength: 1}
+                                        key: {type: string, minLength: 1}
+                                    configMapKeyRef:
+                                      type: object
+                                      required: [name, key]
+                                      properties:
+                                        name: {type: string, minLength: 1}
+                                        key: {type: string, minLength: 1}
+                                password:
+                                  type: object
+                                  description: "Password, from a Secret."
+                                  minProperties: 1
+                                  maxProperties: 1
+                                  properties:
+                                    secretKeyRef:
+                                      type: object
+                                      required: [name, key]
+                                      properties:
+                                        name: {type: string, minLength: 1}
+                                        key: {type: string, minLength: 1}
+                            serviceAccountToken: {type: boolean, enum: [true]}
+                    otlp:
+                      type: object
+                      description: "OTLP receiver: gRPC on 4317, HTTP and Prometheus remote write on 4318."
+                      properties:
+                        tls:
+                          type: object
+                          required: [cert, key]
+                          properties:
+                            cert:
+                              type: object
+                              description: "Server certificate."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                                configMapKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            key:
+                              type: object
+                              description: "Server private key, from a Secret."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                            clientCA:
+                              type: object
+                              description: "When set, clients must present a certificate signed by this CA."
+                              minProperties: 1
+                              maxProperties: 1
+                              properties:
+                                secretKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                                configMapKeyRef:
+                                  type: object
+                                  required: [name, key]
+                                  properties:
+                                    name: {type: string, minLength: 1}
+                                    key: {type: string, minLength: 1}
+                analysis:
+                  type: object
+                  properties:
+                    sensitivity:
+                      type: string
+                      enum: [conservative, balanced, aggressive]
+                      default: balanced
+                    horizon:
+                      type: string
+                      default: 30m
+                alerting:
+                  type: object
+                  properties:
+                    channels:
+                      type: array
+                      items:
+                        type: object
+                        required: [name]
+                        properties:
+                          name: {type: string}
+                          alertmanager:
+                            type: object
+                            required: [url]
+                            properties:
+                              url: {type: string}
+                              serviceAccountToken:
+                                type: boolean
+                                description: Send the instance service account token, as the OpenShift cluster Alertmanager requires. Never set it for a third party target.
+                logging:
+                  type: object
+                  properties:
+                    level:
+                      type: string
+                      enum: [debug, info, warn, error]
+                      default: info
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Running, Degraded, Failed]
+                readyReplicas:
+                  type: integer
+                availableReplicas:
+                  type: integer
+                message:
+                  type: string
+                operator:
+                  type: string
+                  description: "Namespace of the operator that manages this instance."
+                lastReconcileTime:
+                  type: string
+                  format: date-time
+                observedGeneration:
+                  type: integer

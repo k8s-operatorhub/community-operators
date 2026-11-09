@@ -428,6 +428,24 @@ spec:
                 required:
                 - enabled
                 type: object
+              serviceAccountRealmRoles:
+                description: |-
+                  ServiceAccountRealmRoles grants realm roles to the service account of an
+                  m2m client. Only listed and previously listed roles are managed; other
+                  service-account mappings, including default roles, are preserved.
+                items:
+                  maxLength: 255
+                  minLength: 1
+                  pattern: ^[^\x00-\x1F\x7F]+$
+                  type: string
+                maxItems: 16
+                type: array
+                x-kubernetes-list-type: set
+                x-kubernetes-validations:
+                - message: reserved platform, fleet and cluster roles cannot be granted
+                    to a service account
+                  rule: self.all(r, r != 'HANKO_PLATFORM' && !r.startsWith('HANKO_PLATFORM_')
+                    && !r.startsWith('HANKO_FLEET_') && !r.startsWith('HANKO_CLUSTER_'))
               theme:
                 description: Theme references a HankoTheme to apply to this application's
                   login page.
@@ -611,6 +629,13 @@ spec:
                 && !has(self.realmRoleScopes) && !has(self.secretRotationPolicy) &&
                 (!has(self.clientSecretProjections) || size(self.clientSecretProjections)
                 == 0))'
+            - message: serviceAccountRealmRoles require a managed m2m client
+              rule: '!has(self.serviceAccountRealmRoles) || size(self.serviceAccountRealmRoles)
+                == 0 || (has(self.type) && self.type == ''m2m'' && (!has(self.mode)
+                || self.mode == ''Manage''))'
+            - message: serviceAccountRealmRoles must also be listed in realmRoleScopes
+              rule: '!has(self.serviceAccountRealmRoles) || self.serviceAccountRealmRoles.all(r,
+                has(self.realmRoleScopes) && r in self.realmRoleScopes)'
             - message: native attributes cannot override protocol, SAML, ownership
                 or managed theme/logout settings
               rule: '!has(self.attributes) || self.attributes.all(k, !k.matches(''(?i)^(saml|hanko[.]).*'')
@@ -1271,6 +1296,17 @@ spec:
                   type: object
                 maxItems: 128
                 type: array
+              managedServiceAccountRealmRoles:
+                description: |-
+                  ManagedServiceAccountRealmRoles records the service-account realm-role
+                  mappings this application grants.
+                items:
+                  maxLength: 255
+                  minLength: 1
+                  type: string
+                maxItems: 16
+                type: array
+                x-kubernetes-list-type: set
               managedTokenClaims:
                 description: ManagedTokenClaims records client-scoped protocol mappers
                   managed for this application.

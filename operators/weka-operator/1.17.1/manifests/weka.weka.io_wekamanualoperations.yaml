@@ -1,0 +1,590 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: wekamanualoperations.weka.weka.io
+spec:
+  group: weka.weka.io
+  names:
+    kind: WekaManualOperation
+    listKind: WekaManualOperationList
+    plural: wekamanualoperations
+    singular: wekamanualoperation
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Action
+      jsonPath: .spec.action
+      name: Action
+      type: string
+    - description: Status
+      jsonPath: .status.status
+      name: Status
+      type: string
+    - description: Result
+      jsonPath: .status.result
+      name: Result
+      priority: 1
+      type: string
+    - description: Time since creation
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WekaManualOperation is the Schema for the wekamanualoperations
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WekaManualOperationSpec defines the desired state of WekaManualOperation
+            properties:
+              action:
+                description: WekaManualOperationAction enumerates the supported WekaManualOperation
+                  actions.
+                enum:
+                - sign-drives
+                - discover-drives
+                - force-resign-drives
+                - block-drives
+                - unblock-drives
+                - ensure-nics
+                - remote-traces-session
+                - clean-stale-virtual-drives
+                - rotate-ssdproxy
+                - migrate-to-drive-sharing
+                type: string
+              deletionDelay:
+                default: 5m
+                description: |-
+                  DeletionDelay specifies how long to wait after completion before deleting the resource.
+                  Defaults to 5m if not specified.
+                pattern: ^(0|([0-9]+(\.[0-9]+)?(s|m|h))+)$
+                type: string
+              image:
+                type: string
+              imagePullSecret:
+                type: string
+              payload:
+                properties:
+                  blockDrivesPayload:
+                    properties:
+                      node:
+                        type: string
+                      physicalUUIDs:
+                        items:
+                          type: string
+                        type: array
+                      serialIDs:
+                        items:
+                          type: string
+                        type: array
+                      virtualUUIDs:
+                        description: |-
+                          VirtualUUIDs blocks individual virtual drives (VIDs) on a drive-sharing node. Removes exactly
+                          the named VIDs, leaving other VIDs on the same physical drive — including other tenants' —
+                          untouched. Node physical inventory and capacity resources are unchanged. Blocked entries are
+                          never cleaned automatically: unblock them once the replacement is in place.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - node
+                    type: object
+                  cleanStaleVirtualDrivesPayload:
+                    description: |-
+                      CleanStaleVirtualDrivesPayload is the shared payload for the clean-stale-virtual-drives
+                      operation, used by both WekaManualOperation (one-shot) and WekaPolicy (periodic).
+
+                      The operation scans every ssdproxy's virtual drives (VIDs) and diffs them against
+                      the union of all live WekaContainer allocations to find stale VIDs. Detection always
+                      runs and reports; deletion is opt-in and double-gated (see DeleteStaleVids).
+                    properties:
+                      deleteStaleVids:
+                        default: false
+                        description: |-
+                          DeleteStaleVids enables ACTUAL removal of detected stale VIDs. DANGEROUS — disabled by
+                          default. Even when true, a VID is only removed if it was reported stale and UNCHANGED on
+                          the previous cycle (fingerprint match) and is still unclaimed at removal time. Acts as the
+                          user's confirmation.
+                        type: boolean
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          NodeSelector limits the scan to ssdproxies on nodes matching these labels.
+                          Empty = all nodes that have an ssdproxy.
+                        type: object
+                      onlyNonExistingClusters:
+                        default: false
+                        description: |-
+                          OnlyNonExistingClusters restricts the stale set to VIDs whose owner cluster GUID has NO
+                          WekaCluster CR at all (category dead_cluster) — the safe-by-construction subset (no live
+                          cluster could be mid-allocating them). Excludes live_cluster_unclaimed. Recommended ON
+                          when pairing with deletion.
+                        type: boolean
+                    type: object
+                  discoverDrivesPayload:
+                    properties:
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  ensureNICsPayload:
+                    properties:
+                      dataNICsNumber:
+                        type: integer
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      type:
+                        type: string
+                    required:
+                    - type
+                    type: object
+                  forceResignDrivesPayload:
+                    properties:
+                      devicePaths:
+                        items:
+                          type: string
+                        type: array
+                      deviceSerials:
+                        items:
+                          type: string
+                        type: array
+                      nodeName:
+                        description: "NodeName is a type that holds a api.Node's Name
+                          identifier.\nBeing a type captures intent and helps make
+                          sure that the node name\nis not confused with similar concepts
+                          (the hostname, the cloud provider id,\nthe cloud provider
+                          name etc)\n\nTo clarify the various types:\n\n  - Node.Name
+                          is the Name field of the Node in the API.  This should be
+                          stored in a NodeName.\n    Unfortunately, because Name is
+                          part of ObjectMeta, we can't store it as a NodeName at the
+                          API level.\n\n  - Hostname is the hostname of the local
+                          machine (from uname -n).\n    However, some components allow
+                          the user to pass in a --hostname-override flag,\n    which
+                          will override this in most places. In the absence of anything
+                          more meaningful,\n    kubelet will use Hostname as the Node.Name
+                          when it creates the Node.\n\n* The cloudproviders have the
+                          own names: GCE has InstanceName, AWS has InstanceId.\n\n\tFor
+                          GCE, InstanceName is the Name of an Instance object in the
+                          GCE API.  On GCE, Instance.Name becomes the\n\tHostname,
+                          and thus it makes sense also to use it as the Node.Name.
+                          \ But that is GCE specific, and it is up\n\tto the cloudprovider
+                          how to do this mapping.\n\n\tFor AWS, the InstanceID is
+                          not yet suitable for use as a Node.Name, so we actually
+                          use the\n\tPrivateDnsName for the Node.Name.  And this is
+                          _not_ always the same as the hostname: if\n\twe are using
+                          a custom DHCP domain it won't be."
+                        type: string
+                    required:
+                    - nodeName
+                    type: object
+                  migrateToDriveSharingPayload:
+                    description: |-
+                      MigrateToDriveSharingPayload configures the migrate-to-drive-sharing operation, which rolls a
+                      WekaCluster's exclusive drive containers over to drive sharing one node at a time.
+                    properties:
+                      cluster:
+                        description: Cluster to migrate.
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
+                      driveTypeOverrides:
+                        properties:
+                          rules:
+                            description: |-
+                              Rules are evaluated in order; the first rule matching a drive wins.
+                              An empty list clears all previously persisted overrides on the node.
+                            items:
+                              description: |-
+                                DriveTypeOverrideRule forces the drive type for drives matching Model and/or CapacityGiB.
+                                When both Model and CapacityGiB are set, BOTH must match (AND semantics) — this lets you
+                                target one SKU shipped in several capacities where only some are QLC.
+                              properties:
+                                capacityGiB:
+                                  description: |-
+                                    CapacityGiB matches the drive capacity in GiB exactly, as reported in the
+                                    weka.io/weka-shared-drives annotation. 0 means "do not match on capacity".
+                                  minimum: 1
+                                  type: integer
+                                model:
+                                  description: |-
+                                    Model matches the device model exactly, case-insensitively, ignoring surrounding
+                                    whitespace. Find it with: lsblk -dno MODEL /dev/nvme0n1
+                                    Empty means "do not match on model".
+                                  type: string
+                                type:
+                                  description: Type is the drive type to report for
+                                    matching drives.
+                                  enum:
+                                  - TLC
+                                  - QLC
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                              x-kubernetes-validations:
+                              - message: at least one of model or capacityGiB must
+                                  be set
+                                rule: (has(self.model) && size(self.model) > 0) ||
+                                  (has(self.capacityGiB) && self.capacityGiB != 0)
+                            type: array
+                        required:
+                        - rules
+                        type: object
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          NodeSelector restricts the campaign to drive containers on nodes matching these labels.
+                          Empty = all.
+                        type: object
+                      paused:
+                        description: Paused stops starting new containers; an in-flight
+                          one finishes.
+                        type: boolean
+                      signOptions:
+                        description: SignOptions for the shared re-sign; allowEraseWekaPartitions
+                          is always forced on.
+                        properties:
+                          allowEraseNonWekaPartitions:
+                            type: boolean
+                          allowEraseWekaPartitions:
+                            type: boolean
+                          allowNonEmptyDevice:
+                            type: boolean
+                          skipTrimFormat:
+                            type: boolean
+                        type: object
+                    required:
+                    - cluster
+                    type: object
+                  remoteTracesSessionPayload:
+                    properties:
+                      allowHttpWekahomeEndpoint:
+                        type: boolean
+                      allowInsecureWekahomeEndpoint:
+                        type: boolean
+                      cluster:
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
+                      duration:
+                        description: |-
+                          Duration specifies how long the trace session should run.
+                          WekaManualOperation: defaults to 1 week if omitted/0. CR auto-deletes after expiration.
+                          WekaPolicy: defaults to continuous if omitted/0. Resources cleaned up after expiration.
+                          Examples: "30m", "2h", "7d", "168h"
+                        type: string
+                      hostNetwork:
+                        type: boolean
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      wekahomeCaSecret:
+                        type: string
+                      wekahomeEndpointOverride:
+                        type: string
+                    type: object
+                  rotateSsdProxyPayload:
+                    description: |-
+                      RotateSsdProxyPayload configures the rotate-ssdproxy operation, which rolls a new image
+                      across ssdproxy WekaContainers one node at a time, gated by a cross-cluster disruption check.
+                    properties:
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        description: NodeSelector restricts rotation to a subset of
+                          nodes. Empty = all nodes that have an ssdproxy.
+                        type: object
+                      paused:
+                        description: Paused stops starting new nodes; an in-flight
+                          node finishes.
+                        type: boolean
+                      targetImage:
+                        description: TargetImage is the image to roll out. Empty means
+                          fall back to helm
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: targetImage is immutable once set; create a new WekaManualOperation
+                        to rotate to a different image
+                      rule: '!has(oldSelf.targetImage) || (has(self.targetImage) &&
+                        self.targetImage == oldSelf.targetImage)'
+                  signDrivesPayload:
+                    properties:
+                      devicePaths:
+                        items:
+                          type: string
+                        type: array
+                      deviceSerials:
+                        description: DeviceSerials sign drives by serial ID. Used
+                          with type device-serials.
+                        items:
+                          type: string
+                        type: array
+                      driveExclusions:
+                        description: |-
+                          DriveExclusions skips matching drives when signing, in both full-drives and shared mode.
+                          Type is matched against the IU-size-derived type, before DriveTypeOverrides apply.
+                        properties:
+                          rules:
+                            description: A drive is excluded if any rule matches it.
+                            items:
+                              description: DriveExclusionRule matches drives by Model,
+                                CapacityGiB and/or Type; all set fields must match.
+                              properties:
+                                capacityGiB:
+                                  description: CapacityGiB matches the drive capacity
+                                    in GiB exactly.
+                                  minimum: 1
+                                  type: integer
+                                model:
+                                  description: |-
+                                    Model matches the device model exactly, case-insensitively, ignoring surrounding
+                                    whitespace. Find it with: lsblk -dno MODEL /dev/nvme0n1
+                                  maxLength: 256
+                                  type: string
+                                type:
+                                  description: Type is the drive type the sign tool
+                                    derives from the IU size.
+                                  enum:
+                                  - TLC
+                                  - QLC
+                                  type: string
+                              type: object
+                              x-kubernetes-validations:
+                              - message: at least one of model, capacityGiB or type
+                                  must be set
+                                rule: (has(self.model) && size(self.model.trim())
+                                  > 0) || (has(self.capacityGiB) && self.capacityGiB
+                                  != 0) || has(self.type)
+                            maxItems: 64
+                            type: array
+                        required:
+                        - rules
+                        type: object
+                      driveTypeOverrides:
+                        description: |-
+                          DriveTypeOverrides forces the reported TLC/QLC type for matching drives instead of
+                          deriving it from the drive's IU size. Only meaningful when Shared is true.
+                          Persisted on the node in the weka.io/drive-type-overrides annotation and re-applied
+                          on every later sign-drives run. Omit the field to keep whatever is already persisted
+                          on the node; set an empty rules list to clear all overrides.
+                        properties:
+                          rules:
+                            description: |-
+                              Rules are evaluated in order; the first rule matching a drive wins.
+                              An empty list clears all previously persisted overrides on the node.
+                            items:
+                              description: |-
+                                DriveTypeOverrideRule forces the drive type for drives matching Model and/or CapacityGiB.
+                                When both Model and CapacityGiB are set, BOTH must match (AND semantics) — this lets you
+                                target one SKU shipped in several capacities where only some are QLC.
+                              properties:
+                                capacityGiB:
+                                  description: |-
+                                    CapacityGiB matches the drive capacity in GiB exactly, as reported in the
+                                    weka.io/weka-shared-drives annotation. 0 means "do not match on capacity".
+                                  minimum: 1
+                                  type: integer
+                                model:
+                                  description: |-
+                                    Model matches the device model exactly, case-insensitively, ignoring surrounding
+                                    whitespace. Find it with: lsblk -dno MODEL /dev/nvme0n1
+                                    Empty means "do not match on model".
+                                  type: string
+                                type:
+                                  description: Type is the drive type to report for
+                                    matching drives.
+                                  enum:
+                                  - TLC
+                                  - QLC
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                              x-kubernetes-validations:
+                              - message: at least one of model or capacityGiB must
+                                  be set
+                                rule: (has(self.model) && size(self.model) > 0) ||
+                                  (has(self.capacityGiB) && self.capacityGiB != 0)
+                            type: array
+                        required:
+                        - rules
+                        type: object
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      options:
+                        properties:
+                          allowEraseNonWekaPartitions:
+                            type: boolean
+                          allowEraseWekaPartitions:
+                            type: boolean
+                          allowNonEmptyDevice:
+                            type: boolean
+                          skipTrimFormat:
+                            type: boolean
+                        type: object
+                      pciDevices:
+                        description: |-
+                          PCI vendor and device IDs of the drives to sign.
+                          To get the values for VendorId and DeviceId:
+                          1. Run the following command to list all PCI devices on your system:
+                             ```bash
+                             lspci -nn
+                             ```
+                          2. Find the relevant PCI device in the output, which will display both the
+                             vendor and device IDs in square brackets in the format [vendorId:deviceId].
+                             For example:
+                             ```
+                             00:1f.0 Non-Volatile memory controller [0108]: Amazon.com, Inc. NVMe SSD Controller [1d0f:cd01]
+                             ```
+                        properties:
+                          deviceId:
+                            description: |-
+                              DeviceId is the 4-digit hexadecimal device ID
+                              default for AWS: `cd01` (NVMe SSD)
+                            pattern: ^[0-9a-fA-F]{4}$
+                            type: string
+                          vendorId:
+                            description: |-
+                              VendorId is the 4-digit hexadecimal vendor ID
+                              default for AWS: `1d0f` (Amazon.com, Inc.)
+                            pattern: ^[0-9a-fA-F]{4}$
+                            type: string
+                        required:
+                        - deviceId
+                        - vendorId
+                        type: object
+                      shared:
+                        description: |-
+                          Shared enables shared drive signing for proxy mode (defaults to false).
+                          When enabled:
+                          - Drives are signed for proxy using 'weka-sign-drive sign proxy' command
+                          - Drives are signed with a proxy system GUID
+                          - Results are stored in weka.io/shared-drives annotation (instead of weka.io/weka-drives)
+                          - Physical UUIDs, serial IDs, and capacities are captured
+                          - Enables multi-tenant drive sharing via SSD proxy
+                        type: boolean
+                      type:
+                        enum:
+                        - aws-all
+                        - gcp-all
+                        - device-identifiers
+                        - device-paths
+                        - device-serials
+                        - all-not-root
+                        type: string
+                    required:
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: driveTypeOverrides is only supported when shared is
+                        true
+                      rule: '!has(self.driveTypeOverrides) || (has(self.shared) &&
+                        self.shared)'
+                type: object
+              serviceAccountName:
+                type: string
+              tolerations:
+                items:
+                  description: |-
+                    The pod this Toleration is attached to tolerates any taint that matches
+                    the triple <key,value,effect> using the matching operator <operator>.
+                  properties:
+                    effect:
+                      description: |-
+                        Effect indicates the taint effect to match. Empty means match all taint effects.
+                        When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                      type: string
+                    key:
+                      description: |-
+                        Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                        If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                      type: string
+                    operator:
+                      description: |-
+                        Operator represents a key's relationship to the value.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                        Exists is equivalent to wildcard for value, so that a pod can
+                        tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                      type: string
+                    tolerationSeconds:
+                      description: |-
+                        TolerationSeconds represents the period of time the toleration (which must be
+                        of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                        it is not set, which means tolerate the taint forever (do not evict). Zero and
+                        negative values will be treated as 0 (evict immediately) by the system.
+                      format: int64
+                      type: integer
+                    value:
+                      description: |-
+                        Value is the taint value the toleration matches to.
+                        If the operator is Exists, the value should be empty, otherwise just a regular string.
+                      type: string
+                  type: object
+                type: array
+            required:
+            - action
+            - payload
+            type: object
+          status:
+            description: WekaManualOperationStatus defines the observed state of WekaManualOperation
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              result:
+                type: string
+              status:
+                type: string
+            required:
+            - completedAt
+            - result
+            - status
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,579 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: dxwcmlibraryimports.dx.europesip.com
+spec:
+  group: dx.europesip.com
+  names:
+    kind: DXWCMLibraryImport
+    listKind: DXWCMLibraryImportList
+    plural: dxwcmlibraryimports
+    shortNames:
+    - dxwcmimport
+    singular: dxwcmlibraryimport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.virtualPortal.context
+      name: Virtual portal
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.chunks
+      name: Chunks
+      priority: 1
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DXWCMLibraryImport imports Web Content Manager libraries into HCL DX Compose (base or virtual portal) from a
+          JCR export, once per source revision.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DXWCMLibraryImportSpec is what to import and where.
+            properties:
+              access:
+                description: |-
+                  Access: roles granted on every imported library after the import. The access control of the source refers to
+                  users and groups that may not exist in the target.
+                items:
+                  description: WCMLibraryAccess grants a role on every imported library.
+                  properties:
+                    dn:
+                      description: DN of the user or group, for example cn=dxadmins,ou=groups,dc=example,dc=com
+                      minLength: 1
+                      type: string
+                    role:
+                      description: Role in the library.
+                      enum:
+                      - User
+                      - Contributor
+                      - Editor
+                      - Manager
+                      - Administrator
+                      type: string
+                    type:
+                      default: group
+                      description: Type of the principal.
+                      enum:
+                      - group
+                      - user
+                      type: string
+                  required:
+                  - dn
+                  - role
+                  type: object
+                type: array
+              connectionRef:
+                description: 'ConnectionRef: the DXConnection of the DX that receives
+                  the libraries.'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              dependsOn:
+                description: 'DependsOn: resources that must be Ready first.'
+                items:
+                  description: Dependency is an object that must be ready before the
+                    resource is reconciled.
+                  properties:
+                    apiVersion:
+                      description: APIVersion of the object, for example apps/v1 (default)
+                        or dx.europesip.com/v1alpha1.
+                      type: string
+                    kind:
+                      description: 'Kind: Deployment, StatefulSet, Job, DXScriptApplication,
+                        DXPage, DXDamCollection, DXDatabase, DXTheme, DXWCMLibraryImport
+                        or DXXMLAccess.'
+                      enum:
+                      - Deployment
+                      - StatefulSet
+                      - Job
+                      - DXScriptApplication
+                      - DXPage
+                      - DXDamCollection
+                      - DXDatabase
+                      - DXTheme
+                      - DXWCMLibraryImport
+                      - DXXMLAccess
+                      type: string
+                    name:
+                      description: Name of the object, in the same namespace.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              dryRun:
+                description: |-
+                  DryRun: only read the export and the target and report what would be imported or skipped (status), without
+                  uploading or importing anything.
+                type: boolean
+              libraries:
+                description: 'Libraries to import. Empty: every library of the export.'
+                properties:
+                  exclude:
+                    description: 'Exclude: titles of the libraries to leave out (applied
+                      after include).'
+                    items:
+                      type: string
+                    type: array
+                  excludeHCLDefaults:
+                    description: |-
+                      ExcludeHCLDefaults leaves out the libraries that HCL DX ships (Web Content, Portal Site, Script Portlet
+                      Library, Web Content Templates 3.0, ...), so that only the own libraries of the export are imported.
+                    type: boolean
+                  include:
+                    description: 'Include: titles of the libraries to import. When
+                      set, only these (each one must be in the export).'
+                    items:
+                      type: string
+                    type: array
+                type: object
+              mode:
+                default: Import
+                description: 'Mode: Import keeps the IDs of the export (importing
+                  again updates the same items); ImportCopy gives new IDs.'
+                enum:
+                - Import
+                - ImportCopy
+                type: string
+              overwrite:
+                description: |-
+                  Overwrite: import also the libraries that already exist in the target (compared by title). Default false:
+                  they are skipped and listed in status.skippedLibraries.
+                type: boolean
+              portalSiteLibraryOverwrite:
+                description: |-
+                  PortalSiteLibraryOverwrite: the Portal Site library (the managed pages of the portal, fixed ID
+                  TWFuYWdlZCBQYWdlcyBSb290IExpYnJhcnk) is never imported, even when it is in the export or in libraries.include
+                  and even with overwrite: true, unless this is true. Default false.
+                type: boolean
+              source:
+                description: |-
+                  Source of the export: a .tar.bz2, .tar.gz/.tgz or .zip archive (URL), an OCI image or a ConfigMap. It holds a
+                  WCM library export in JCR format (folder with <library>.node files), as written by ConfigEngine
+                  export-wcm-data (traditional DX) or by the WCM data module of DX Compose (taskType=export).
+                properties:
+                  configMap:
+                    description: |-
+                      ConfigMap: every key of the ConfigMap is a file (data and binaryData). Handy for small applications:
+                      a ConfigMap and its Secret are limited to 1 MiB. Keys cannot contain "/", so a key "assets__app.js"
+                      becomes the file "assets/app.js".
+                    properties:
+                      name:
+                        description: Name of the ConfigMap.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  image:
+                    description: |-
+                      Image: an OCI image (a "bundle image") that carries the files. The operator reads its layers directly
+                      from the registry: nothing runs in the cluster. Use a digest (repo@sha256:...) for immutable deployments.
+                    properties:
+                      path:
+                        default: /app
+                        description: |-
+                          Path inside the image where the files are (default /app). With the default and nothing under /app, the only
+                          top-level folder with files that is not part of an operating system is used (for example /export).
+                        type: string
+                      pullSecrets:
+                        description: 'PullSecrets: Secrets of type kubernetes.io/dockerconfigjson
+                          for a private registry.'
+                        items:
+                          description: LocalObjectReference names an object in the
+                            same namespace.
+                          properties:
+                            name:
+                              description: Name of the object.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      ref:
+                        description: Reference of the image, for example ghcr.io/acme/my-app:1.2.0
+                          or ghcr.io/acme/my-app@sha256:...
+                        minLength: 1
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                  url:
+                    description: |-
+                      URL: a .tar.gz, .tgz or .zip archive downloaded over HTTP(S), for example a CI artifact or a GitHub
+                      release asset.
+                    properties:
+                      path:
+                        description: 'Path inside the archive where the files are
+                          (default: the root).'
+                        type: string
+                      sha256:
+                        description: |-
+                          SHA256 of the archive (hex). Recommended: the download is rejected if it does not match, and the
+                          operator only downloads it again when this value changes.
+                        type: string
+                      url:
+                        description: URL of a .tar.gz, .tgz or .zip archive.
+                        pattern: ^https?://
+                        type: string
+                    required:
+                    - url
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: set exactly one of image, configMap or url
+                  rule: '(has(self.image) ? 1 : 0) + (has(self.configMap) ? 1 : 0)
+                    + (has(self.url) ? 1 : 0) == 1'
+              suspend:
+                description: Suspend stops the reconciliation.
+                type: boolean
+              timeout:
+                description: Timeout of each import request (one per chunk). Default
+                  2h.
+                type: string
+              upload:
+                description: Upload settings.
+                properties:
+                  maxChunkFiles:
+                    description: |-
+                      MaxChunkFiles: at most this many files per chunk (default 4000), so that each import request ends well before the
+                      proxies in front of DX cut it (the HAProxy of DX Compose: 20 minutes). DX imports ~60 files/s for new items and
+                      ~7 files/s when it updates existing ones (overwrite). 0 = no limit.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  maxChunkSize:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxChunkSize: the libraries are packed into zips no bigger than this, uploaded and imported one after the
+                      other (DX dxFileTransfer accepts at most 500 MB per upload). Default 450Mi.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
+              virtualPortal:
+                description: 'VirtualPortal that receives the libraries. Empty: the
+                  base portal.'
+                properties:
+                  context:
+                    description: 'Context: URL context of the virtual portal (the
+                      part after /wps/portal/), for example "europesip".'
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9_-]*$
+                    type: string
+                  create:
+                    description: |-
+                      Create the virtual portal when it does not exist (XMLAccess, PortalVPHandler). Default false: a missing
+                      virtual portal makes the import fail before anything is downloaded or uploaded.
+                    type: boolean
+                  description:
+                    description: Description of the virtual portal when the operator
+                      creates it.
+                    type: string
+                  realm:
+                    description: |-
+                      Realm of the virtual portal when the operator creates it (default: the realm of the first virtual portal
+                      that already exists, else FederatedRealm and then defaultWIMFileBasedRealm, each checked in the list of
+                      virtual portals).
+                    type: string
+                  title:
+                    description: 'Title of the virtual portal when the operator creates
+                      it (default: the context).'
+                    type: string
+                required:
+                - context
+                type: object
+            required:
+            - connectionRef
+            - source
+            type: object
+          status:
+            description: DXWCMLibraryImportStatus is the result of the import.
+            properties:
+              appliedHash:
+                description: |-
+                  AppliedHash of the spec and the source revision of the last finished run: the import runs again only when it
+                  changes.
+                type: string
+              chunks:
+                description: 'Chunks: number of zips the libraries were packed into.'
+                type: integer
+              completionTime:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currentChunk:
+                description: CurrentChunk being uploaded or imported (1-based).
+                type: integer
+              dryRun:
+                description: 'DryRun: true when the status describes a dry run.'
+                type: boolean
+              exportLibraries:
+                description: |-
+                  ExportLibraries: every library of the export, with its description, size and what this run does with it
+                  (written by every run, dry run included).
+                items:
+                  description: WCMExportLibrary is a library found in the export,
+                    so a UI can offer them to choose from.
+                  properties:
+                    bytes:
+                      description: 'Bytes and Files: its size in the export, before
+                        compression.'
+                      format: int64
+                      type: integer
+                    description:
+                      description: Description of the library in the source portal
+                        (icm:description, at most 300 characters).
+                      type: string
+                    existsInTarget:
+                      description: 'ExistsInTarget: a library with this title is already
+                        in the target portal.'
+                      type: boolean
+                    files:
+                      type: integer
+                    plan:
+                      description: |-
+                        Plan: Import, Skip (Portal Site, or it exists and overwrite is false), CannotUpload (names DX rejects) or
+                        NotSelected (left out by include, exclude or excludeHCLDefaults).
+                      enum:
+                      - Import
+                      - Skip
+                      - CannotUpload
+                      - NotSelected
+                      type: string
+                    reason:
+                      description: Reason of a plan other than Import.
+                      type: string
+                    title:
+                      type: string
+                  required:
+                  - plan
+                  - title
+                  type: object
+                type: array
+              failedLibraries:
+                items:
+                  description: WCMLibraryResult is a library of the export and what
+                    happened to it.
+                  properties:
+                    reason:
+                      description: Reason when it was skipped or failed.
+                      type: string
+                    title:
+                      type: string
+                  required:
+                  - title
+                  type: object
+                type: array
+              importedLibraries:
+                items:
+                  type: string
+                type: array
+              librariesInExport:
+                description: 'LibrariesInExport: number of libraries found in the
+                  export.'
+                type: integer
+              message:
+                description: 'Message: last result in words.'
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: WCMImportPhase is the step an import is in.
+                type: string
+              resume:
+                description: |-
+                  Resume: the plan and progress of a run with chunks, kept while it runs so that an operator that restarts goes on
+                  at the chunk it was on instead of starting again (0.9.1). Removed when the run ends.
+                properties:
+                  attempt:
+                    description: |-
+                      Attempt: number of the run on this plan (1, 2 after a restart...); it names the dxFileTransfer folders, so a
+                      folder DX may still be reading is never deleted or reused.
+                    type: integer
+                  chunkStartedAt:
+                    description: |-
+                      ChunkStartedAt: when the import request of chunk Completed+1 was sent to DX (empty while it is packed or
+                      uploaded). Set when the operator stops: DX may still be importing that chunk.
+                    format: date-time
+                    type: string
+                  chunks:
+                    description: 'Chunks: the titles of the libraries of each chunk,
+                      in order.'
+                    items:
+                      items:
+                        type: string
+                      type: array
+                    type: array
+                  completed:
+                    description: 'Completed: chunks finished (imported, or failed
+                      and recorded in Failed).'
+                    type: integer
+                  existing:
+                    description: 'Existing: planned libraries that already existed
+                      in the target before the run (lowercase titles).'
+                    items:
+                      type: string
+                    type: array
+                  failed:
+                    description: 'Failed: the libraries of finished chunks that failed,
+                      with the reason.'
+                    items:
+                      description: WCMLibraryResult is a library of the export and
+                        what happened to it.
+                      properties:
+                        reason:
+                          description: Reason when it was skipped or failed.
+                          type: string
+                        title:
+                          type: string
+                      required:
+                      - title
+                      type: object
+                    type: array
+                  hash:
+                    description: 'Hash of the spec the plan was made for (as appliedHash):
+                      another spec starts a new run.'
+                    type: string
+                  longestChunkSeconds:
+                    description: |-
+                      LongestChunkSeconds: the longest import of a finished chunk of this run (to estimate how long DX may still be
+                      busy with an interrupted one).
+                    format: int64
+                    type: integer
+                  sourceRevision:
+                    description: 'SourceRevision the plan was made for: another revision
+                      of the export starts a new run.'
+                    type: string
+                required:
+                - chunks
+                - completed
+                - hash
+                type: object
+              skippedLibraries:
+                items:
+                  description: WCMLibraryResult is a library of the export and what
+                    happened to it.
+                  properties:
+                    reason:
+                      description: Reason when it was skipped or failed.
+                      type: string
+                    title:
+                      type: string
+                  required:
+                  - title
+                  type: object
+                type: array
+              sourceRevision:
+                description: SourceRevision of the export.
+                type: string
+              startTime:
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,306 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: dxwcmlibraryexports.dx.europesip.com
+spec:
+  group: dx.europesip.com
+  names:
+    kind: DXWCMLibraryExport
+    listKind: DXWCMLibraryExportList
+    plural: dxwcmlibraryexports
+    shortNames:
+    - dxwcmexport
+    singular: dxwcmlibraryexport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.virtualPortal
+      name: Virtual portal
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.destination.image
+      name: Image
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DXWCMLibraryExport exports Web Content Manager libraries of HCL DX Compose (base or virtual portal) to an OCI
+          artifact (the zip of the export and EXPORT-INFO.txt), once per spec. DXWCMLibraryImport imports it elsewhere.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DXWCMLibraryExportSpec is what to export and where to.
+            properties:
+              connectionRef:
+                description: 'ConnectionRef: the DXConnection of the DX the libraries
+                  are exported from.'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              dependsOn:
+                description: 'DependsOn: resources that must be Ready first.'
+                items:
+                  description: Dependency is an object that must be ready before the
+                    resource is reconciled.
+                  properties:
+                    apiVersion:
+                      description: APIVersion of the object, for example apps/v1 (default)
+                        or dx.europesip.com/v1alpha1.
+                      type: string
+                    kind:
+                      description: 'Kind: Deployment, StatefulSet, Job, DXScriptApplication,
+                        DXPage, DXDamCollection, DXDatabase, DXTheme, DXWCMLibraryImport
+                        or DXXMLAccess.'
+                      enum:
+                      - Deployment
+                      - StatefulSet
+                      - Job
+                      - DXScriptApplication
+                      - DXPage
+                      - DXDamCollection
+                      - DXDatabase
+                      - DXTheme
+                      - DXWCMLibraryImport
+                      - DXXMLAccess
+                      type: string
+                    name:
+                      description: Name of the object, in the same namespace.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              destination:
+                description: Destination of the export.
+                properties:
+                  attributes:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Attributes: free key/value labels of the artifact, written as manifest annotations com.europesip.dx.attr.<key>
+                      next to the standard ones (docs/artifact-annotations.md), so artifacts can be listed and filtered by them later.
+                      Keys: lowercase letters, digits, dots and dashes (at most 63); values at most 256 characters.
+                    maxProperties: 32
+                    type: object
+                  authors:
+                    description: |-
+                      Authors: who exports it (annotations org.opencontainers.image.authors and com.europesip.dx.requested-by).
+                      Default: the annotation dx.europesip.com/changed-by of the resource.
+                    maxLength: 256
+                    type: string
+                  image:
+                    description: |-
+                      Image: reference of the artifact, for example harbor.example.com/project/wcm/orbita-20261119:1. It holds the
+                      zip of the export (wcm-export-<name>.zip) and EXPORT-INFO.txt, and DXWCMLibraryImport reads it as an image
+                      source.
+                    minLength: 1
+                    type: string
+                  pushSecrets:
+                    description: 'PushSecrets: Secrets of type kubernetes.io/dockerconfigjson
+                      with push rights on the repository.'
+                    items:
+                      description: LocalObjectReference names an object in the same
+                        namespace.
+                      properties:
+                        name:
+                          description: Name of the object.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  reason:
+                    description: |-
+                      Reason: why it is exported (annotation com.europesip.dx.reason and EXPORT-INFO.txt). Default: the annotation
+                      dx.europesip.com/reason of the resource (Backstage writes it), then the attribute reason.
+                    maxLength: 512
+                    type: string
+                required:
+                - image
+                type: object
+              libraries:
+                description: 'Libraries: titles of the libraries to export (each one
+                  must exist).'
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              suspend:
+                description: Suspend stops the reconciliation.
+                type: boolean
+              timeout:
+                description: Timeout of the export request of each library. Default
+                  1h.
+                type: string
+              virtualPortal:
+                description: 'VirtualPortal: URL context of the virtual portal the
+                  libraries are in. Empty: the base portal.'
+                pattern: ^([A-Za-z0-9][A-Za-z0-9_-]*)?$
+                type: string
+            required:
+            - connectionRef
+            - destination
+            - libraries
+            type: object
+          status:
+            description: DXWCMLibraryExportStatus is the result of the export.
+            properties:
+              appliedHash:
+                description: |-
+                  AppliedHash of the spec of the last finished run: the export runs again only when it changes (or with the
+                  reconcile annotation).
+                type: string
+              completionTime:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currentLibrary:
+                description: CurrentLibrary being exported (1-based), while it runs.
+                type: integer
+              digest:
+                description: Digest of the manifest of the artifact.
+                type: string
+              exportedLibraries:
+                description: 'ExportedLibraries: the libraries in the artifact, with
+                  their size.'
+                items:
+                  description: WCMExportedLibrary is a library of the export with
+                    its size.
+                  properties:
+                    bytes:
+                      description: 'Bytes and Files: its size in the export, before
+                        compression.'
+                      format: int64
+                      type: integer
+                    files:
+                      type: integer
+                    title:
+                      type: string
+                  required:
+                  - title
+                  type: object
+                type: array
+              image:
+                description: 'Image: the artifact pushed, as repository@digest.'
+                type: string
+              message:
+                description: 'Message: last result in words.'
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                description: WCMExportPhase is the step an export is in.
+                type: string
+              startTime:
+                format: date-time
+                type: string
+              totalBytes:
+                description: 'TotalBytes: size of the zip of the export.'
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,307 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: dxjavaextensions.dx.europesip.com
+spec:
+  group: dx.europesip.com
+  names:
+    kind: DXJavaExtension
+    listKind: DXJavaExtensionList
+    plural: dxjavaextensions
+    shortNames:
+    - dxjx
+    - dxjavaext
+    singular: dxjavaextension
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.artifact.ref
+      name: Artifact
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DXJavaExtension is a Java extension (a portlet WAR or shared-library JARs) loaded from a registry onto the
+          official DX Compose Web Engine image: no custom image (issue #54).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DXJavaExtensionSpec declares a Java extension of the DX Compose
+              Web Engine.
+            properties:
+              artifact:
+                description: 'Artifact: the OCI artifact with the WAR or the JARs.'
+                properties:
+                  pullSecrets:
+                    description: |-
+                      PullSecrets: Secrets of type kubernetes.io/dockerconfigjson in this namespace for a private registry
+                      (read-only access is enough). The init container of the Web Engine uses them too.
+                    items:
+                      description: LocalObjectReference names an object in the same
+                        namespace.
+                      properties:
+                        name:
+                          description: Name of the object.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  ref:
+                    description: |-
+                      Ref of the artifact, for example harbor.example.com/dx-artifacts/java-extensions/portlets/my-portlet:1.0.0 or
+                      ...@sha256:... The artifact has one file: a WAR (or a tar/tar.gz of the expanded WAR) for a portlet, a JAR
+                      (or a tar/tar.gz of JARs) for a shared library. A tag is resolved to its digest before any rollout, and the
+                      Web Engine always loads that digest.
+                    minLength: 1
+                    type: string
+                required:
+                - ref
+                type: object
+              connectionRef:
+                description: 'ConnectionRef: the DXConnection of the portal (used
+                  to register the portlets with XMLAccess).'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              contextRoot:
+                description: ContextRoot of the web application (portlets; default
+                  /<metadata.name>). Must start with a slash.
+                pattern: ^/[A-Za-z0-9._~/-]*$
+                type: string
+              fileName:
+                description: |-
+                  FileName of the WAR in customApplications (default <metadata.name>.war) or of the JAR in customSharedLib
+                  (default <metadata.name>.jar).
+                type: string
+              optional:
+                description: |-
+                  Optional: when the artifact cannot be pulled while a Web Engine pod starts, start without it (a warning in
+                  the init container log) instead of failing the pod.
+                type: boolean
+              page:
+                description: 'Page: optional page where the first portlet is placed.'
+                properties:
+                  anonymous:
+                    default: true
+                    description: 'Anonymous: anonymous users can see the page and
+                      the portlet (default true).'
+                    type: boolean
+                  friendlyName:
+                    description: 'FriendlyName: the URL segment of the page (…/wps/portal/<parent>/<friendlyName>).'
+                    type: string
+                  parentUniqueName:
+                    default: ibm.portal.Home
+                    description: 'ParentUniqueName: the parent page (default ibm.portal.Home,
+                      the Home label).'
+                    type: string
+                  title:
+                    description: Title of the page (every locale in titles takes precedence).
+                    minLength: 1
+                    type: string
+                  titles:
+                    additionalProperties:
+                      type: string
+                    description: 'Titles per locale, for example {"es": "Escaparate"}.'
+                    type: object
+                  uniqueName:
+                    description: UniqueName of the page.
+                    minLength: 1
+                    type: string
+                required:
+                - title
+                - uniqueName
+                type: object
+              portletAppUID:
+                description: |-
+                  PortletAppUID: uid of the portlet application in DX (default: the id attribute of <portlet-app> in
+                  portlet.xml, or the annotation com.europesip.dx.java.webapp-uid of the artifact without ".webmod").
+                type: string
+              register:
+                default: true
+                description: |-
+                  Register the portlets in DX with XMLAccess predeployed (default true; portlets only). Only done when they are
+                  not registered yet or when the portlets of portlet.xml change.
+                type: boolean
+              rolloutTimeout:
+                description: |-
+                  RolloutTimeout: how long a rollout may take before the operator goes back to the previous digest
+                  (default 30m).
+                type: string
+              target:
+                description: 'Target: the Web Engine (defaults of the HCL chart: StatefulSet
+                  dx-deployment-web-engine, container web-engine).'
+                properties:
+                  container:
+                    default: web-engine
+                    description: Container of the Web Engine in that StatefulSet.
+                    type: string
+                  statefulSet:
+                    default: dx-deployment-web-engine
+                    description: StatefulSet of the Web Engine in this namespace (the
+                      HCL chart names it <release>-web-engine).
+                    type: string
+                type: object
+              type:
+                default: portlet
+                description: |-
+                  Type: portlet (a WAR with portlet.xml: loaded by Liberty and registered in DX) or sharedLibrary (JARs on
+                  the global classpath of the Web Engine, libraries/customSharedLib).
+                enum:
+                - portlet
+                - sharedLibrary
+                type: string
+            required:
+            - artifact
+            - connectionRef
+            type: object
+          status:
+            description: DXJavaExtensionStatus is what the operator saw and did.
+            properties:
+              conditions:
+                description: 'Conditions: Ready, ArtifactResolved, RolledOut, Registered.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              desiredRef:
+                description: 'DesiredRef: repository@digest that the Web Engine pods
+                  must load (the webhook injects this one).'
+                type: string
+              failedRef:
+                description: |-
+                  FailedRef: repository@digest whose rollout failed and was rolled back; it is not rolled out again until the
+                  spec changes.
+                type: string
+              observedGeneration:
+                description: 'ObservedGeneration: the generation of the spec that
+                  the status describes.'
+                format: int64
+                type: integer
+              portletAppUID:
+                description: PortletAppUID registered in DX.
+                type: string
+              portlets:
+                description: Portlets registered in DX (names from portlet.xml).
+                items:
+                  type: string
+                type: array
+              previousRef:
+                description: 'PreviousRef: repository@digest before the last change
+                  (the rollback target).'
+                type: string
+              registeredHash:
+                description: |-
+                  RegisteredHash: hash of what was registered (uid, portlets, context root, page); registration runs again
+                  only when it changes.
+                type: string
+              resolvedDigest:
+                description: 'ResolvedDigest: the digest of artifact.ref the last
+                  time it was resolved.'
+                type: string
+              rolledOutRef:
+                description: 'RolledOutRef: repository@digest every Web Engine pod
+                  runs with after the last finished rollout.'
+                type: string
+              rolloutStarted:
+                description: 'RolloutStarted: when the current rollout started.'
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

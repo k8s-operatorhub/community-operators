@@ -1,0 +1,604 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "protem.dev/v1alpha1",
+          "kind": "AccessProfile",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "protem"
+            },
+            "name": "dev-view",
+            "namespace": "default"
+          },
+          "spec": {
+            "approval": {
+              "pendingTimeout": "24h",
+              "rules": [
+                {
+                  "mode": "Auto",
+                  "name": "dev-self-service"
+                }
+              ]
+            },
+            "clusters": {
+              "selector": {
+                "matchLabels": {
+                  "env": "dev"
+                }
+              }
+            },
+            "description": "Read access to the default namespace on dev clusters.",
+            "displayName": "Dev read-only",
+            "duration": {
+              "default": "1h",
+              "max": "4h"
+            },
+            "justification": {
+              "reason": "Required"
+            },
+            "namespaces": [
+              "default"
+            ],
+            "requesters": {
+              "groups": [
+                "devs"
+              ],
+              "users": [
+                "alice@example.com"
+              ]
+            },
+            "role": {
+              "kind": "ClusterRole",
+              "name": "view"
+            },
+            "scope": "Namespaced"
+          }
+        },
+        {
+          "apiVersion": "protem.dev/v1alpha1",
+          "kind": "AccessProfile",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "protem"
+            },
+            "name": "prod-view",
+            "namespace": "default"
+          },
+          "spec": {
+            "approval": {
+              "pendingTimeout": "4h",
+              "rules": [
+                {
+                  "approvers": {
+                    "groups": [
+                      "sre-leads"
+                    ]
+                  },
+                  "mode": "Manual",
+                  "name": "prod-needs-sre",
+                  "requiredApprovals": 1
+                }
+              ]
+            },
+            "clusters": {
+              "selector": {
+                "matchLabels": {
+                  "env": "prod"
+                }
+              }
+            },
+            "description": "Read access to the default namespace on production clusters.",
+            "displayName": "Production read-only",
+            "duration": {
+              "default": "30m",
+              "max": "1h"
+            },
+            "justification": {
+              "reason": "Required",
+              "ticketPattern": "^INC-[0-9]+$"
+            },
+            "namespaces": [
+              "default"
+            ],
+            "requesters": {
+              "groups": [
+                "devs"
+              ]
+            },
+            "role": {
+              "kind": "ClusterRole",
+              "name": "view"
+            },
+            "scope": "Namespaced"
+          }
+        },
+        {
+          "apiVersion": "protem.dev/v1alpha1",
+          "kind": "AccessRequest",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "protem"
+            },
+            "name": "alice-dev-view",
+            "namespace": "default"
+          },
+          "spec": {
+            "clusters": [
+              "local"
+            ],
+            "duration": "30m",
+            "justification": {
+              "reason": "Checking a failing rollout."
+            },
+            "profileRef": "dev-view",
+            "requester": {
+              "email": "alice@company.com",
+              "groups": [
+                "devs"
+              ],
+              "username": "alice"
+            }
+          }
+        },
+        {
+          "apiVersion": "protem.dev/v1alpha1",
+          "kind": "TargetCluster",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "protem",
+              "env": "dev"
+            },
+            "name": "local"
+          },
+          "spec": {
+            "description": "The cluster the operator runs on.",
+            "displayName": "Hub cluster"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Security
+    containerImage: ghcr.io/illeniumstudios/protem:v0.1.1
+    createdAt: "2026-11-25T09:47:02Z"
+    description: Just-in-time privileged access management for Kubernetes, with time-bound,
+      approval-gated access across every cluster.
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/internal-objects: '["accessgrants.protem.dev","clustergrants.protem.dev"]'
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/iLLeniumStudios/protem
+    support: iLLeniumStudios
+  name: protem.v0.1.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Access given for an approved request, with its end time; created
+        by the operator, never by hand.
+      displayName: Access Grant
+      kind: AccessGrant
+      name: accessgrants.protem.dev
+      statusDescriptors:
+      - description: Where the grant is in its life, for example Active or Expired.
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: Which role may be requested, on which clusters, by whom, for how
+        long and who approves; written by administrators, usually from Git.
+      displayName: Access Profile
+      kind: AccessProfile
+      name: accessprofiles.protem.dev
+      statusDescriptors:
+      - description: Grants from this profile that are active now.
+        displayName: Active Grants
+        path: activeGrantsCount
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: One person's request for a profile's role on some clusters for
+        a limited time; created by people, from the UI or with kubectl.
+      displayName: Access Request
+      kind: AccessRequest
+      name: accessrequests.protem.dev
+      statusDescriptors:
+      - description: Where the request is in its life, for example Pending or Approved.
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - description: The AccessGrant created for this request.
+        displayName: Grant
+        path: grantRef
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+    - description: The part of a grant for one target cluster, in that cluster's namespace
+        on the hub; created by the operator and carried out by the cluster's agent.
+      displayName: Cluster Grant
+      kind: ClusterGrant
+      name: clustergrants.protem.dev
+      statusDescriptors:
+      - description: What the agent reported, for example Active or Expired.
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - displayName: Message
+        path: message
+        x-descriptors:
+        - urn:alm:descriptor:text
+      version: v1alpha1
+    - description: A cluster that access can be granted on, the hub included; registered
+        by administrators, from the UI or with kubectl.
+      displayName: Target Cluster
+      kind: TargetCluster
+      name: targetclusters.protem.dev
+      statusDescriptors:
+      - description: Whether the cluster's agent is connected, for example Ready.
+        displayName: Phase
+        path: phase
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.phase
+      - displayName: Agent Version
+        path: agentVersion
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+      version: v1alpha1
+  description: |
+    Protem is just-in-time privileged access management for Kubernetes. It replaces standing admin rights with time-bound, approval-gated access across a fleet of clusters: engineers request a role, approvers see exactly what it grants, and every grant is audited and revoked automatically when it expires.
+
+    A hub cluster holds the rules (`AccessProfile`) and the requests (`AccessRequest`) as custom resources. An agent on each target cluster turns approved requests into ordinary RoleBindings and removes them when they expire, even while the hub is unreachable.
+
+    ### What gets installed
+
+    The operator on the hub, with its web UI and API on port 8080, the five custom resource definitions, and the RBAC the operator needs. It may bind only the `view` and `edit` roles on the hub itself. The admission policy that checks requests created with `kubectl` is not part of this bundle: see [How to install with OLM](https://github.com/iLLeniumStudios/protem/blob/main/docs/guides/how-to-install-with-olm.md).
+
+    ### After installing
+
+    1. Put an OIDC-aware proxy, such as oauth2-proxy, in front of the UI, and set the OIDC issuer and client ID. See [How to set up login](https://github.com/iLLeniumStudios/protem/blob/main/docs/guides/how-to-set-up-login.md).
+    2. To grant access on the hub itself, create a `TargetCluster` named like `PROTEM_HUB_CLUSTER_NAME` (default `local`). The operator marks it Ready without an agent.
+    3. Connect each target cluster by running the agent on it. See [How to connect a target cluster](https://github.com/iLLeniumStudios/protem/blob/main/docs/guides/how-to-connect-a-target-cluster.md).
+
+    ### Options
+
+    Every operator flag `--some-name` can be set as the environment variable `PROTEM_SOME_NAME` in the Subscription's `spec.config.env`, for example:
+
+    ```yaml
+    config:
+      env:
+      - {name: PROTEM_OIDC_ISSUER_URL, value: "https://idp.example.com/realms/example"}
+      - {name: PROTEM_OIDC_CLIENT_ID, value: protem}
+    ```
+
+    What Protem trusts and what it does not protect against: [Security model](https://github.com/iLLeniumStudios/protem/blob/main/docs/architecture/security-model.md).
+  displayName: Protem
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiI+PHRpdGxlPlByb3RlbTwvdGl0bGU+PHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHJ4PSI1Ny42IiBmaWxsPSIjMUQ1RkE4Ii8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjYuMzcgMjYuMzcpIHNjYWxlKDAuNzk0KSIgZmlsbD0iI2ZmZmZmZiI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+UHJvdGVtIHN5bWJvbCAoc21hbGwtc2l6ZSBjdXQsIDE2LTI0cHgpPC90aXRsZT4KICA8cGF0aCBmaWxsPSIjZmZmZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0yOCAyOCBMMTI0IDI4IEwxMjQgNzQgTDc0IDc0IEw3NCAyMjggTDI4IDIyOCBaIE0yMjggMjggTDIyOCAyMjggTDEwNCAyMjggTDEwNCAxODIgTDE4MiAxODIgTDE4MiAyOCBaIi8+CjwvZz48L3N2Zz4=
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resourceNames:
+          - view
+          - edit
+          resources:
+          - roles
+          - clusterroles
+          verbs:
+          - bind
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - create
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resourceNames:
+          - protem-agent
+          resources:
+          - serviceaccounts/token
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - protem.dev
+          resources:
+          - accessgrants
+          - clustergrants
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - protem.dev
+          resources:
+          - accessgrants/finalizers
+          - accessprofiles/finalizers
+          - accessrequests/finalizers
+          - targetclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - protem.dev
+          resources:
+          - accessgrants/status
+          - accessprofiles/status
+          - accessrequests/status
+          - clustergrants/status
+          - targetclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - protem.dev
+          resources:
+          - accessprofiles
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - protem.dev
+          resources:
+          - accessrequests
+          verbs:
+          - create
+          - delegate
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - protem.dev
+          resources:
+          - targetclusters
+          verbs:
+          - get
+          - list
+          - patch
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - rolebindings
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterroles
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          verbs:
+          - create
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: protem-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: protem
+          control-plane: controller-manager
+        name: protem-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: protem
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: protem
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: ghcr.io/illeniumstudios/protem:v0.1.1
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: protem-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: protem-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - access
+  - rbac
+  - just-in-time
+  - privileged access
+  - multi-cluster
+  - security
+  links:
+  - name: Source
+    url: https://github.com/iLLeniumStudios/protem
+  - name: Documentation
+    url: https://github.com/iLLeniumStudios/protem/tree/main/docs
+  - name: Security model
+    url: https://github.com/iLLeniumStudios/protem/blob/main/docs/architecture/security-model.md
+  maintainers:
+  - email: 104288623+TheiLLeniumStudios@users.noreply.github.com
+    name: iLLeniumStudios
+  maturity: alpha
+  minKubeVersion: 1.30.0
+  provider:
+    name: iLLeniumStudios
+    url: https://github.com/iLLeniumStudios
+  version: 0.1.1

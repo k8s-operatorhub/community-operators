@@ -1,0 +1,299 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  creationTimestamp: null
+  name: accessgrants.protem.dev
+spec:
+  group: protem.dev
+  names:
+    kind: AccessGrant
+    listKind: AccessGrantList
+    plural: accessgrants
+    shortNames:
+    - agrant
+    singular: accessgrant
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.profileRef
+      name: Profile
+      type: string
+    - jsonPath: .spec.requester.email
+      name: Requester
+      type: string
+    - jsonPath: .spec.role.name
+      name: Role
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.expiresAt
+      name: Expires At
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AccessGrant represents an active, time-bound access lease for
+          a user.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AccessGrantSpec defines the immutable lease snapshot and
+              revocation state.
+            properties:
+              clusters:
+                description: Clusters targeted by this grant
+                items:
+                  type: string
+                type: array
+              expiresAt:
+                description: ExpiresAt is the absolute time when access elevation
+                  expires
+                format: date-time
+                type: string
+              namespaces:
+                description: Namespaces targeted by this grant
+                items:
+                  type: string
+                type: array
+              profileRef:
+                description: ProfileRef is the name of the AccessProfile in the same
+                  namespace
+                type: string
+              requestRef:
+                description: RequestRef is the name of the AccessRequest in the same
+                  namespace
+                type: string
+              requester:
+                description: Requester is the snapshot of the user identity
+                properties:
+                  email:
+                    type: string
+                  groups:
+                    items:
+                      type: string
+                    type: array
+                  username:
+                    type: string
+                required:
+                - email
+                - username
+                type: object
+              revocation:
+                description: Revocation is set when access is revoked early; presence
+                  indicates revoked state
+                properties:
+                  at:
+                    description: At is the timestamp when revocation took effect
+                    format: date-time
+                    type: string
+                  by:
+                    description: By is the identity that revoked the elevation
+                    type: string
+                  reason:
+                    description: Reason explains why elevation was revoked
+                    type: string
+                required:
+                - at
+                type: object
+              role:
+                description: Role snapshot to bind
+                properties:
+                  kind:
+                    description: Kind is either "Role" or "ClusterRole"
+                    enum:
+                    - Role
+                    - ClusterRole
+                    type: string
+                  name:
+                    description: Name is the name of the Role or ClusterRole
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              scope:
+                description: Scope indicates Namespaced or Cluster
+                enum:
+                - Namespaced
+                - Cluster
+                type: string
+            required:
+            - expiresAt
+            - profileRef
+            - requestRef
+            - requester
+            - role
+            - scope
+            type: object
+            x-kubernetes-validations:
+            - message: AccessGrant core spec is immutable after creation
+              rule: oldSelf == null || (self.requestRef == oldSelf.requestRef && self.profileRef
+                == oldSelf.profileRef && self.requester == oldSelf.requester && self.role
+                == oldSelf.role && self.scope == oldSelf.scope && (has(self.namespaces)
+                == has(oldSelf.namespaces) && (!has(self.namespaces) || self.namespaces
+                == oldSelf.namespaces)) && (has(self.clusters) == has(oldSelf.clusters)
+                && (!has(self.clusters) || self.clusters == oldSelf.clusters)) &&
+                self.expiresAt == oldSelf.expiresAt)
+          status:
+            description: AccessGrantStatus defines the observed state of AccessGrant.
+            properties:
+              clusters:
+                description: Clusters tracks per-cluster enforcement state in multi-cluster
+                  environments
+                items:
+                  description: ClusterBindingState tracks the status of bindings on
+                    a specific cluster.
+                  properties:
+                    bindings:
+                      items:
+                        description: ManagedBindingRef tracks a RoleBinding or ClusterRoleBinding
+                          created by this grant.
+                        properties:
+                          kind:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        type: object
+                      type: array
+                    clusterName:
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    state:
+                      description: ClusterBindingStatePhase defines the phase of a
+                        binding on a specific cluster.
+                      enum:
+                      - Pending
+                      - Active
+                      - Revoked
+                      - Failed
+                      type: string
+                  required:
+                  - clusterName
+                  - state
+                  type: object
+                type: array
+              conditions:
+                description: Conditions represent observations of the grant state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              managedBindings:
+                description: ManagedBindings tracks created bindings on the local
+                  cluster
+                items:
+                  description: ManagedBindingRef tracks a RoleBinding or ClusterRoleBinding
+                    created by this grant.
+                  properties:
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              phase:
+                description: Phase is Active, Expired, or Revoked
+                enum:
+                - Active
+                - Expired
+                - Revoked
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

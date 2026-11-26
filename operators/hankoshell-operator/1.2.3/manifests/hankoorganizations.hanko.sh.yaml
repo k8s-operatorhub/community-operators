@@ -1,0 +1,586 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankoorganizations.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoOrganization
+    listKind: HankoOrganizationList
+    plural: hankoorganizations
+    shortNames:
+    - horg
+    singular: hankoorganization
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.realmRef
+      name: Realm
+      type: string
+    - jsonPath: .spec.name
+      name: Org
+      type: string
+    - jsonPath: .spec.parentRef
+      name: Parent
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          HankoOrganization represents one hierarchical organization node, reconciled
+          into Keycloak as a realm group whose realm-role mappings become the members'
+          effective roles. It is the authoritative source Trunx consumes via claims
+          (HKX-09): the organization is declared here, not in Trunx's database.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: HankoOrganizationSpec defines the desired state of an organization
+              node.
+            properties:
+              clientRoles:
+                description: |-
+                  ClientRoles maps client-scoped roles onto this organization's group, one
+                  entry per client. This is the per-application half of the node model
+                  (HKX-09): members of the node inherit each client's listed roles in
+                  tokens issued for that client. Referenced clients and roles must already
+                  exist (typically declared by a HankoApplication).
+                items:
+                  description: |-
+                    OrganizationClientRoles lists the client-scoped roles granted to an
+                    organization node for a single Keycloak client.
+                  properties:
+                    client:
+                      description: Client is the Keycloak clientID owning the roles,
+                        e.g. "trunx-dashboard".
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[^\x00-\x1F\x7F]+$
+                      type: string
+                    roles:
+                      description: Roles lists the client role names mapped onto the
+                        node's group.
+                      items:
+                        maxLength: 255
+                        minLength: 1
+                        pattern: ^[^\x00-\x1F\x7F]+$
+                        type: string
+                      maxItems: 64
+                      minItems: 1
+                      type: array
+                  required:
+                  - client
+                  - roles
+                  type: object
+                maxItems: 64
+                type: array
+              domains:
+                description: |-
+                  Domains lists the internet domains owned by this tenant, e.g.
+                  "alien6.com". Only valid on a root organization (empty parentRef): the
+                  root is reconciled into a Keycloak Organization carrying the alias and
+                  domains, which is the tenancy isolation boundary. Internal nodes inherit
+                  the root's isolation and must leave this empty.
+                items:
+                  maxLength: 253
+                  minLength: 1
+                  pattern: ^[^\x00-\x1F\x7F]+$
+                  type: string
+                maxItems: 64
+                type: array
+              identityProvider:
+                description: |-
+                  IdentityProvider is the alias of an existing realm identity broker to
+                  link to this tenant root's Keycloak Organization, making it the tenant's
+                  managed IdP. Only valid on a root organization (empty parentRef). When
+                  empty, organization IdP links are left unmanaged: the operator never
+                  unlinks a broker it was not told about, so a live login path cannot be
+                  broken by omission.
+                maxLength: 255
+                pattern: ^[^\x00-\x1F\x7F]*$
+                type: string
+              mode:
+                default: Manage
+                description: |-
+                  Mode controls provider writes. Observe never changes groups, native
+                  Organizations, role mappings or optional platform projections. An
+                  imported-by label always forces Observe. Adoption does not change Mode.
+                enum:
+                - Manage
+                - Observe
+                type: string
+              name:
+                description: Name is the organization's display name and Keycloak
+                  group name.
+                maxLength: 255
+                minLength: 1
+                pattern: ^[^\x00-\x1F\x7F]+$
+                type: string
+              parentRef:
+                description: |-
+                  ParentRef is the name of the parent HankoOrganization in the same
+                  namespace, empty for a top-level (tenant-root) organization. It expresses
+                  the multi-level hierarchy as nested Keycloak groups.
+                maxLength: 253
+                type: string
+              realmRef:
+                description: RealmRef references the HankoRealm this organization
+                  belongs to.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+              roles:
+                description: |-
+                  Roles lists the realm roles mapped onto this organization's group. Every
+                  member of the group inherits these roles in issued tokens. Referenced
+                  roles must already exist (typically declared by a HankoRealm or HankoRole).
+                items:
+                  maxLength: 255
+                  type: string
+                maxItems: 64
+                type: array
+              slug:
+                description: |-
+                  Slug is the stable, URL-safe identifier surfaced to Trunx. When empty it
+                  is derived from Name by the consumer.
+                maxLength: 253
+                pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+                type: string
+            required:
+            - name
+            - realmRef
+            type: object
+            x-kubernetes-validations:
+            - message: reserved platform, fleet and cluster roles cannot be assigned
+                through an organization
+              rule: '!has(self.roles) || self.roles.all(r, r != ''HANKO_PLATFORM''
+                && !r.startsWith(''HANKO_PLATFORM_'') && !r.startsWith(''HANKO_FLEET_'')
+                && !r.startsWith(''HANKO_CLUSTER_''))'
+          status:
+            description: |-
+              HankoOrganizationStatus separates Keycloak Synced readiness from the optional
+              platform Projection. Ready standalone organizations do not need a PositionID.
+            properties:
+              adoptionCandidate:
+                description: AdoptionCandidate is bounded review evidence, never provider
+                  authority.
+                properties:
+                  approvable:
+                    type: boolean
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  complete:
+                    type: boolean
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  diff:
+                    items:
+                      properties:
+                        classification:
+                          enum:
+                          - supported-typed-native
+                          - preserved-readonly-native
+                          - unsupported
+                          - conflicting
+                          - security-sensitive-excluded
+                          type: string
+                        code:
+                          enum:
+                          - equal
+                          - would-manage
+                          - would-change
+                          - would-preserve
+                          - provider-native-readonly
+                          - unsupported
+                          - credential-excluded
+                          - recreation-required
+                          - ownership-transition
+                          type: string
+                        current:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        desired:
+                          description: AdoptionValue contains only reviewed non-secret
+                            semantic fields.
+                          properties:
+                            flag:
+                              type: boolean
+                            set:
+                              items:
+                                maxLength: 512
+                                type: string
+                              maxItems: 1024
+                              type: array
+                              x-kubernetes-list-type: set
+                            text:
+                              maxLength: 512
+                              type: string
+                          type: object
+                        domain:
+                          maxLength: 64
+                          type: string
+                        field:
+                          maxLength: 64
+                          type: string
+                        identity:
+                          maxLength: 128
+                          type: string
+                        object:
+                          maxLength: 255
+                          type: string
+                        roundTrip:
+                          enum:
+                          - lossless-represented
+                          - preserved-native
+                          - lossy
+                          - unsupported
+                          type: string
+                      required:
+                      - classification
+                      - code
+                      - domain
+                      - field
+                      - identity
+                      - object
+                      - roundTrip
+                      type: object
+                    maxItems: 256
+                    type: array
+                  diffHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  findings:
+                    items:
+                      properties:
+                        blocking:
+                          type: boolean
+                        code:
+                          maxLength: 512
+                          type: string
+                        domain:
+                          maxLength: 64
+                          type: string
+                        message:
+                          maxLength: 512
+                          type: string
+                      required:
+                      - blocking
+                      - code
+                      - domain
+                      - message
+                      type: object
+                    maxItems: 32
+                    type: array
+                  observationHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  providerIdentity:
+                    description: AdoptionProviderIdentity excludes AdminRef, credentials
+                      and credential hashes.
+                    properties:
+                      caIdentity:
+                        description: CAIdentity binds the public trust bundle and
+                          Secret UID.
+                        maxLength: 255
+                        type: string
+                      caReference:
+                        maxLength: 255
+                        type: string
+                      instance:
+                        description: AdoptionTargetIdentity identifies a current object,
+                          never write authority.
+                        properties:
+                          generation:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          importRef:
+                            description: ImportRef binds the discovery latch without
+                              consuming it.
+                            maxLength: 255
+                            type: string
+                          kind:
+                            maxLength: 64
+                            type: string
+                          name:
+                            maxLength: 255
+                            type: string
+                          namespace:
+                            maxLength: 255
+                            type: string
+                          tenantRef:
+                            description: TenantRef binds connection-selecting target
+                              metadata without acquiring it.
+                            maxLength: 255
+                            type: string
+                          uid:
+                            maxLength: 128
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - namespace
+                        - uid
+                        type: object
+                      objectIDs:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 512
+                        type: array
+                        x-kubernetes-list-type: set
+                      origin:
+                        maxLength: 2048
+                        type: string
+                      realmID:
+                        maxLength: 128
+                        type: string
+                      trust:
+                        description: Unknown is reserved for incomplete diagnostic
+                          evidence.
+                        enum:
+                        - public-ca
+                        - private-ca
+                        - explicit-http
+                        - unknown
+                        type: string
+                    required:
+                    - instance
+                    - origin
+                    - realmID
+                    - trust
+                    type: object
+                  target:
+                    description: AdoptionTargetIdentity identifies a current object,
+                      never write authority.
+                    properties:
+                      generation:
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      importRef:
+                        description: ImportRef binds the discovery latch without consuming
+                          it.
+                        maxLength: 255
+                        type: string
+                      kind:
+                        maxLength: 64
+                        type: string
+                      name:
+                        maxLength: 255
+                        type: string
+                      namespace:
+                        maxLength: 255
+                        type: string
+                      tenantRef:
+                        description: TenantRef binds connection-selecting target metadata
+                          without acquiring it.
+                        maxLength: 255
+                        type: string
+                      uid:
+                        maxLength: 128
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - namespace
+                    - uid
+                    type: object
+                  truncated:
+                    type: boolean
+                required:
+                - approvable
+                - candidateHash
+                - complete
+                - contractVersion
+                - diffHash
+                - observationHash
+                - providerIdentity
+                - target
+                - truncated
+                type: object
+              adoptionReceipt:
+                description: |-
+                  AdoptionReceipt reports provider checkpoint verification, not consent
+                  to reconcile business state or delete either aggregate member.
+                properties:
+                  candidateHash:
+                    maxLength: 71
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  contractVersion:
+                    enum:
+                    - hanko.sh/adoption-contract/v1alpha1
+                    type: string
+                  state:
+                    enum:
+                    - Pending
+                    - Verified
+                    - Partial
+                    - Conflict
+                    type: string
+                required:
+                - candidateHash
+                - contractVersion
+                - state
+                type: object
+              conditions:
+                description: |-
+                  Conditions separates provider Synced from optional platform Projection.
+                  Disabled projection is Unknown/Disabled, not a synchronization failure.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              groupID:
+                description: GroupID is the Keycloak UUID of the reconciled group.
+                maxLength: 128
+                type: string
+              groupPath:
+                description: GroupPath is the full Keycloak group path, e.g. "/alien6/demo".
+                maxLength: 16384
+                type: string
+              lastReconciled:
+                description: LastReconciled is the timestamp of the last successful
+                  reconciliation.
+                format: date-time
+                maxLength: 64
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the latest generation processed into status, including
+                  provider or projection failures; it is not proof of successful application.
+                format: int64
+                type: integer
+              orgID:
+                description: |-
+                  OrgID is the Keycloak Organization UUID reconciled for a tenant root.
+                  Empty on internal nodes, which are groups only.
+                maxLength: 128
+                type: string
+              phase:
+                description: |-
+                  Phase is Ready when Keycloak is synchronized and projection is disabled or
+                  healthy. Configured projection failures are Error; parent projection waits
+                  are Pending even when provider Synced is True.
+                enum:
+                - Pending
+                - Reconciling
+                - Ready
+                - Error
+                type: string
+              positionID:
+                description: |-
+                  PositionID is the hankoShell API position projected for hankoShell and ADK
+                  consumers. It is optional, last-known platform metadata and never provider
+                  authority. Disabling projection retains it without making API calls.
+                maxLength: 128
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

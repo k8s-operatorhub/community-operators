@@ -1,0 +1,434 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankokeycloakinstances.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoKeycloakInstance
+    listKind: HankoKeycloakInstanceList
+    plural: hankokeycloakinstances
+    shortNames:
+    - hkc
+    singular: hankokeycloakinstance
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.keycloakVersion
+      name: Version
+      type: string
+    - jsonPath: .status.realmCount
+      name: Realms
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          HankoKeycloakInstance represents a Keycloak instance managed or observed by the operator.
+          Mode controls the level of ownership: managed (operator owns the Deployment),
+          adopted (existing K8s Deployment), or external (Admin API only, including
+          Kubernetes instances owned by the official Keycloak operator).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: HankoKeycloakInstanceSpec defines the desired state of a
+              Keycloak instance.
+            properties:
+              adminRef:
+                description: AdminRef points to a Secret with keys HANKO_KEYCLOAK_URL,
+                  HANKO_KC_CLIENT_ID, HANKO_KC_CLIENT_SECRET.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              adopted:
+                description: |-
+                  Adopted references an existing K8s Keycloak Deployment.
+                  Required when mode=adopted.
+                properties:
+                  deploymentRef:
+                    description: DeploymentRef is the name of the existing Keycloak
+                      Deployment in the same namespace.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  publishDiscovery:
+                    default: false
+                    description: |-
+                      PublishDiscovery authorizes adding hankoShell discovery labels and annotations
+                      to ServiceRef. Referencing an adopted Service alone never authorizes a patch.
+                    type: boolean
+                  serviceRef:
+                    description: |-
+                      ServiceRef names an existing Keycloak Service for optional discovery metadata.
+                      The reference alone does not grant ownership or authorize updates.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                required:
+                - deploymentRef
+                type: object
+              hardenMasterRealm:
+                default: false
+                description: |-
+                  HardenMasterRealm explicitly authorizes changes to the master realm security
+                  baseline. Disabled by default in every mode; requires master manage-realm.
+                type: boolean
+              managed:
+                description: |-
+                  Managed holds the desired state for an operator-provisioned Keycloak Deployment.
+                  Required when mode=managed.
+                properties:
+                  allowInsecureHTTP:
+                    default: false
+                    description: |-
+                      AllowInsecureHTTP explicitly selects a plaintext listener on 8080 instead
+                      of HTTPS. Also requires the operator's process-wide HTTP acknowledgement.
+                      Mutually exclusive with TLSSecretRef and always refused in enterprise.
+                    type: boolean
+                  database:
+                    description: |-
+                      Database points to a Secret with DB connection env vars
+                      (KC_DB, KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD).
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        maxLength: 253
+                        pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  image:
+                    description: |-
+                      Image is a digest-approved signed optimized Keycloak image, built for the
+                      declared database with health enabled and root IAM/management context paths.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^[^\x00-\x20\x7F]+$
+                    type: string
+                  replicas:
+                    default: 1
+                    description: Replicas is the number of Keycloak pods. Defaults
+                      to 1.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: Resources sets CPU/memory requests and limits on
+                      the Keycloak container.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          maxLength: 64
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        maxProperties: 32
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          maxLength: 64
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        maxProperties: 32
+                        type: object
+                    type: object
+                  themePVC:
+                    description: ThemePVC is the PersistentVolumeClaim name for Keycloak
+                      theme JARs.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  tlsSecretRef:
+                    description: |-
+                      TLSSecretRef names a same-namespace kubernetes.io/tls Secret with tls.crt
+                      and tls.key for the native HTTPS listener on 8443. Required by default.
+                      Client trust is configured separately through spec.tlsCARef or system CAs.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                required:
+                - database
+                - image
+                type: object
+                x-kubernetes-validations:
+                - message: managed requires tlsSecretRef unless allowInsecureHTTP
+                    is explicitly true; these settings are mutually exclusive
+                  rule: '(has(self.allowInsecureHTTP) && self.allowInsecureHTTP) ?
+                    !has(self.tlsSecretRef) : has(self.tlsSecretRef)'
+              mode:
+                default: external
+                description: Mode determines what the operator owns.
+                enum:
+                - managed
+                - adopted
+                - external
+                type: string
+              rotateAdminCredentials:
+                default: false
+                description: |-
+                  RotateAdminCredentials authorizes rotation of the AdminRef service-account
+                  secret in master. Disabled by default; otherwise HANKO_KC_SA_MAX_AGE sets
+                  its maximum age. Requires master manage-clients. This does not control
+                  application or HankoServiceAccount credential rotation.
+                type: boolean
+              tlsCARef:
+                description: |-
+                  TLSCARef is the name of a Secret containing a "ca.crt" key with the PEM-encoded
+                  CA bundle used to verify the Keycloak Admin API TLS certificate.
+                  HTTPS always verifies certificates; without this Secret it uses system CAs.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                type: string
+            required:
+            - adminRef
+            - mode
+            type: object
+            x-kubernetes-validations:
+            - message: mode managed requires spec.managed
+              rule: self.mode != 'managed' || has(self.managed)
+          status:
+            description: HankoKeycloakInstanceStatus describes the observed state
+              of the Keycloak instance.
+            properties:
+              adminAPIURL:
+                description: AdminAPIURL is the base URL used to reach the Keycloak
+                  Admin API.
+                maxLength: 4096
+                type: string
+              conditions:
+                description: Conditions holds standard Kubernetes condition objects.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              keycloakVersion:
+                description: |-
+                  KeycloakVersion is discovered from the Admin API when permissions allow;
+                  it can be empty for a restricted administrative identity.
+                maxLength: 128
+                type: string
+              lastCredentialRotation:
+                description: |-
+                  LastCredentialRotation is the last time the AdminRef service-account
+                  credential was promoted after successful Keycloak verification.
+                format: date-time
+                maxLength: 64
+                type: string
+              lastProbed:
+                description: LastProbed is the timestamp of the last successful Admin
+                  API probe.
+                format: date-time
+                maxLength: 64
+                type: string
+              lastReconciled:
+                description: LastReconciled is the timestamp of the last successful
+                  reconciliation.
+                format: date-time
+                maxLength: 64
+                type: string
+              managedObservation:
+                description: |-
+                  ManagedObservation binds a successful Admin API probe to the same ready,
+                  owned Deployment observed before and after the probe. Absent for external
+                  and adopted instances; legacy Ready status is not managed rollout evidence.
+                properties:
+                  deploymentGeneration:
+                    description: DeploymentGeneration identifies the exact ready pod
+                      template observed.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  deploymentUID:
+                    description: DeploymentUID prevents replacement Deployments inheriting
+                      a previous probe.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                required:
+                - deploymentGeneration
+                - deploymentUID
+                type: object
+              nextCredentialRotation:
+                description: |-
+                  NextCredentialRotation is set only when spec.rotateAdminCredentials is enabled,
+                  using the deadline derived from HANKO_KC_SA_MAX_AGE.
+                format: date-time
+                maxLength: 64
+                type: string
+              phase:
+                description: 'Phase: Pending | Probing | Ready | Degraded | Error'
+                enum:
+                - Pending
+                - Probing
+                - Ready
+                - Degraded
+                - Error
+                type: string
+              realmCount:
+                description: RealmCount is the number of realms discovered in this
+                  Keycloak instance.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

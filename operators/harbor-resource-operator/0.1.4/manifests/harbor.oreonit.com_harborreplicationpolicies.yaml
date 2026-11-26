@@ -1,0 +1,329 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: harborreplicationpolicies.harbor.oreonit.com
+spec:
+  group: harbor.oreonit.com
+  names:
+    kind: HarborReplicationPolicy
+    listKind: HarborReplicationPolicyList
+    plural: harborreplicationpolicies
+    shortNames:
+    - hrepl
+    singular: harborreplicationpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.direction
+      name: Direction
+      type: string
+    - jsonPath: .spec.trigger.type
+      name: Trigger
+      type: string
+    - jsonPath: .status.lastExecution.status
+      name: Last run
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: HarborReplicationPolicy manages a push or pull replication policy.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of HarborReplicationPolicy
+            properties:
+              adoptExisting:
+                description: adoptExisting takes over a policy of the same name.
+                type: boolean
+              connectionRef:
+                description: connectionRef selects the Harbor instance.
+                properties:
+                  name:
+                    description: name of the HarborConnection.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: |-
+                      namespace of the HarborConnection. Defaults to the namespace of the
+                      referencing resource. A cross-namespace reference is only honoured when
+                      the connection's spec.allowedNamespaces permits it.
+                    type: string
+                required:
+                - name
+                type: object
+              copyByChunk:
+                description: copyByChunk transfers blobs in chunks.
+                type: boolean
+              deletionPolicy:
+                default: Delete
+                description: deletionPolicy controls whether the Harbor policy is
+                  deleted with this object.
+                enum:
+                - Retain
+                - Delete
+                type: string
+              description:
+                description: description shown in Harbor.
+                type: string
+              destNamespace:
+                description: destNamespace is the target project or namespace. Empty
+                  keeps the source path.
+                type: string
+              destNamespaceReplaceCount:
+                default: -1
+                description: |-
+                  destNamespaceReplaceCount is how many leading path components destNamespace
+                  replaces. -1 is Harbor's legacy mode.
+                format: int32
+                minimum: -1
+                type: integer
+              destRegistryRef:
+                description: destRegistryRef names the HarborRegistry to push to.
+                  Required for push.
+                properties:
+                  name:
+                    description: name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              direction:
+                description: direction is push (local to destRegistryRef) or pull
+                  (srcRegistryRef to local).
+                enum:
+                - push
+                - pull
+                type: string
+              enabled:
+                default: true
+                description: enabled enables the policy.
+                type: boolean
+              executeOnCreate:
+                description: executeOnCreate starts one execution right after the
+                  policy is created.
+                type: boolean
+              filters:
+                description: filters are managed in full.
+                items:
+                  description: ReplicationFilter narrows what a policy replicates.
+                  properties:
+                    decoration:
+                      description: decoration is matches or excludes (tag and label
+                        filters only).
+                      enum:
+                      - matches
+                      - excludes
+                      type: string
+                    type:
+                      description: type is name, tag, label or resource.
+                      enum:
+                      - name
+                      - tag
+                      - label
+                      - resource
+                      type: string
+                    value:
+                      description: |-
+                        value is a glob for name and tag (for example "payments/**", "v*"), a
+                        label name for label, and image or chart for resource.
+                      minLength: 1
+                      type: string
+                  required:
+                  - type
+                  - value
+                  type: object
+                type: array
+              name:
+                description: name of the policy in Harbor. Defaults to metadata.name.
+                maxLength: 256
+                type: string
+              override:
+                default: true
+                description: override replaces artifacts that already exist at the
+                  destination.
+                type: boolean
+              replicateDeletion:
+                description: replicateDeletion propagates deletions.
+                type: boolean
+              singleActiveReplication:
+                description: singleActiveReplication skips a run while the previous
+                  one is still active.
+                type: boolean
+              speedKBps:
+                description: speedKBps limits bandwidth. 0 means unlimited.
+                format: int32
+                minimum: 0
+                type: integer
+              srcRegistryRef:
+                description: srcRegistryRef names the HarborRegistry to pull from.
+                  Required for pull.
+                properties:
+                  name:
+                    description: name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              syncPeriod:
+                description: syncPeriod overrides the connection's drift-correction
+                  interval.
+                type: string
+              trigger:
+                description: trigger says when the policy runs.
+                properties:
+                  cron:
+                    description: cron expression (Harbor uses six fields with seconds)
+                      for type scheduled.
+                    type: string
+                  type:
+                    default: manual
+                    description: type is manual, scheduled or event_based.
+                    enum:
+                    - manual
+                    - scheduled
+                    - event_based
+                    type: string
+                type: object
+            required:
+            - connectionRef
+            - direction
+            type: object
+          status:
+            description: status defines the observed state of HarborReplicationPolicy
+            properties:
+              conditions:
+                description: 'conditions: Ready=True when the policy exists and matches
+                  the spec.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              executedOnCreate:
+                description: executedOnCreate records that the executeOnCreate run
+                  was started.
+                type: boolean
+              lastExecution:
+                description: lastExecution mirrors the most recent execution in Harbor.
+                properties:
+                  endTime:
+                    description: endTime of the execution.
+                    format: date-time
+                    type: string
+                  id:
+                    description: id of the execution.
+                    format: int64
+                    type: integer
+                  startTime:
+                    description: startTime of the execution.
+                    format: date-time
+                    type: string
+                  status:
+                    description: status such as Succeed, Failed, InProgress, Stopped.
+                    type: string
+                required:
+                - id
+                type: object
+              observedGeneration:
+                description: observedGeneration is the spec generation the status
+                  reflects.
+                format: int64
+                type: integer
+              policyID:
+                description: policyID in Harbor.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

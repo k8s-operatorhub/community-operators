@@ -1,0 +1,292 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: dxconnections.dx.europesip.com
+spec:
+  group: dx.europesip.com
+  names:
+    kind: DXConnection
+    listKind: DXConnectionList
+    plural: dxconnections
+    shortNames:
+    - dxconn
+    singular: dxconnection
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.url
+      name: URL
+      type: string
+    - jsonPath: .spec.runtime
+      name: Runtime
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DXConnection is a connection to an HCL DX server, shared by the
+          resources of a namespace.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DXConnectionSpec is how the operator reaches an HCL DX server.
+            properties:
+              caSecret:
+                description: 'CASecret: deprecated, use tlsCASecret (same meaning;
+                  still accepted, with a warning).'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              contentHandlerPath:
+                default: /wps/mycontenthandler
+                description: |-
+                  ContentHandlerPath of DX (default /wps/mycontenthandler). It also sets the context root: /mycontenthandler for a
+                  traditional DX installed with an empty context root (XMLAccess at /config, the login at /j_security_check).
+                type: string
+              credentialsSecret:
+                description: 'CredentialsSecret: deprecated, use portalCredentialsSecret
+                  (same meaning; still accepted, with a warning).'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              dxConnect:
+                description: |-
+                  DXConnect of DX Core (runtime core): the servlet of the Config Wizard profile that DXClient uses, for the WCM
+                  library exports and imports. Default: url, the credentials of credentialsSecret and profile wp_profile.
+                properties:
+                  cwCredentialsSecret:
+                    description: |-
+                      CWCredentialsSecret of the Config Wizard (cw_profile) administrator ("username", "password"), named like
+                      wasCredentialsSecret so that each Secret says whose it is. Default: the credentials of the connection.
+                    properties:
+                      name:
+                        description: Name of the object.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  profileName:
+                    default: wp_profile
+                    description: ProfileName of the DX profile on the server (default
+                      wp_profile).
+                    type: string
+                  url:
+                    description: |-
+                      URL of DXConnect: https://<host> in Kubernetes (HAProxy routes /hcl/dxconnect to the core pod) or
+                      https://<host>:10202 on a VM. Default: spec.url.
+                    pattern: ^https?://[^/]+/?$
+                    type: string
+                  wasCredentialsSecret:
+                    description: |-
+                      WASCredentialsSecret of the WebSphere administrator ("username", "password"). Default: the credentials of the
+                      connection.
+                    properties:
+                      name:
+                        description: Name of the object.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              insecureSkipTLSVerify:
+                description: 'InsecureSkipTLSVerify: do not verify the certificate
+                  at all (labs only).'
+                type: boolean
+              internalURL:
+                description: |-
+                  InternalURL: in-cluster URL of the Web Engine, without Traefik or HAProxy in between, for example
+                  http://dx-deployment-web-engine.<namespace>.svc:9080 when the operator runs in the same cluster. The long requests
+                  (WCM data module import and export, dxFileTransfer uploads and downloads) go there, so no proxy timeout cuts them
+                  (a cut import goes on inside DX and the next one would run at the same time); everything else uses url.
+                pattern: ^https?://[^/]+/?$
+                type: string
+              portalCredentialsSecret:
+                description: |-
+                  PortalCredentialsSecret: Secret with the keys "username" and "password" of the DX portal user the operator
+                  signs in with (XMLAccess, WCM, DAM, DXClient). Script Applications need Editor access to the Script Application
+                  Library; pages (XMLAccess) and DAM need a DX administrator. Required (or the deprecated credentialsSecret).
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              resyncInterval:
+                default: 10m
+                description: |-
+                  ResyncInterval: how often every resource that uses this connection is checked against DX, to detect
+                  and correct drift (default 10m, minimum 1m).
+                type: string
+              runtime:
+                default: compose
+                description: |-
+                  Runtime of the DX server: compose (the Web Engine of DX Compose, default) or core (DX Core, the traditional
+                  DX 9.5 on WebSphere Application Server). On core the WCM libraries go through DXConnect (spec.dxConnect), because
+                  DX Core has no dxFileTransfer.
+                enum:
+                - compose
+                - core
+                type: string
+              sourceName:
+                description: |-
+                  SourceName: short name of this DX in the artifacts it exports (annotation com.europesip.dx.source.server and
+                  EXPORT-INFO.txt), for example wps01 or cf230; the URL goes to com.europesip.dx.source.url. Default: the name of
+                  the DXConnection. A name, not a host: internal IPs and host names are not published as the "server".
+                maxLength: 63
+                pattern: ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$
+                type: string
+              tlsCASecret:
+                description: |-
+                  TLSCASecret: Secret with the key "ca.crt" to verify the TLS certificate of DX (a self-signed certificate or a
+                  private CA).
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              url:
+                description: URL of DX as the operator reaches it, for example https://dx.example.com
+                  (normally the public host).
+                pattern: ^https?://[^/]+/?$
+                type: string
+              virtualPortalContext:
+                description: 'VirtualPortalContext: push Script Applications into
+                  this virtual portal.'
+                type: string
+            required:
+            - url
+            type: object
+            x-kubernetes-validations:
+            - message: set portalCredentialsSecret (credentialsSecret is its deprecated
+                name)
+              rule: has(self.portalCredentialsSecret) || has(self.credentialsSecret)
+            - message: 'portalCredentialsSecret and the deprecated credentialsSecret
+                name different Secrets: set only portalCredentialsSecret'
+              rule: '!has(self.portalCredentialsSecret) || !has(self.credentialsSecret)
+                || self.portalCredentialsSecret.name == self.credentialsSecret.name'
+            - message: 'tlsCASecret and the deprecated caSecret name different Secrets:
+                set only tlsCASecret'
+              rule: '!has(self.tlsCASecret) || !has(self.caSecret) || self.tlsCASecret.name
+                == self.caSecret.name'
+          status:
+            description: DXConnectionStatus is the last check of the connection.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastCheckTime:
+                description: LastCheckTime of the connection.
+                format: date-time
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

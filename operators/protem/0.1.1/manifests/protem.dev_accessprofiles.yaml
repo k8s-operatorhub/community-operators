@@ -1,0 +1,427 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  creationTimestamp: null
+  name: accessprofiles.protem.dev
+spec:
+  group: protem.dev
+  names:
+    kind: AccessProfile
+    listKind: AccessProfileList
+    plural: accessprofiles
+    shortNames:
+    - aprofile
+    singular: accessprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.displayName
+      name: Display Name
+      type: string
+    - jsonPath: .spec.role.name
+      name: Role
+      type: string
+    - jsonPath: .spec.scope
+      name: Scope
+      type: string
+    - jsonPath: .spec.duration.max
+      name: Max Duration
+      type: string
+    - jsonPath: .status.activeGrantsCount
+      name: Active Grants
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AccessProfile defines an eligible privileged role and its multi-cluster
+          approval policy.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AccessProfileSpec defines the desired state of AccessProfile.
+            properties:
+              approval:
+                description: Approval rules and workflow
+                properties:
+                  pendingTimeout:
+                    description: PendingTimeout defines when an unapproved request
+                      expires (e.g. 24h)
+                    type: string
+                  rules:
+                    description: Rules evaluated in order; first match per target
+                      cluster governs
+                    items:
+                      description: ApprovalRule defines a condition-based approval
+                        requirement.
+                      properties:
+                        allowSelfApproval:
+                          default: false
+                          description: AllowSelfApproval permits a requester in an
+                            approver group to approve their own request
+                          type: boolean
+                        approvers:
+                          description: Approvers specifies who can approve this rule
+                          properties:
+                            groups:
+                              description: Groups of approvers
+                              items:
+                                type: string
+                              type: array
+                            users:
+                              description: Specific approver usernames/emails
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        maxDuration:
+                          description: MaxDuration can tighten the maximum duration
+                            for this rule
+                          type: string
+                        mode:
+                          description: Mode determines if elevation is self-service
+                            (Auto) or requires approval (Manual)
+                          enum:
+                          - Auto
+                          - Manual
+                          type: string
+                        name:
+                          description: Name uniquely identifies this rule
+                          type: string
+                        requiredApprovals:
+                          default: 1
+                          description: RequiredApprovals is the number of distinct
+                            approvals needed (default 1)
+                          type: integer
+                        when:
+                          description: When conditions under which this rule applies
+                          properties:
+                            clusterSelector:
+                              description: ClusterSelector matches target cluster
+                                labels
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            requesterGroups:
+                              description: RequesterGroups matches requester groups
+                              items:
+                                type: string
+                              type: array
+                            requesterUsers:
+                              description: RequesterUsers matches requester usernames
+                                or emails
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                      required:
+                      - mode
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: approvers is required when mode is Manual
+                        rule: self.mode != 'Manual' || has(self.approvers)
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - rules
+                type: object
+              clusters:
+                description: Clusters specifies targeted fleet clusters (either selector
+                  or names)
+                properties:
+                  names:
+                    description: Names explicitly lists target cluster names
+                    items:
+                      type: string
+                    type: array
+                  selector:
+                    description: Selector dynamically matches target clusters by label
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+              description:
+                type: string
+              displayName:
+                type: string
+              duration:
+                description: Duration constraints
+                properties:
+                  default:
+                    description: Default duration granted if requester does not specify
+                    type: string
+                  max:
+                    description: Maximum allowable duration
+                    type: string
+                required:
+                - default
+                - max
+                type: object
+              justification:
+                description: Justification requirements
+                properties:
+                  reason:
+                    default: Required
+                    description: Reason requirement policy
+                    enum:
+                    - Required
+                    - Optional
+                    type: string
+                  ticketPattern:
+                    description: TicketPattern is an optional regex pattern validating
+                      ticket IDs (e.g. ^(INC|OPS)-[0-9]+$)
+                    type: string
+                required:
+                - reason
+                type: object
+              namespaces:
+                description: Namespaces permitted for elevation (required iff Scope
+                  is Namespaced)
+                items:
+                  type: string
+                type: array
+              requesters:
+                description: Requesters permitted to request this profile
+                properties:
+                  groups:
+                    description: Groups allowed to request this profile
+                    items:
+                      type: string
+                    type: array
+                  users:
+                    description: Users (usernames or emails) allowed to request this
+                      profile
+                    items:
+                      type: string
+                    type: array
+                type: object
+              role:
+                description: Role is the target Role or ClusterRole
+                properties:
+                  kind:
+                    description: Kind is either "Role" or "ClusterRole"
+                    enum:
+                    - Role
+                    - ClusterRole
+                    type: string
+                  name:
+                    description: Name is the name of the Role or ClusterRole
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              scope:
+                default: Namespaced
+                description: Scope is either Namespaced or Cluster
+                enum:
+                - Namespaced
+                - Cluster
+                type: string
+            required:
+            - approval
+            - clusters
+            - displayName
+            - duration
+            - justification
+            - requesters
+            - role
+            - scope
+            type: object
+            x-kubernetes-validations:
+            - message: Cluster scoped profiles require role.kind=ClusterRole
+              rule: self.scope != 'Cluster' || self.role.kind == 'ClusterRole'
+            - message: namespaces is required when scope is Namespaced
+              rule: self.scope != 'Namespaced' || (has(self.namespaces) && size(self.namespaces)
+                > 0)
+            - message: requesters must name at least one group or user
+              rule: (has(self.requesters.groups) && size(self.requesters.groups) >
+                0) || (has(self.requesters.users) && size(self.requesters.users) >
+                0)
+            - message: clusters must specify exactly one of selector or names
+              rule: (has(self.clusters.selector) && !has(self.clusters.names)) ||
+                (!has(self.clusters.selector) && has(self.clusters.names))
+            - message: duration.default must be less than or equal to duration.max
+              rule: duration(self.duration.default) <= duration(self.duration.max)
+            - message: duration.default must be greater than zero
+              rule: duration(self.duration.default) > duration('0s')
+          status:
+            description: AccessProfileStatus defines the observed state of AccessProfile.
+            properties:
+              activeGrantsCount:
+                type: integer
+              conditions:
+                description: Conditions represent observations of the profile's readiness
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

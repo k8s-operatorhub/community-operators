@@ -1,0 +1,289 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: dxdatabases.dx.europesip.com
+spec:
+  group: dx.europesip.com
+  names:
+    kind: DXDatabase
+    listKind: DXDatabaseList
+    plural: dxdatabases
+    shortNames:
+    - dxdb
+    singular: dxdatabase
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.engine
+      name: Engine
+      type: string
+    - jsonPath: .spec.host
+      name: Host
+      type: string
+    - jsonPath: .status.secretName
+      name: Secret
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DXDatabase is a database for the backend of an application (PostgreSQL, Oracle or SQL Server), created and kept by
+          the operator.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              DXDatabaseSpec is a database (and the user that owns it) in an existing database server, for the backend of an
+              application. The operator creates them and writes a Secret with the connection details; the password is generated
+              once and kept.
+            properties:
+              adminSecret:
+                description: 'AdminSecret: deprecated, use dbAdminCredentialsSecret
+                  (same meaning; still accepted, with a warning).'
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              adminSecretNamespace:
+                description: 'AdminSecretNamespace: deprecated, use dbAdminCredentialsSecretNamespace.'
+                type: string
+              database:
+                description: |-
+                  Database name (default: the name of the resource, with "-" replaced by "_"). With Oracle it is the schema: a
+                  user with that name.
+                type: string
+              dbAdminCredentialsSecret:
+                description: |-
+                  DBAdminCredentialsSecret: Secret with "username" and "password" of an administrator of the database server that
+                  can create users and databases (PostgreSQL: a superuser or CREATEROLE + CREATEDB; Oracle: CREATE USER and GRANT;
+                  SQL Server: sysadmin or dbcreator + securityadmin). In another namespace only if the operator may read it there
+                  (dbAdminCredentialsSecretNamespace). Required (or the deprecated adminSecret).
+                properties:
+                  name:
+                    description: Name of the object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              dbAdminCredentialsSecretNamespace:
+                description: 'DBAdminCredentialsSecretNamespace: namespace of that
+                  Secret (default: the namespace of the resource).'
+                type: string
+              deletionPolicy:
+                default: Retain
+                description: |-
+                  DeletionPolicy: Retain (default) keeps the database and the user when the resource is deleted; Delete drops
+                  them (the data is lost).
+                enum:
+                - Retain
+                - Delete
+                type: string
+              engine:
+                default: PostgreSQL
+                description: 'Engine of the server: PostgreSQL (default), Oracle or
+                  SQLServer.'
+                enum:
+                - PostgreSQL
+                - Oracle
+                - SQLServer
+                type: string
+              extensions:
+                description: Extensions (PostgreSQL only) to create in the database,
+                  for example [pgcrypto, vector].
+                items:
+                  type: string
+                type: array
+              host:
+                description: Host of the database server, for example dx-pg-rw.dx-shared.svc.cluster.local.
+                minLength: 1
+                type: string
+              oracle:
+                description: Oracle settings (required with engine Oracle).
+                properties:
+                  service:
+                    description: Service name of the pluggable database to connect
+                      to, for example FREEPDB1 or ORCLPDB1.
+                    minLength: 1
+                    type: string
+                  tablespace:
+                    default: USERS
+                    description: Tablespace for the quota of the user (default USERS).
+                    type: string
+                required:
+                - service
+                type: object
+              outputSecretName:
+                description: |-
+                  OutputSecretName: the Secret the operator creates for the backend, with engine, username, password, host, port,
+                  database, uri and jdbcUrl. Default: <name>-db.
+                type: string
+              owner:
+                description: |-
+                  Owner: the user that owns the database and that the backend signs in with (default: the database name). With
+                  Oracle it is always the database (schema) name.
+                type: string
+              port:
+                description: 'Port (default: 5432 PostgreSQL, 1521 Oracle, 1433 SQL
+                  Server).'
+                format: int32
+                type: integer
+              secretName:
+                description: 'SecretName: deprecated, use outputSecretName (same meaning;
+                  still accepted, with a warning).'
+                type: string
+              sqlServer:
+                description: SQLServer settings (engine SQLServer).
+                properties:
+                  encrypt:
+                    default: mandatory
+                    description: 'Encrypt (TLS of the connection): disable, optional,
+                      mandatory (default) or strict (TDS 8).'
+                    enum:
+                    - disable
+                    - optional
+                    - mandatory
+                    - strict
+                    type: string
+                  trustServerCertificate:
+                    description: 'TrustServerCertificate: accept the certificate of
+                      the server without checking it (self-signed servers in labs).'
+                    type: boolean
+                type: object
+              sslMode:
+                description: 'SSLMode (PostgreSQL only): disable, prefer (default),
+                  require, verify-ca or verify-full.'
+                enum:
+                - disable
+                - prefer
+                - require
+                - verify-ca
+                - verify-full
+                type: string
+            required:
+            - host
+            type: object
+            x-kubernetes-validations:
+            - message: set dbAdminCredentialsSecret (adminSecret is its deprecated
+                name)
+              rule: has(self.dbAdminCredentialsSecret) || has(self.adminSecret)
+            - message: 'dbAdminCredentialsSecret and the deprecated adminSecret name
+                different Secrets: set only dbAdminCredentialsSecret'
+              rule: '!has(self.dbAdminCredentialsSecret) || !has(self.adminSecret)
+                || self.dbAdminCredentialsSecret.name == self.adminSecret.name'
+            - message: 'dbAdminCredentialsSecretNamespace and the deprecated adminSecretNamespace
+                differ: set only dbAdminCredentialsSecretNamespace'
+              rule: '!has(self.dbAdminCredentialsSecretNamespace) || !has(self.adminSecretNamespace)
+                || self.dbAdminCredentialsSecretNamespace == self.adminSecretNamespace'
+            - message: 'outputSecretName and the deprecated secretName differ: set
+                only outputSecretName'
+              rule: '!has(self.outputSecretName) || !has(self.secretName) || self.outputSecretName
+                == self.secretName'
+          status:
+            description: DXDatabaseStatus is what the operator knows about the database.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastCheckTime:
+                format: date-time
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              secretName:
+                description: SecretName written for the backend.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

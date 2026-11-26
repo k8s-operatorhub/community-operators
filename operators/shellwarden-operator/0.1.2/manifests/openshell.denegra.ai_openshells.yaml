@@ -1,0 +1,290 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: openshells.openshell.denegra.ai
+spec:
+  group: openshell.denegra.ai
+  names:
+    kind: OpenShell
+    listKind: OpenShellList
+    plural: openshells
+    singular: openshell
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Deployed
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Deployed')].status
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: >-
+            An NVIDIA OpenShell install: the gateway, its configuration and the sandbox defaults.
+            One per cluster. spec holds the values of the upstream OpenShell Helm chart; the fields
+            typed here are the common ones, and any other value of that chart is accepted as well.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: Values of the upstream OpenShell Helm chart (deploy/helm/openshell).
+              type: object
+              default: {}
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                replicaCount:
+                  description: Gateway replicas. More than 1 needs server.externalDbSecret (PostgreSQL).
+                  type: integer
+                  minimum: 1
+                global:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    image:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        registry:
+                          description: >-
+                            Registry and path prefix of the OpenShell images, for example
+                            mirror.example.com/nvidia. The images keep their digests, so a mirror
+                            serves exactly the tested images.
+                          type: string
+                        tag:
+                          type: string
+                        pullPolicy:
+                          type: string
+                          enum: [Always, IfNotPresent, Never]
+                gateway:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    image:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        registry:
+                          type: string
+                        repository:
+                          type: string
+                        tag:
+                          type: string
+                        digest:
+                          description: Image digest (sha256:...). Takes precedence over tag.
+                          type: string
+                        pullPolicy:
+                          type: string
+                supervisor:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    image:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        registry:
+                          type: string
+                        repository:
+                          type: string
+                        tag:
+                          type: string
+                        digest:
+                          description: Image digest (sha256:...). Takes precedence over tag.
+                          type: string
+                        pullPolicy:
+                          type: string
+                sandboxRuntime:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    image:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        registry:
+                          type: string
+                        repository:
+                          type: string
+                        tag:
+                          type: string
+                        digest:
+                          description: Image digest (sha256:...). Takes precedence over tag.
+                          type: string
+                        pullPolicy:
+                          type: string
+                sandbox:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    image:
+                      description: Default image agents run in, when a sandbox names none.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        repository:
+                          type: string
+                        tag:
+                          type: string
+                        digest:
+                          type: string
+                imagePullSecrets:
+                  description: Pull secrets for the gateway and helper pods.
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    properties:
+                      name:
+                        type: string
+                networkPolicy:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    enabled:
+                      description: >-
+                        Allow SSH into sandbox pods only from the gateway. The egress fence around
+                        each sandbox is applied by the gateway regardless. The cluster's network
+                        plugin must enforce NetworkPolicy.
+                      type: boolean
+                      default: true
+                resources:
+                  description: Gateway pod resource requests and limits.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                nodeSelector:
+                  type: object
+                  additionalProperties:
+                    type: string
+                tolerations:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                openshiftRoute:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    enabled:
+                      description: Expose the gateway with an OpenShift passthrough Route.
+                      type: boolean
+                    host:
+                      type: string
+                server:
+                  type: object
+                  default: {}
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    telemetryEnabled:
+                      description: >-
+                        Send OpenShell's anonymous usage telemetry to NVIDIA from the gateway and
+                        the sandbox supervisors. Off unless set here.
+                      type: boolean
+                      default: false
+                    logLevel:
+                      type: string
+                      enum: [trace, debug, info, warn, error]
+                    sandboxNamespace:
+                      description: Namespace for sandboxes in shared mode. Empty means this resource's namespace.
+                      type: string
+                    dataStorageClass:
+                      description: StorageClass of the gateway's database volume. Use block storage, not NFS.
+                      type: string
+                    dataStorageSize:
+                      type: string
+                    workspaceStorageClass:
+                      description: StorageClass of each sandbox's workspace volume.
+                      type: string
+                    workspaceDefaultStorageSize:
+                      type: string
+                    externalDbSecret:
+                      description: Secret with a PostgreSQL URI (key uri) instead of the built-in SQLite.
+                      type: string
+                    sandboxImagePullSecrets:
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    drivers:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        kubernetes:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                          properties:
+                            workspaceMode:
+                              description: >-
+                                How workspaces map to namespaces. shared: every sandbox in one
+                                namespace. managed: the gateway creates a namespace per workspace.
+                                operator: workspaces are namespaces the platform prepares (with an
+                                OpenShellWorkspace) and labels with operatorNamespaceLabel.
+                              type: string
+                              enum: [shared, managed, operator]
+                            operatorNamespaceLabel:
+                              description: Label selector of the namespaces the gateway may use in operator mode.
+                              type: string
+                    otlp:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        endpoint:
+                          description: OTLP/gRPC collector for gateway traces. Empty turns tracing off.
+                          type: string
+                    ocsfLog:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        enabled:
+                          description: Write gateway security events as OCSF JSON lines.
+                          type: boolean
+                    oidc:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                      properties:
+                        issuer:
+                          description: OIDC issuer for user sign-in. Empty keeps mTLS client certificates.
+                          type: string
+                        audience:
+                          type: string
+            status:
+              description: Set by the operator (helm-operator) after each reconcile.
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                conditions:
+                  description: Initialized, Deployed, ReleaseFailed, Irreconcilable.
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                deployedRelease:
+                  description: The Helm release now deployed.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    name:
+                      type: string
+                    manifest:
+                      type: string

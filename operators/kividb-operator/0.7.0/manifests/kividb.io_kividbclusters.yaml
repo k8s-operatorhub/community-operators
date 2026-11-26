@@ -1,0 +1,528 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/managed-by: kividb-operator
+    app.kubernetes.io/name: kividb-operator
+  name: kividbclusters.kividb.io
+spec:
+  group: kividb.io
+  names:
+    kind: KividbCluster
+    listKind: KividbClusterList
+    plural: kividbclusters
+    shortNames:
+    - kdb
+    singular: kividbcluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.masterPod
+      name: Master
+      type: string
+    - jsonPath: .spec.shards
+      name: Shards
+      type: integer
+    - jsonPath: .spec.replicas
+      name: Replicas
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: 'KividbCluster describes a single-master, N-replica KiviDB (Redis-compatible)
+          cluster: storage, scheduling constraints, exposed Services, monitoring,
+          and failover behavior. Configuration, ACL users, and scheduled backups are
+          set via separate KividbConfig / KividbAclConfig / KividbSnapshotConfig resources,
+          referenced by name.'
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              aclConfigRef:
+                description: 'Names a KividbAclConfig in the same namespace, providing
+                  ACL users and/or requirepass. Optional: omit for an open, passwordless
+                  default user.'
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              affinity:
+                description: Standard Kubernetes Affinity. If unset, a default preferred
+                  anti-affinity is injected.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              agentImage:
+                description: kividb-operator sidecar agent image. Defaults to the
+                  operator's bundled version.
+                type: string
+              agentResources:
+                description: Standard Kubernetes ResourceRequirements for the agent
+                  sidecar container.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              bootstrapFromSnapshot:
+                description: Seed a brand-new cluster's pod-0 data volume from a successful
+                  KividbSnapshot before kividb starts. Only honored until status.bootstrap.completed
+                  is true.
+                properties:
+                  snapshotRef:
+                    properties:
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - snapshotRef
+                type: object
+              cluster:
+                description: Cluster-mode settings, for a cluster with spec.shards.
+                properties:
+                  busSecretRef:
+                    description: The cluster-bus-secret. Generated into <cluster>-bus
+                      when unset.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    - key
+                    type: object
+                  minReplicasMaxLagSeconds:
+                    description: min-replicas-max-lag. Defaults to 10.
+                    minimum: 1
+                    type: integer
+                  minReplicasToWrite:
+                    description: min-replicas-to-write. 0 (the default) turns it off.
+                    minimum: 0
+                    type: integer
+                  nodeTimeoutMs:
+                    description: cluster-node-timeout in milliseconds. Defaults to
+                      5000.
+                    minimum: 1000
+                    type: integer
+                  replicaValidityFactor:
+                    description: 'cluster-replica-validity-factor: a replica cut off
+                      from its master for longer than nodeTimeoutMs times this does
+                      not stand for election. 0 lets every replica stand. Unset leaves
+                      the engine''s default, 10. Needs engine 1.2 or later.'
+                    minimum: 0
+                    type: integer
+                  requireFullCoverage:
+                    description: cluster-require-full-coverage. Defaults to true.
+                    type: boolean
+                type: object
+              configRef:
+                description: Names a KividbConfig in the same namespace, providing
+                  kividb.conf directives and TLS settings. Optional.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              exporterImage:
+                description: Prometheus redis_exporter sidecar image, added only when
+                  spec.monitoring.enabled is true. Defaults to the operator's bundled
+                  oliver006/redis_exporter version.
+                type: string
+              exporterResources:
+                description: Standard Kubernetes ResourceRequirements for the redis_exporter
+                  sidecar container.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              failover:
+                properties:
+                  enabled:
+                    type: boolean
+                  unhealthyThresholdSeconds:
+                    format: int32
+                    type: integer
+                type: object
+              image:
+                description: kividb container image, e.g. "docker.io/kividb/kividb:v1.2.0".
+                  Defaults to docker.io/kividb/kividb:v1.2.0 if unset -- set this
+                  explicitly to pin a version. Used verbatim; never derived or modified
+                  from variant below.
+                type: string
+              imagePullPolicy:
+                enum:
+                - Always
+                - IfNotPresent
+                - Never
+                type: string
+              imagePullSecrets:
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              monitoring:
+                properties:
+                  enabled:
+                    type: boolean
+                  serviceMonitor:
+                    type: boolean
+                type: object
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                type: object
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                type: object
+              podLabels:
+                additionalProperties:
+                  type: string
+                type: object
+              port:
+                default: 6380
+                description: RESP protocol port kividb listens on.
+                maximum: 65535
+                minimum: 0
+                type: integer
+              replicas:
+                default: 2
+                description: Number of replicas of each master (beside the single
+                  master, or in each shard).
+                minimum: 0
+                type: integer
+              resources:
+                description: Standard Kubernetes ResourceRequirements for the kividb
+                  container.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              services:
+                properties:
+                  master:
+                    description: Service exposing the current master pod.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      loadBalancerIP:
+                        type: string
+                      loadBalancerSourceRanges:
+                        items:
+                          type: string
+                        type: array
+                      type:
+                        enum:
+                        - ClusterIP
+                        - NodePort
+                        - LoadBalancer
+                        type: string
+                    type: object
+                  replicas:
+                    description: Service load-balancing across all replica pods.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      loadBalancerIP:
+                        type: string
+                      loadBalancerSourceRanges:
+                        items:
+                          type: string
+                        type: array
+                      type:
+                        enum:
+                        - ClusterIP
+                        - NodePort
+                        - LoadBalancer
+                        type: string
+                    type: object
+                type: object
+              shards:
+                description: 'Makes the cluster sharded: that many shards, each a
+                  master and spec.replicas replicas, in kividb''s cluster mode. Unset:
+                  one master and its replicas. Set or unset only at creation; the
+                  number can change later.'
+                minimum: 1
+                type: integer
+              snapshotConfigRef:
+                description: 'Names a KividbSnapshotConfig in the same namespace,
+                  providing the backup schedule and S3 destination. Optional: omit
+                  to disable scheduled backups.'
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              storage:
+                properties:
+                  accessModes:
+                    items:
+                      type: string
+                    type: array
+                  size:
+                    description: PVC capacity, e.g. "10Gi".
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    type: string
+                  storageClassName:
+                    type: string
+                required:
+                - size
+                type: object
+              terminationGracePeriodSeconds:
+                format: int64
+                type: integer
+              tolerations:
+                description: Standard Kubernetes Tolerations applied to every pod.
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              variant:
+                default: standard
+                description: 'Declares which build of kividb image actually is: informational
+                  only, does not change which image gets pulled. Tells the operator
+                  whether to wire up variant-specific configuration (TLS cert mounting/CLI
+                  flags). Not validated against image -- the operator emits a guidance
+                  Event on a likely mismatch instead.'
+                enum:
+                - standard
+                - tls
+                - lua
+                - full
+                type: string
+            required:
+            - storage
+            type: object
+            x-kubernetes-validations:
+            - message: 'spec.shards cannot be added or removed after creation: a cluster
+                is sharded, or not, for good'
+              rule: has(self.shards) == has(oldSelf.shards)
+            - message: 'spec.bootstrapFromSnapshot cannot be added after creation:
+                it seeds a new cluster, and on a running one would overwrite pod-0''s
+                data'
+              rule: '!has(self.bootstrapFromSnapshot) || has(oldSelf.bootstrapFromSnapshot)'
+          status:
+            properties:
+              bootstrap:
+                description: Snapshot-bootstrap progress for this cluster.
+                properties:
+                  completed:
+                    type: boolean
+                  completionTime:
+                    format: date-time
+                    type: string
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  phase:
+                    enum:
+                    - Pending
+                    - InProgress
+                    - Completed
+                    - Failed
+                    type: string
+                  snapshotName:
+                    type: string
+                type: object
+              cluster:
+                properties:
+                  currentEpoch:
+                    format: int64
+                    type: integer
+                  knownNodes:
+                    type: integer
+                  rebalance:
+                    properties:
+                      current:
+                        properties:
+                          destPod:
+                            type: string
+                          fromShard:
+                            type: integer
+                          slotCount:
+                            type: integer
+                          slots:
+                            items:
+                              type: string
+                            type: array
+                          startTime:
+                            format: date-time
+                            type: string
+                          taskID:
+                            type: string
+                          toShard:
+                            type: integer
+                        required:
+                        - fromShard
+                        - toShard
+                        - slots
+                        - slotCount
+                        type: object
+                      from:
+                        type: integer
+                      lastError:
+                        type: string
+                      lastErrorTime:
+                        format: date-time
+                        type: string
+                      movesDone:
+                        type: integer
+                      pending:
+                        items:
+                          properties:
+                            destPod:
+                              type: string
+                            fromShard:
+                              type: integer
+                            slotCount:
+                              type: integer
+                            slots:
+                              items:
+                                type: string
+                              type: array
+                            startTime:
+                              format: date-time
+                              type: string
+                            taskID:
+                              type: string
+                            toShard:
+                              type: integer
+                          required:
+                          - fromShard
+                          - toShard
+                          - slots
+                          - slotCount
+                          type: object
+                        type: array
+                      phase:
+                        enum:
+                        - AddingShards
+                        - MovingSlots
+                        type: string
+                      startTime:
+                        format: date-time
+                        type: string
+                      to:
+                        type: integer
+                    required:
+                    - from
+                    - to
+                    type: object
+                  shards:
+                    type: integer
+                  slotsAssigned:
+                    type: integer
+                  slotsFail:
+                    type: integer
+                  staleNodeIDs:
+                    items:
+                      type: string
+                    type: array
+                  state:
+                    type: string
+                type: object
+              conditions:
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              lastFailoverTime:
+                format: date-time
+                type: string
+              masterPod:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                enum:
+                - Pending
+                - Provisioning
+                - Running
+                - Degraded
+                - FailingOver
+                - Rebalancing
+                - Error
+                type: string
+              pods:
+                items:
+                  properties:
+                    incarnation:
+                      type: string
+                    keys:
+                      format: int64
+                      type: integer
+                    name:
+                      type: string
+                    nodeID:
+                      type: string
+                    ready:
+                      type: boolean
+                    replID:
+                      type: string
+                    replicationOffset:
+                      format: int64
+                      type: integer
+                    role:
+                      type: string
+                    runID:
+                      type: string
+                    shard:
+                      type: integer
+                    synced:
+                      type: boolean
+                  type: object
+                type: array
+              shards:
+                items:
+                  properties:
+                    index:
+                      type: integer
+                    masterNodeID:
+                      type: string
+                    masterPod:
+                      type: string
+                    pods:
+                      items:
+                        type: string
+                      type: array
+                    readyPods:
+                      type: integer
+                    slots:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - index
+                  type: object
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

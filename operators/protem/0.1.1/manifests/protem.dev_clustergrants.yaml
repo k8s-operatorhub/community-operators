@@ -1,0 +1,246 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  creationTimestamp: null
+  name: clustergrants.protem.dev
+spec:
+  group: protem.dev
+  names:
+    kind: ClusterGrant
+    listKind: ClusterGrantList
+    plural: clustergrants
+    shortNames:
+    - cgrant
+    - clgrant
+    singular: clustergrant
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.profileRef
+      name: Profile
+      type: string
+    - jsonPath: .spec.requester.email
+      name: Requester
+      type: string
+    - jsonPath: .spec.role.name
+      name: Role
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.expiresAt
+      name: Expires At
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterGrant represents a single-cluster slice of an AccessGrant,
+          living in protem-cluster-<name>.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ClusterGrantSpec defines the per-cluster elevation lease
+              dispatched to a spoke cluster's namespace.
+            properties:
+              expiresAt:
+                description: ExpiresAt is the absolute time when access elevation
+                  expires
+                format: date-time
+                type: string
+              grantRef:
+                description: GrantRef references the parent AccessGrant in its origin
+                  namespace
+                type: string
+              namespaces:
+                description: Namespaces targeted by this grant on this cluster
+                items:
+                  type: string
+                type: array
+              profileRef:
+                description: ProfileRef is the AccessProfile name
+                type: string
+              requester:
+                description: Requester is the snapshot of the user identity
+                properties:
+                  email:
+                    type: string
+                  groups:
+                    items:
+                      type: string
+                    type: array
+                  username:
+                    type: string
+                required:
+                - email
+                - username
+                type: object
+              revocation:
+                description: Revocation details if revoked early
+                properties:
+                  at:
+                    description: At is the timestamp when revocation took effect
+                    format: date-time
+                    type: string
+                  by:
+                    description: By is the identity that revoked the elevation
+                    type: string
+                  reason:
+                    description: Reason explains why elevation was revoked
+                    type: string
+                required:
+                - at
+                type: object
+              role:
+                description: Role snapshot to bind
+                properties:
+                  kind:
+                    description: Kind is either "Role" or "ClusterRole"
+                    enum:
+                    - Role
+                    - ClusterRole
+                    type: string
+                  name:
+                    description: Name is the name of the Role or ClusterRole
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              scope:
+                description: Scope indicates Namespaced or Cluster
+                enum:
+                - Namespaced
+                - Cluster
+                type: string
+              subject:
+                description: Subject is the resolved username/subject mapped for this
+                  cluster
+                type: string
+            required:
+            - expiresAt
+            - grantRef
+            - profileRef
+            - requester
+            - role
+            - scope
+            type: object
+          status:
+            description: ClusterGrantStatus defines the observed state reported by
+              the spoke agent.
+            properties:
+              bindings:
+                description: Bindings created on the spoke cluster
+                items:
+                  description: ManagedBindingRef tracks a RoleBinding or ClusterRoleBinding
+                    created by this grant.
+                  properties:
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                type: array
+              lastTransitionTime:
+                description: LastTransitionTime timestamp of last status change
+                format: date-time
+                type: string
+              message:
+                description: Message describes error or enforcement status from spoke
+                type: string
+              phase:
+                description: Phase is Pending, Active, Expired, Revoked, or Failed
+                enum:
+                - Pending
+                - Active
+                - Expired
+                - Revoked
+                - Failed
+                type: string
+              rules:
+                description: |-
+                  Rules are the rules of the ClusterRole the agent bound, as read on that cluster.
+                  Empty for a namespaced Role, whose rules can differ per namespace.
+                items:
+                  description: |-
+                    PolicyRule holds information that describes a policy rule, but does not contain information
+                    about who the rule applies to or which namespace the rule applies to.
+                  properties:
+                    apiGroups:
+                      description: |-
+                        APIGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of
+                        the enumerated resources in any API group will be allowed. "" represents the core API group and "*" represents all API groups.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    nonResourceURLs:
+                      description: |-
+                        NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path
+                        Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding.
+                        Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"),  but not both.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    resourceNames:
+                      description: ResourceNames is an optional white list of names
+                        that the rule applies to.  An empty set means that everything
+                        is allowed.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    resources:
+                      description: Resources is a list of resources this rule applies
+                        to. '*' represents all resources.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    verbs:
+                      description: Verbs is a list of Verbs that apply to ALL the
+                        ResourceKinds contained in this rule. '*' represents all verbs.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  required:
+                  - verbs
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

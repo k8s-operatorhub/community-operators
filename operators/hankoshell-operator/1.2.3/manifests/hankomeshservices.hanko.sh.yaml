@@ -1,0 +1,402 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: hankomeshservices.hanko.sh
+spec:
+  group: hanko.sh
+  names:
+    categories:
+    - hanko
+    kind: HankoMeshService
+    listKind: HankoMeshServiceList
+    plural: hankomeshservices
+    shortNames:
+    - hms
+    singular: hankomeshservice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.workloadID
+      name: Workload
+      type: string
+    - jsonPath: .status.audience
+      name: Audience
+      type: string
+    - jsonPath: .spec.serviceRef
+      name: Service
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          HankoMeshService explicitly registers one Kubernetes workload for selective
+          Continuum transport. A label or selector match alone never creates a mesh
+          identity; the controller resolves every mutable reference to immutable UIDs.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              HankoMeshServiceSpec binds the Hanko caller and target identities to one
+              Kubernetes Service and one Kubernetes ServiceAccount in the same namespace.
+            properties:
+              egress:
+                description: |-
+                  Egress is the bounded set of ordinary-CNI Kubernetes Services a
+                  registered caller may reach. The controller resolves every name to an
+                  immutable Service UID before Hub signs the policy.
+                items:
+                  description: MeshServiceEgress identifies one reviewed unregistered
+                    Kubernetes Service.
+                  properties:
+                    namespace:
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    ports:
+                      items:
+                        description: MeshServicePort identifies one exact L4 Service
+                          port.
+                        properties:
+                          port:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          protocol:
+                            enum:
+                            - TCP
+                            - UDP
+                            type: string
+                        required:
+                        - port
+                        - protocol
+                        type: object
+                      maxItems: 64
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - protocol
+                      - port
+                      x-kubernetes-list-type: map
+                    serviceRef:
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - namespace
+                  - ports
+                  - serviceRef
+                  type: object
+                maxItems: 64
+                type: array
+              enforcementMode:
+                description: |-
+                  EnforcementMode declares directional registration intent for downstream policy.
+                  The operator only audits/projects policy; it does not enforce workload traffic.
+                  The empty value preserves the original bidirectional registration intent.
+                enum:
+                - bidirectional
+                - ingressOnly
+                - egressOnly
+                - auditOnly
+                type: string
+              identityRef:
+                description: |-
+                  IdentityRef references the HankoServiceAccount whose clientID identifies
+                  this workload when it calls another registered service.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+              ports:
+                description: Ports is the non-empty set of exact Service ports registered
+                  for downstream policy.
+                items:
+                  description: MeshServicePort identifies one exact L4 Service port.
+                  properties:
+                    port:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    protocol:
+                      enum:
+                      - TCP
+                      - UDP
+                      type: string
+                  required:
+                  - port
+                  - protocol
+                  type: object
+                maxItems: 64
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - protocol
+                - port
+                x-kubernetes-list-type: map
+              resourceServerRef:
+                description: |-
+                  ResourceServerRef references the HankoResourceServer whose audience
+                  identifies this workload as a destination.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+              serviceRef:
+                description: ServiceRef names the Kubernetes Service selected for
+                  interception.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+              tenantRef:
+                description: |-
+                  TenantRef references the HankoTenant whose Hub identity and cluster
+                  enrollment scope this registration.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+              workloadServiceAccountRef:
+                description: |-
+                  WorkloadServiceAccountRef names the Kubernetes ServiceAccount that every
+                  selected pod must use. It is distinct from the HankoServiceAccount above.
+                maxLength: 253
+                minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                type: string
+            required:
+            - identityRef
+            - ports
+            - resourceServerRef
+            - serviceRef
+            - tenantRef
+            - workloadServiceAccountRef
+            type: object
+          status:
+            description: |-
+              HankoMeshServiceStatus contains only controller-resolved identity material.
+              Policy compilers must consume a Ready status for the observed generation.
+            properties:
+              audience:
+                maxLength: 255
+                type: string
+              clusterID:
+                maxLength: 128
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      maxLength: 64
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              enforcementMode:
+                maxLength: 32
+                type: string
+              lastResolved:
+                format: date-time
+                maxLength: 64
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                enum:
+                - Pending
+                - Ready
+                - Error
+                type: string
+              realm:
+                description: |-
+                  Realm is the controller-resolved Hanko realm shared by the caller
+                  identity and destination resource server. It scopes otherwise reusable
+                  client IDs and audiences to the authoritative Hanko link store.
+                maxLength: 253
+                type: string
+              receiverNodeUIDs:
+                description: |-
+                  ReceiverNodeUIDs is the sorted immutable UID set of Kubernetes Nodes
+                  currently hosting selected Running/Ready pods. Names, labels and pod IPs
+                  are never receiver authority.
+                items:
+                  maxLength: 128
+                  type: string
+                maxItems: 256
+                type: array
+                x-kubernetes-list-type: set
+              resolvedEgress:
+                items:
+                  description: ResolvedMeshServiceEgress is the immutable egress projection
+                    reported to Hub.
+                  properties:
+                    namespace:
+                      maxLength: 63
+                      type: string
+                    ports:
+                      items:
+                        description: MeshServicePort identifies one exact L4 Service
+                          port.
+                        properties:
+                          port:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          protocol:
+                            enum:
+                            - TCP
+                            - UDP
+                            type: string
+                        required:
+                        - port
+                        - protocol
+                        type: object
+                      maxItems: 64
+                      type: array
+                    serviceName:
+                      maxLength: 63
+                      type: string
+                    serviceUID:
+                      maxLength: 128
+                      type: string
+                  required:
+                  - namespace
+                  - ports
+                  - serviceName
+                  - serviceUID
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - namespace
+                - serviceName
+                x-kubernetes-list-type: map
+              resolvedPorts:
+                items:
+                  description: MeshServicePort identifies one exact L4 Service port.
+                  properties:
+                    port:
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    protocol:
+                      enum:
+                      - TCP
+                      - UDP
+                      type: string
+                  required:
+                  - port
+                  - protocol
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - protocol
+                - port
+                x-kubernetes-list-type: map
+              selectorSHA256:
+                maxLength: 64
+                type: string
+              serviceUID:
+                maxLength: 128
+                type: string
+              tenantID:
+                maxLength: 128
+                type: string
+              workloadID:
+                maxLength: 255
+                type: string
+              workloadServiceAccountUID:
+                maxLength: 128
+                type: string
+            required:
+            - receiverNodeUIDs
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

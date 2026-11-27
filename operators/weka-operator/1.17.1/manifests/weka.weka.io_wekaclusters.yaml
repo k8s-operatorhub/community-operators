@@ -1,0 +1,2798 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: wekaclusters.weka.weka.io
+spec:
+  group: weka.weka.io
+  names:
+    kind: WekaCluster
+    listKind: WekaClusterList
+    plural: wekaclusters
+    singular: wekacluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Status of the cluster
+      jsonPath: .status.status
+      name: Status
+      type: string
+    - description: Weka cluster GUID
+      jsonPath: .status.clusterID
+      name: Cluster ID
+      type: string
+    - description: 'Number of compute containers: Active/Created/Desired'
+      jsonPath: .status.printer.computeContainers
+      name: CCT(A/C/D)
+      type: string
+    - description: 'Number of drive containers: Active/Created/Desired'
+      jsonPath: .status.printer.driveContainers
+      name: DCT(A/C/D)
+      type: string
+    - description: 'Number of Drives: Active/Created/Desired'
+      jsonPath: .status.printer.drives
+      name: DRVS(A/C/D)
+      type: string
+    - description: IOPS Read/Write/Metadata
+      jsonPath: .status.printer.iops
+      name: IOPS(R/W/M)
+      priority: 1
+      type: string
+    - description: Throughput Read/Write
+      jsonPath: .status.printer.throughput
+      name: THRPT(R/W)
+      priority: 1
+      type: string
+    - description: Filesystem Capacity
+      jsonPath: .status.printer.filesystemCapacity
+      name: FS(Capacity)
+      priority: 1
+      type: string
+    - description: Raw provisioned drive-sharing capacity (TLC/QLC)
+      jsonPath: .status.printer.capacity
+      name: Capacity
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WekaClusterSpec defines the desired state of WekaCluster
+            properties:
+              additionalMemory:
+                description: additional memory to allocate for weka containers
+                properties:
+                  compute:
+                    description: Additional memory in MiB for compute containers (positive
+                      or negative offset from auto-calculated baseline).
+                    type: integer
+                  dataServices:
+                    type: integer
+                  drive:
+                    description: Additional memory in MiB for drive containers.
+                    type: integer
+                  envoy:
+                    description: Additional memory in MiB for Envoy proxy containers
+                      (used by S3 gateway).
+                    type: integer
+                  nfs:
+                    description: Additional memory in MiB for NFS protocol containers.
+                    type: integer
+                  s3:
+                    description: Additional memory in MiB for S3 gateway containers.
+                    type: integer
+                  smbw:
+                    type: integer
+                type: object
+              adminCredentialsSecretRef:
+                description: 'reference to a user-provided secret (keys: username,
+                  password) used as the weka admin user credentials instead of generating
+                  them; immutable'
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: adminCredentialsSecretRef.name must be a valid Secret name
+                    (lowercase DNS subdomain)
+                  rule: size(self.name) <= 253 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
+              bucketRaftSize:
+                description: size of raft for buckets, defaults to 5, 5/9 are supported
+                type: integer
+              catalog:
+                description: Catalog configuration for data catalog service
+                properties:
+                  indexInterval:
+                    default: 1d
+                    description: IndexInterval specifies how often the catalog index
+                      is updated (e.g., "1d", "1m")
+                    type: string
+                  retentionPeriod:
+                    default: 30d
+                    description: RetentionPeriod specifies how long catalog data is
+                      retained (e.g., "30d", "10m")
+                    type: string
+                type: object
+              cpuPolicy:
+                default: auto
+                description: |-
+                  cpu policy to use for scheduling cores for weka, unless instructed by weka team, keep default of auto
+                  manual and shared are same, with shared being deprecated
+                  when manual is used - no exclusive cores will be allocaated on k8s/cgroup level, assuming good alignment of cores usage across different applications, like weka and slurm
+                  there is no need to specify siblings in this list, but on the side of other applications like slurm, both weka core and its siblings should be excluded from used cpu set
+                enum:
+                - auto
+                - shared
+                - dedicated
+                - dedicated_ht
+                - manual
+                type: string
+              csiConfig:
+                description: Configuration for the Weka CSI Driver integration. Controls
+                  how the CSI driver discovers and connects to this cluster.
+                properties:
+                  advanced:
+                    description: Advanced CSI driver settings. Should not be changed
+                      unless explicitly instructed by Weka support.
+                    properties:
+                      controllerLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      controllerTolerations:
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                                Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
+                      enforceTrustedHttps:
+                        type: boolean
+                      nodeLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      nodeTolerations:
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                                Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
+                      skipGarbageCollection:
+                        type: boolean
+                    type: object
+                  csiGroup:
+                    description: CSI driver group name. Scopes CSI resources when
+                      multiple Weka clusters coexist in the same namespace.
+                    type: string
+                  endpointsSubnets:
+                    description: CIDR subnets to filter which management IPs are advertised
+                      to the CSI driver. Leave empty to advertise all.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              driversDistService:
+                description: endpoint for distribution service, global https://drivers.weka.io
+                  or in-k8s-cluster "https://weka-drivers-dist.namespace.svc.cluster.local:60001"
+                type: string
+              dynamicTemplate:
+                description: weka cluster topology configuration
+                properties:
+                  clusterCapacity:
+                    description: |-
+                      ClusterCapacity is a human-friendly target USABLE capacity for the whole cluster.
+                      Alternative to ContainerCapacity: instead of sizing each container, the operator
+                      translates this target into failure domains built from whole containers and grows
+                      toward it (capacity only ever increases). Mutually exclusive with ContainerCapacity,
+                      NumDrives and DriveCapacity.
+
+                      Unit handling: the suffix determines whether decimal (base-1000) or binary (base-1024)
+                      interpretation is used.
+                        - Binary (IEC): "GiB"/"Gi", "TiB"/"Ti", "MiB"/"Mi", etc.  e.g. "8000GiB" = 8000 GiB
+                        - Decimal (SI): "GB", "TB", "MB", etc.                      e.g. "8000GB"  ≈ 7450 GiB
+                        - Bare unit (no "B"): "8000g", "300t" — treated as binary for backward compatibility
+                    type: string
+                  computeContainers:
+                    description: Number of compute containers per cluster node.
+                    minimum: 0
+                    type: integer
+                  computeCores:
+                    description: Number of cores allocated to each compute container.
+                    minimum: 0
+                    type: integer
+                  computeExtraCores:
+                    minimum: 0
+                    type: integer
+                  computeHugepages:
+                    description: Hugepage allocation in MiB for compute containers.
+                      0 means auto-calculated.
+                    minimum: 0
+                    type: integer
+                  computeHugepagesOffset:
+                    description: Offset in MiB applied to the auto-calculated hugepage
+                      allocation for compute containers.
+                    minimum: 0
+                    type: integer
+                  containerCapacity:
+                    description: |-
+                      ContainerCapacity specifies the total capacity (in GiB) requested by each container when using shared drives via SSD proxy.
+                      This value takes precedence over DriveCapacity when both are set. It allows more flexible capacity allocation.
+                    minimum: 0
+                    type: integer
+                  dataServicesContainers:
+                    minimum: 0
+                    type: integer
+                  dataServicesCores:
+                    minimum: 0
+                    type: integer
+                  dataServicesExtraCores:
+                    type: integer
+                  dataServicesFeCores:
+                    minimum: 0
+                    type: integer
+                  dataServicesHugepages:
+                    minimum: 0
+                    type: integer
+                  dataServicesHugepagesOffset:
+                    minimum: 0
+                    type: integer
+                  driveCapacity:
+                    description: |-
+                      DriveCapacity is the capacity in GiB to allocate per single virtual drive.
+                      NumDrives multiplied by DriveCapacity gives the total capacity requested by each drive container.
+                      This value determines how much capacity each container receives from shared drives.
+                    minimum: 0
+                    type: integer
+                  driveContainers:
+                    description: Number of drive containers per cluster node.
+                    minimum: 0
+                    type: integer
+                  driveCores:
+                    description: Number of cores allocated to each drive container.
+                    minimum: 0
+                    type: integer
+                  driveExtraCores:
+                    minimum: 0
+                    type: integer
+                  driveHugepages:
+                    description: Hugepage allocation in MiB for drive containers.
+                      0 means auto-calculated.
+                    minimum: 0
+                    type: integer
+                  driveHugepagesOffset:
+                    description: Offset in MiB applied to the auto-calculated hugepage
+                      allocation for drive containers.
+                    minimum: 0
+                    type: integer
+                  driveTypesRatio:
+                    description: DriveTypesRatio specifies the desired ratio of drive
+                      types (TLC vs QLC) when allocating drives for the cluster.
+                    properties:
+                      qlc:
+                        default: 0
+                        minimum: 0
+                        type: integer
+                      tlc:
+                        default: 0
+                        minimum: 0
+                        type: integer
+                    required:
+                    - qlc
+                    - tlc
+                    type: object
+                  envoyCores:
+                    description: Number of cores allocated to the Envoy proxy process
+                      used by the S3 gateway.
+                    minimum: 0
+                    type: integer
+                  nfsContainers:
+                    description: Number of NFS protocol containers per cluster node.
+                    minimum: 0
+                    type: integer
+                  nfsCores:
+                    description: Number of cores allocated to each NFS container.
+                    minimum: 0
+                    type: integer
+                  nfsExtraCores:
+                    description: Additional non-DPDK cores for NFS containers.
+                    minimum: 0
+                    type: integer
+                  nfsFrontendHugepages:
+                    description: Hugepage allocation in MiB for NFS frontend threads.
+                    minimum: 0
+                    type: integer
+                  nfsFrontendHugepagesOffset:
+                    description: Offset in MiB for NFS frontend hugepage allocation.
+                    minimum: 0
+                    type: integer
+                  numDrives:
+                    description: |-
+                      Number of virtual or physical drives per drive container. Mutually exclusive with containerCapacity.
+                      When the cluster acts as a daemonset (computeContainers and driveContainers both unset), NumDrives
+                      is the per-node drive count: each drive container takes that many of the node's largest signed
+                      drives instead of all of them.
+                    minimum: 0
+                    type: integer
+                  s3Containers:
+                    description: |-
+                      Total number of S3 gateway containers in the cluster. -1 (act-as-daemonset mode only) puts one S3 and
+                      one envoy container on every eligible node matching roleNodeSelector.s3, else the cluster nodeSelector.
+                    minimum: -1
+                    type: integer
+                  s3Cores:
+                    description: Number of cores allocated to each S3 gateway container.
+                    minimum: 0
+                    type: integer
+                  s3ExtraCores:
+                    description: Additional non-DPDK cores for S3 gateway containers,
+                      used for background tasks.
+                    minimum: 0
+                    type: integer
+                  s3FrontendHugepages:
+                    description: Hugepage allocation in MiB for S3 gateway frontend
+                      threads.
+                    minimum: 0
+                    type: integer
+                  s3FrontendHugepagesOffset:
+                    description: Offset in MiB applied to the auto-calculated hugepage
+                      allocation for S3 frontend threads.
+                    minimum: 0
+                    type: integer
+                  smbwContainers:
+                    description: number of SMB-W containers (3-8)
+                    minimum: 0
+                    type: integer
+                  smbwCores:
+                    description: number of SMB-W cores per container
+                    minimum: 0
+                    type: integer
+                  smbwExtraCores:
+                    description: number of SMB-W extra cores per container
+                    minimum: 0
+                    type: integer
+                  smbwFrontendHugepages:
+                    description: hugepage allocation for SMB-W frontend
+                    minimum: 0
+                    type: integer
+                  smbwFrontendHugepagesOffset:
+                    description: hugepage offset for SMB-W frontend
+                    minimum: 0
+                    type: integer
+                type: object
+                x-kubernetes-validations:
+                - message: driveCapacity and driveTypesRatio are mutually exclusive;
+                    use driveCapacity for TLC-only mode, or containerCapacity with
+                    driveTypesRatio for mixed drive types
+                  rule: '!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.driveTypesRatio)'
+                - message: numDrives must be >= driveCores when using driveCapacity
+                    (TLC-only mode); each drive core requires at least one virtual
+                    drive
+                  rule: '!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.numDrives)
+                    || self.numDrives == 0 || !has(self.driveCores) || self.driveCores
+                    == 0 || self.numDrives >= self.driveCores'
+                - message: numDrives must be >= driveCores in full-drives mode, including
+                    the daemonset mode (computeContainers and driveContainers both
+                    unset) where numDrives pins a per-node drive count; weka requires
+                    at least one physical drive per drive core. To run more than one
+                    core per physical drive, use a drive-sharing mode (containerCapacity
+                    or clusterCapacity) instead
+                  rule: '!has(self.numDrives) || self.numDrives == 0 || (has(self.driveCapacity)
+                    && self.driveCapacity > 0) || !has(self.driveCores) || self.driveCores
+                    == 0 || self.numDrives >= self.driveCores'
+                - message: numDrives and containerCapacity are mutually exclusive;
+                    use numDrives with driveCapacity for TLC-only mode, or containerCapacity
+                    with driveTypesRatio for mixed drive types
+                  rule: '!has(self.numDrives) || self.numDrives == 0 || !has(self.containerCapacity)
+                    || self.containerCapacity == 0'
+                - message: containerCapacity must be greater than 0 when specified
+                  rule: '!has(self.containerCapacity) || self.containerCapacity >
+                    0'
+                - message: at least one of driveTypesRatio.tlc or driveTypesRatio.qlc
+                    must be greater than 0
+                  rule: '!has(self.driveTypesRatio) || self.driveTypesRatio.tlc >
+                    0 || self.driveTypesRatio.qlc > 0'
+                - message: driveTypesRatio.tlc must be greater than 0 when driveTypesRatio
+                    is specified; TLC-only and mixed TLC/QLC configurations are supported,
+                    but QLC-only is not allowed
+                  rule: '!has(self.driveTypesRatio) || self.driveTypesRatio.tlc >
+                    0'
+                - message: driveCapacity must be greater than 0 when specified
+                  rule: '!has(self.driveCapacity) || self.driveCapacity > 0'
+                - message: clusterCapacity is mutually exclusive with containerCapacity,
+                    numDrives and driveCapacity
+                  rule: '!has(self.clusterCapacity) || self.clusterCapacity.size()
+                    == 0 || ((!has(self.containerCapacity) || self.containerCapacity
+                    == 0) && (!has(self.numDrives) || self.numDrives == 0) && (!has(self.driveCapacity)
+                    || self.driveCapacity == 0))'
+                - message: 'computeContainers and driveContainers must be set together:
+                    setting both sizes the cluster by container counts, while leaving
+                    both unset makes the operator act as a daemonset over its drive-role
+                    nodeSelector (one drive container per eligible node, sized from
+                    that node''s own full drives). numDrives, driveCores and computeCores
+                    may be pinned either way. For capacity-based sizing, use clusterCapacity,
+                    containerCapacity or driveCapacity instead'
+                  rule: (has(self.clusterCapacity) && self.clusterCapacity.size()
+                    > 0) || (has(self.containerCapacity) && self.containerCapacity
+                    > 0) || (has(self.driveCapacity) && self.driveCapacity > 0) ||
+                    ((has(self.computeContainers) && self.computeContainers > 0) ==
+                    (has(self.driveContainers) && self.driveContainers > 0))
+                - message: 's3Containers: -1 (one S3 container per eligible node)
+                    is only allowed in act-as-daemonset mode: computeContainers, driveContainers,
+                    containerCapacity, driveCapacity and clusterCapacity must all
+                    be unset'
+                  rule: '!has(self.s3Containers) || self.s3Containers != -1 || ((!has(self.computeContainers)
+                    || self.computeContainers == 0) && (!has(self.driveContainers)
+                    || self.driveContainers == 0) && (!has(self.containerCapacity)
+                    || self.containerCapacity == 0) && (!has(self.driveCapacity) ||
+                    self.driveCapacity == 0) && (!has(self.clusterCapacity) || self.clusterCapacity.size()
+                    == 0))'
+              encryption:
+                description: Encryption configuration for data at rest. Configure
+                  a HashiCorp Vault KMS for production use.
+                properties:
+                  internal:
+                    description: InternalConfig defines internal encryption settings,
+                      encryption key stored in weka configuration, for production
+                      systems use real KMS, however this mode can be useful to evaluate
+                      performance of encrypted filesystems
+                    properties:
+                      enabled:
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                  vault:
+                    description: Configures a HashiCorp Vault KMS for encryption key
+                      management. Recommended for production.
+                    properties:
+                      address:
+                        description: Vault address, e.g. "https://vault.example.com:8200".
+                        type: string
+                      authPath:
+                        default: kubernetes
+                        description: Path under auth/ that the weka uses for login.
+                          defaults to "kubernetes"
+                        type: string
+                      keyName:
+                        default: weka-key
+                        description: Name of the transit key. defaults to "weka-key"
+                        type: string
+                      method:
+                        default: kubernetes
+                        description: Vault Auth method (only “kubernetes” is supported  on
+                          operator side.)
+                        enum:
+                        - kubernetes
+                        type: string
+                      role:
+                        description: Role to authenticate as in Vault.
+                        type: string
+                      transitPath:
+                        default: transit
+                        description: Transit engine mount path, defaults "transit".
+                        type: string
+                    required:
+                    - address
+                    - role
+                    type: object
+                type: object
+              expandEndpoints:
+                description: endpoint of existing weka cluster, containers created
+                  for this k8s-driver cluster will join existing weka cluster, used
+                  in flow of migration
+                items:
+                  type: string
+                type: array
+              failureDomain:
+                description: failure domain configuration for weka containers
+                properties:
+                  compositeLabels:
+                    description: |-
+                      If multiple labels are specified, the failure domain will be the combination of the labels.
+                      If `compositeLabels` is set, `label` and `skew` will be ignored.
+                      When using compositeLabels, weka containers will be spread considering all labels
+                      with best effort, but even distribution is not guaranteed
+                    items:
+                      type: string
+                    type: array
+                  label:
+                    description: |-
+                      label used for spreading the weka containers across different failure domains (if set)
+                      nodes that have the same value for the label will be considered as a single failure domain
+                    type: string
+                  skew:
+                    description: |-
+                      skew for the failure domain, if set, the weka containers will be spread with the skew in mind
+                      (only applicable if `label` is set)
+                    type: integer
+                type: object
+              globalPVC:
+                description: Reference to a PVC shared by all Weka containers. Use
+                  to persist container state on nodes lacking local NVMe storage.
+                properties:
+                  name:
+                    description: Name of the PersistentVolumeClaim to mount into all
+                      Weka containers.
+                    type: string
+                  path:
+                    description: Mount path inside the Weka container. Defaults to
+                      /opt/k8s-weka when empty.
+                    type: string
+                required:
+                - name
+                type: object
+              gracefulDestroyDuration:
+                default: 24h
+                description: |-
+                  During this period the cluster will not be destroyed (protection from accidental deletion)
+                  Note: due to discrepancies in validation vs parsing, we use a Pattern instead of `Format=duration`. See
+                  https://bugzilla.redhat.com/show_bug.cgi?id=2050332
+                  https://github.com/kubernetes/apimachinery/issues/131
+                  https://github.com/kubernetes/apiextensions-apiserver/issues/56
+                pattern: ^(0|([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$
+                type: string
+              hotSpare:
+                default: 0
+                description: |-
+                  A hot spare is reserved capacity designed to handle data rebuilds while maintaining the system's net capacity, even in the event of failure domains being lost
+                  See: https://docs.weka.io/weka-system-overview/ssd-capacity-management#hot-spare
+                type: integer
+              image:
+                description: full container image name in format of quay.io/weka.io/weka-in-container:VERSION
+                pattern: ^.+:\d+\.\d+\.\d+.*$
+                type: string
+              imagePullSecret:
+                description: image pull secret to use for pulling the image
+                type: string
+              ipv6:
+                description: |-
+                  prefer ipv6 on a data-path device that carries both address families.
+                  It is not needed when network.deviceSubnets or a selector subnet is set, which already pin the
+                  address family, nor when the device only has an ipv6 address.
+                type: boolean
+              leadershipRaftSize:
+                description: size of raft for leadership, defaults to 5, 5/9 are supported
+                type: integer
+              licenseSecret:
+                description: |-
+                  Name of a Secret in the WekaCluster's namespace holding the WEKA license under key "license".
+                  Applied after the cluster forms and re-applied when the Secret changes.
+                type: string
+              network:
+                description: weka cluster network configuration
+                properties:
+                  allocateVfPerIoNode:
+                    type: boolean
+                  bindManagementAll:
+                    description: |-
+                      BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                      When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                      When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                    type: boolean
+                  deviceSubnets:
+                    description: |-
+                      A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                      or IPv6 (for example, 2001:db8::/64).
+                      The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                      The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                    items:
+                      pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                      type: string
+                    type: array
+                  ethDevice:
+                    description: |-
+                      The name of a single network interface (for example, eth1) to be used by every backend container.
+                      This is for clusters that use only one dedicated NIC for the data path.
+                      You cannot use this field with ethDevices.
+                      If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                    type: string
+                  ethDevices:
+                    description: |-
+                      A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                      The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                      You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                    items:
+                      type: string
+                    type: array
+                  gateway:
+                    description: |-
+                      The default gateway IPv4 address for the backend containers’ data-path network.
+                      This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                      If you have a flat, non-routed backend network, you can leave this field empty.
+                    type: string
+                  managementIpsSelectors:
+                    description: Selectors for management IPs used for cluster API
+                      and agent communication.
+                    items:
+                      properties:
+                        deviceNames:
+                          description: |-
+                            Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                            holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                            The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                          items:
+                            type: string
+                          type: array
+                        disableRdma:
+                          type: boolean
+                        max:
+                          description: Maximum number of interfaces to select per
+                            node matching this selector.
+                          type: integer
+                        min:
+                          description: Minimum number of interfaces required from
+                            nodes matching this selector.
+                          type: integer
+                        rdmaOnly:
+                          type: boolean
+                        subnet:
+                          description: |-
+                            CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                            When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                            address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                          type: string
+                      type: object
+                    type: array
+                  netmask:
+                    description: |-
+                      The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                      This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                    maximum: 32
+                    minimum: 1
+                    type: integer
+                  nvidiaVfSingleIp:
+                    description: |-
+                      NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                      When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                    type: boolean
+                  selectors:
+                    description: Selectors define how backend data-path network interfaces
+                      are chosen on each node.
+                    items:
+                      properties:
+                        deviceNames:
+                          description: |-
+                            Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                            holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                            The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                          items:
+                            type: string
+                          type: array
+                        disableRdma:
+                          type: boolean
+                        max:
+                          description: Maximum number of interfaces to select per
+                            node matching this selector.
+                          type: integer
+                        min:
+                          description: Minimum number of interfaces required from
+                            nodes matching this selector.
+                          type: integer
+                        rdmaOnly:
+                          type: boolean
+                        subnet:
+                          description: |-
+                            CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                            When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                            address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                          type: string
+                      type: object
+                    type: array
+                  udpMode:
+                    description: |-
+                      A setting that enables or disables UDP encapsulation for backend traffic.
+                      - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                      This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                    type: boolean
+                type: object
+              nfs:
+                properties:
+                  interfaces:
+                    items:
+                      type: string
+                    type: array
+                  ipRanges:
+                    items:
+                      type: string
+                    type: array
+                type: object
+                x-kubernetes-validations:
+                - message: NFS allows only 1 interface per host
+                  rule: '!has(self.interfaces) || self.interfaces.size() <= 1'
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: node selector for the weka containers
+                type: object
+              numa:
+                description: NUMA confinement configuration for all weka containers,
+                  overridden per role by roleNuma
+                properties:
+                  method:
+                    description: Method selects the enforcement mechanism
+                    enum:
+                    - device-plugin
+                    - dra
+                    type: string
+                  region:
+                    description: Region is the NUMA region index to pin this container
+                      to
+                    minimum: 0
+                    type: integer
+                  single:
+                    description: Single, when true, confines the container to a single
+                      NUMA region
+                    type: boolean
+                type: object
+              operatorSecretRef:
+                description: reference to the secret containing the weka system credentials
+                  used by operator, used in flow of migration
+                type: string
+              overrides:
+                description: Advanced override settings for cluster operations. Only
+                  use when explicitly instructed by Weka support.
+                properties:
+                  allowNfsInterfaceGroupDestroy:
+                    description: When true, permits the operator to remove the NFS
+                      interface group it manages once NFS is torn down. Destructive
+                      — also drops the interface group's floating IP ranges.
+                    type: boolean
+                  allowS3ClusterDestroy:
+                    description: When true, permits cluster deletion even when an
+                      active S3 cluster exists. Destructive — will erase all S3 data.
+                    type: boolean
+                  allowSmbwClusterDestroy:
+                    description: When true, permits the operator to destroy the SMB-W
+                      cluster it manages once SMB-W is torn down (no SMB-W containers
+                      desired). Destructive — will erase all SMB share configuration.
+                    type: boolean
+                  cancelDeletion:
+                    description: Cancel deletion of the cluster if it is in graceful
+                      destroy period, a disaster recovery mechanism
+                    type: boolean
+                  disregardRedundancy:
+                    description: disregard redundancy constraints, useful for testing,
+                      should not be used in production as misaligns failure domains
+                    type: boolean
+                  dpdkBaseMemoryMb:
+                    description: |-
+                      DpdkBaseMemoryMbOverride specifies DPDK base memory overrides (in MiB) per container mode.
+                      Used for hugepages calculation and resources.json configuration. Default value is 64 MiB per core.
+                      Only positive values are applied; zero or unset means use default.
+                    properties:
+                      compute:
+                        type: integer
+                      dataServices:
+                        type: integer
+                      drive:
+                        type: integer
+                      nfs:
+                        type: integer
+                      s3:
+                        type: integer
+                      smbw:
+                        type: integer
+                    type: object
+                  driversBuildId:
+                    description: can be used to specify a build_id for a driver in
+                      the distributor service, keep empty for auto detection default
+                    type: string
+                  driversLoaderImage:
+                    description: image to be used for loading drivers, do not use
+                      unless explicitly instructed by Weka team
+                    type: string
+                  forceAio:
+                    description: force weka to use drives in aio mode and not direct
+                      nvme (impacts performance, but might serve as a fallback in
+                      case of incompatible device)
+                    type: boolean
+                  machineIdentifierNodeRef:
+                    description: used to override machine identifier node reference
+                      for backend containers (drive, compute, etc.)
+                    type: string
+                  noReserveSpace:
+                    description: |-
+                      configures the weka agent of this cluster's containers with [mounts] allocate_reserved_space=false.
+                      applied only when a container is created; toggling it later does not reconfigure existing containers
+                    type: boolean
+                  paused:
+                    description: |-
+                      Pause the cluster - all containers will be stopped forcefully.
+                      nil (not set): no propagation, allows direct container-level state manipulation.
+                      true: pause all containers.
+                      false: actively unpause containers that are in paused state.
+                    type: boolean
+                  podRotation:
+                    description: Replace pods one at a time when their pod-affecting
+                      spec changes. Nil uses the operator-wide default (configuration
+                      WekaPolicy podRotation.enabled).
+                    type: boolean
+                  podTerminationDeactivationTimeout:
+                    description: |-
+                      Timeout duration for deactivating pods that are terminating longer than this duration.
+                      When nil (default), the default timeout of 5 minutes is used.
+                      When set to 0, deactivation of terminating pods is disabled.
+                      Otherwise, the specified duration is used.
+                    pattern: ^(0|([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$
+                    type: string
+                  postFormClusterScript:
+                    description: script to run post cluster create (i.e before starting
+                      io)
+                    type: string
+                  skipDefaultFilesystemCreation:
+                    description: |-
+                      SkipDefaultFilesystemCreation disables creation of the `default` filesystem.
+                      The `default` filesystem group and `.config_fs` are still created.
+                    type: boolean
+                  upgradeAllAtOnce:
+                    description: unsafe operation, should not be used unless instructed
+                      explicitly by weka personnel
+                    type: boolean
+                  upgradeForceReplace:
+                    description: unsafe operation, skips graceful stop of weka container
+                      for a quick replacement to a new image, should not be used unless
+                      instructed explicitly by weka personnel
+                    type: boolean
+                  upgradeForceReplaceDrives:
+                    description: unsafe operation, skips graceful stop of drive weka
+                      container for a quick replacement to a new image, should not
+                      be used unless instructed explicitly by weka personnel
+                    type: boolean
+                  upgradePausePreCompute:
+                    description: Prevent from moving into compute phase
+                    type: boolean
+                  upgradePaused:
+                    description: Pause upgrade
+                    type: boolean
+                  waitSinceIoProcessesUpTimeout:
+                    description: |-
+                      how long to wait, once IO processes are reported up, before considering the container's applied
+                      image settled. nil/0 (default): don't wait.
+                    pattern: ^(0|([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$
+                    type: string
+                type: object
+              podConfig:
+                description: advanced pod affinities configuration
+                properties:
+                  affinity:
+                    description: advanced scheduling constraints
+                    x-kubernetes-preserve-unknown-fields: true
+                  extraVolumeMounts:
+                    description: mounts for `extraVolumes`, applied to the weka container
+                      only (not init containers)
+                    items:
+                      description: VolumeMount describes a mounting of a Volume within
+                        a container.
+                      properties:
+                        mountPath:
+                          description: |-
+                            Path within the container at which the volume should be mounted.  Must
+                            not contain ':'.
+                          type: string
+                        mountPropagation:
+                          description: |-
+                            mountPropagation determines how mounts are propagated from the host
+                            to container and the other way around.
+                            When not set, MountPropagationNone is used.
+                            This field is beta in 1.10.
+                            When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
+                            (which defaults to None).
+                          type: string
+                        name:
+                          description: This must match the Name of a Volume.
+                          type: string
+                        readOnly:
+                          description: |-
+                            Mounted read-only if true, read-write otherwise (false or unspecified).
+                            Defaults to false.
+                          type: boolean
+                        recursiveReadOnly:
+                          description: |-
+                            RecursiveReadOnly specifies whether read-only mounts should be handled
+                            recursively.
+
+                            If ReadOnly is false, this field has no meaning and must be unspecified.
+
+                            If ReadOnly is true, and this field is set to Disabled, the mount is not made
+                            recursively read-only.  If this field is set to IfPossible, the mount is made
+                            recursively read-only, if it is supported by the container runtime.  If this
+                            field is set to Enabled, the mount is made recursively read-only if it is
+                            supported by the container runtime, otherwise the pod will not be started and
+                            an error will be generated to indicate the reason.
+
+                            If this field is set to IfPossible or Enabled, MountPropagation must be set to
+                            None (or be unspecified, which defaults to None).
+
+                            If this field is not specified, it is treated as an equivalent of Disabled.
+                          type: string
+                        subPath:
+                          description: |-
+                            Path within the volume from which the container's volume should be mounted.
+                            Defaults to "" (volume's root).
+                          type: string
+                        subPathExpr:
+                          description: |-
+                            Expanded path within the volume from which the container's volume should be mounted.
+                            Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
+                            Defaults to "" (volume's root).
+                            SubPathExpr and SubPath are mutually exclusive.
+                          type: string
+                      required:
+                      - mountPath
+                      - name
+                      type: object
+                    type: array
+                  extraVolumes:
+                    description: |-
+                      extra volumes added to every weka pod of this cluster, in the same shape as a PodSpec's
+                      `volumes`. Names must not collide with operator-managed volumes; see
+                      doc/operator/deployment/extra-volumes.md for the reserved names and paths.
+                    x-kubernetes-preserve-unknown-fields: true
+                  roleAffinity:
+                    description: |-
+                      affinity per container role
+                      takes precedence over the `affinity` field
+                    properties:
+                      compute:
+                        x-kubernetes-preserve-unknown-fields: true
+                      drive:
+                        x-kubernetes-preserve-unknown-fields: true
+                      nfs:
+                        x-kubernetes-preserve-unknown-fields: true
+                      s3:
+                        x-kubernetes-preserve-unknown-fields: true
+                      smbw:
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  roleTopologySpreadConstraints:
+                    description: takes precedence over the `topologySpreadConstraints`
+                    properties:
+                      compute:
+                        x-kubernetes-preserve-unknown-fields: true
+                      drive:
+                        x-kubernetes-preserve-unknown-fields: true
+                      nfs:
+                        x-kubernetes-preserve-unknown-fields: true
+                      s3:
+                        x-kubernetes-preserve-unknown-fields: true
+                      smbw:
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  topologySpreadConstraints:
+                    description: controls the distribution of weka containers across
+                      the failure domains
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
+              ports:
+                description: port allocation for weka containers, if not set, free
+                  range will be auto selected. Currently allocated ports can be seen
+                  in wekacluster.status.ports
+                properties:
+                  basePort:
+                    description: Starting port number used for allocating Weka cluster
+                      ports. Can be overridden by the user; defaults to 35000 for
+                      the first cluster.
+                    type: integer
+                  dataServicesPort:
+                    type: integer
+                  lbAdminPort:
+                    description: Administration port for the S3 software load balancer.
+                      If unset, auto-allocated within the cluster port range, immediately
+                      after lbPort.
+                    type: integer
+                  lbPort:
+                    description: Data port for the S3 software load balancer. If unset,
+                      auto-allocated within the cluster port range relative to basePort
+                      (basePort+300 in the legacy 500-port layout, basePort+240 with
+                      the default 260-port range).
+                    type: integer
+                  managementProxyPort:
+                    description: Enables Kubernetes-level access to Weka management
+                      for port-forwarding, REST API usage, and UI access. If unset,
+                      auto-allocated within the cluster port range relative to basePort
+                      when the management proxy is first enabled.
+                    type: integer
+                  portRange:
+                    description: Number of ports to allocate for the cluster. Defaults
+                      to 260 with operator version 1.10 / WEKA 5.1.0 onwards (500
+                      for earlier versions).
+                    type: integer
+                  s3Port:
+                    description: Data port for S3 API traffic. If unset, auto-allocated
+                      within the cluster port range, after the load balancer ports.
+                    type: integer
+                type: object
+              rawTolerations:
+                description: tolerations in standard k8s format
+                items:
+                  description: |-
+                    The pod this Toleration is attached to tolerates any taint that matches
+                    the triple <key,value,effect> using the matching operator <operator>.
+                  properties:
+                    effect:
+                      description: |-
+                        Effect indicates the taint effect to match. Empty means match all taint effects.
+                        When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                      type: string
+                    key:
+                      description: |-
+                        Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                        If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                      type: string
+                    operator:
+                      description: |-
+                        Operator represents a key's relationship to the value.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                        Exists is equivalent to wildcard for value, so that a pod can
+                        tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                      type: string
+                    tolerationSeconds:
+                      description: |-
+                        TolerationSeconds represents the period of time the toleration (which must be
+                        of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                        it is not set, which means tolerate the taint forever (do not evict). Zero and
+                        negative values will be treated as 0 (evict immediately) by the system.
+                      format: int64
+                      type: integer
+                    value:
+                      description: |-
+                        Value is the taint value the toleration matches to.
+                        If the operator is Exists, the value should be empty, otherwise just a regular string.
+                      type: string
+                  type: object
+                type: array
+              redundancyLevel:
+                description: storage capacity dedicated to system protection (2/4).
+                  https://docs.weka.io/weka-system-overview/ssd-capacity-management#protection-level
+                type: integer
+              roleAnnotations:
+                description: annotations for the weka containers per role
+                properties:
+                  compute:
+                    additionalProperties:
+                      type: string
+                    description: annotations for compute weka containers
+                    type: object
+                  dataServices:
+                    additionalProperties:
+                      type: string
+                    description: annotations for data services weka containers
+                    type: object
+                  drive:
+                    additionalProperties:
+                      type: string
+                    description: annotations for drive weka containers
+                    type: object
+                  nfs:
+                    additionalProperties:
+                      type: string
+                    description: annotations for nfs weka containers
+                    type: object
+                  s3:
+                    additionalProperties:
+                      type: string
+                    description: annotations for s3 weka containers
+                    type: object
+                  smbw:
+                    additionalProperties:
+                      type: string
+                    description: annotations for smbw weka containers
+                    type: object
+                type: object
+              roleCoreIds:
+                description: |-
+                  RoleCoreIds defines a list of CPU core IDs (as seen by the host) that should
+                  be assigned to containers of the specific role when CpuPolicy is set to
+                  "manual". If the slice for the given role is empty, core ids will not be
+                  set for that role, and the manual policy will fail validation on pod start.
+
+                  NOTE: The semantics are the same as for NodeSelector/Annotations structures –
+                  a single list per role which will be copied to every container of that role.
+                  Users are responsible to provide a set that makes sense for their topology.
+                  Example:
+                    roleCoreIds:
+                      compute: [0,1,2,3]
+                      drive:   [4,5,6,7]
+
+                  will result in every compute container getting coreIds [0,1,2,3] and every
+                  drive container getting [4,5,6,7].
+                properties:
+                  compute:
+                    items:
+                      type: integer
+                    type: array
+                  dataServices:
+                    items:
+                      type: integer
+                    type: array
+                  drive:
+                    items:
+                      type: integer
+                    type: array
+                  nfs:
+                    items:
+                      type: integer
+                    type: array
+                  s3:
+                    items:
+                      type: integer
+                    type: array
+                  smbw:
+                    items:
+                      type: integer
+                    type: array
+                type: object
+              roleNetworkSelector:
+                description: network selector for the weka containers per role, overrides
+                  global network
+                properties:
+                  compute:
+                    description: network selector for compute weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                  dataServices:
+                    description: network selector for data services weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                  drive:
+                    description: network selector for drive weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                  nfs:
+                    description: network selector for nfs weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                  s3:
+                    description: network selector for s3 weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                  smbw:
+                    description: network selector for smbw weka containers
+                    properties:
+                      allocateVfPerIoNode:
+                        type: boolean
+                      bindManagementAll:
+                        description: |-
+                          BindManagementAll controls whether Weka containers bind to all network interfaces or only to specific management interfaces.
+                          When set to false (default), containers will only listen on the management ips interfaces (restrict_listen mode).
+                          When set to true, containers will listen on all ips (0.0.0.0) instead of specific IP addresses.
+                        type: boolean
+                      deviceSubnets:
+                        description: |-
+                          A list of backend subnets in CIDR notation, either IPv4 (for example, 192.168.10.0/24)
+                          or IPv6 (for example, 2001:db8::/64).
+                          The operator assigns IP addresses from these subnets to the backend containers for their data path network.
+                          The address family of the subnet selects the address family used on the data path; the ipv6 field is not consulted.
+                        items:
+                          pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F:.]*)\/[0-9]{1,3}$
+                          type: string
+                        type: array
+                      ethDevice:
+                        description: |-
+                          The name of a single network interface (for example, eth1) to be used by every backend container.
+                          This is for clusters that use only one dedicated NIC for the data path.
+                          You cannot use this field with ethDevices.
+                          If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+                        type: string
+                      ethDevices:
+                        description: |-
+                          A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+                          The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+                          You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
+                        items:
+                          type: string
+                        type: array
+                      gateway:
+                        description: |-
+                          The default gateway IPv4 address for the backend containers’ data-path network.
+                          This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+                          If you have a flat, non-routed backend network, you can leave this field empty.
+                        type: string
+                      managementIpsSelectors:
+                        description: Selectors for management IPs used for cluster
+                          API and agent communication.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      netmask:
+                        description: |-
+                          The data-path netmask for the backend containers’ network, expressed as prefix bits (for example, 24).
+                          This is only necessary when the netmask cannot be inferred from deviceSubnets.
+                        maximum: 32
+                        minimum: 1
+                        type: integer
+                      nvidiaVfSingleIp:
+                        description: |-
+                          NvidiaVfSingleIp indicates whether NVIDIA virtual functions (VFs) should be configured to use a single-ip weka mode, where multiple weka processes can share same VF
+                          When not set defaults to false, in future releases, when auto-discovery of capabilities will be implemented not set might translate to true on supported setups
+                        type: boolean
+                      selectors:
+                        description: Selectors define how backend data-path network
+                          interfaces are chosen on each node.
+                        items:
+                          properties:
+                            deviceNames:
+                              description: |-
+                                Interface names (e.g. eth1) to select. Combine with subnet to narrow these to the interface
+                                holding an address in that subnet, which lets one selector cover nodes on different subnets.
+                                The subnet narrowing is skipped for rdmaOnly selectors, whose interfaces may carry no address at all.
+                              items:
+                                type: string
+                              type: array
+                            disableRdma:
+                              type: boolean
+                            max:
+                              description: Maximum number of interfaces to select
+                                per node matching this selector.
+                              type: integer
+                            min:
+                              description: Minimum number of interfaces required from
+                                nodes matching this selector.
+                              type: integer
+                            rdmaOnly:
+                              type: boolean
+                            subnet:
+                              description: |-
+                                CIDR subnet (e.g. 192.168.10.0/24) to filter interfaces. Only interfaces with an IP in this subnet are eligible.
+                                When set together with deviceNames, both conditions apply: only the named interfaces that also hold an
+                                address in this subnet are selected. For management IPs, the address picked is the one within this subnet.
+                              type: string
+                          type: object
+                        type: array
+                      udpMode:
+                        description: |-
+                          A setting that enables or disables UDP encapsulation for backend traffic.
+                          - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+                          This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+                        type: boolean
+                    type: object
+                type: object
+              roleNodeSelector:
+                description: node selector for the weka containers per role, overrides
+                  global nodeSelector
+                properties:
+                  compute:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for compute weka containers
+                    type: object
+                  dataServices:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for data services weka containers
+                    type: object
+                  drive:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for drive weka containers
+                    type: object
+                  nfs:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for nfs weka containers
+                    type: object
+                  s3:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for s3 weka containers
+                    type: object
+                  smbw:
+                    additionalProperties:
+                      type: string
+                    description: nodeSelector for smbw weka containers
+                    type: object
+                type: object
+              roleNonDatapathCoreIds:
+                description: |-
+                  RoleNonDatapathCoreIds defines CPU core IDs (as seen by the host) to pin
+                  management/aux (non-IONode) processes to, per container role. Applicable
+                  when CpuPolicy is "manual" or "shared".
+                  When set, weka pins management processes to these cores instead of deriving them automatically.
+                properties:
+                  compute:
+                    items:
+                      type: integer
+                    type: array
+                  dataServices:
+                    items:
+                      type: integer
+                    type: array
+                  drive:
+                    items:
+                      type: integer
+                    type: array
+                  nfs:
+                    items:
+                      type: integer
+                    type: array
+                  s3:
+                    items:
+                      type: integer
+                    type: array
+                  smbw:
+                    items:
+                      type: integer
+                    type: array
+                type: object
+              roleNuma:
+                description: NUMA configuration for the weka containers per role,
+                  overrides global numa
+                properties:
+                  compute:
+                    description: NUMA configuration for compute weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                  dataServices:
+                    description: NUMA configuration for data services weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                  drive:
+                    description: NUMA configuration for drive weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                  nfs:
+                    description: NUMA configuration for nfs weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                  s3:
+                    description: NUMA configuration for s3 weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                  smbw:
+                    description: NUMA configuration for smbw weka containers
+                    properties:
+                      method:
+                        description: Method selects the enforcement mechanism
+                        enum:
+                        - device-plugin
+                        - dra
+                        type: string
+                      region:
+                        description: Region is the NUMA region index to pin this container
+                          to
+                        minimum: 0
+                        type: integer
+                      single:
+                        description: Single, when true, confines the container to
+                          a single NUMA region
+                        type: boolean
+                    type: object
+                type: object
+              s3:
+                properties:
+                  clusterCreateArgs:
+                    description: |-
+                      No overlap validation, only appended to the cluster create command as-is
+                      Useful for settings such as: `--envoy-max-requests 1150 --envoy-max-connections 1300 --envoy-max-pending-requests 1450`
+                      Not propagated to already created cluster, and direct weka control should be used for that
+                    items:
+                      type: string
+                    type: array
+                type: object
+              serviceAccountName:
+                description: Name of the Kubernetes ServiceAccount for Weka container
+                  pods. Operator default is used if empty.
+                type: string
+              smbw:
+                properties:
+                  clusterName:
+                    description: ClusterName is the SMB-W cluster name, defaults to
+                      "default"
+                    type: string
+                  defaultDomainMappingFromId:
+                    description: DefaultDomainMappingFromId is the start of the UID/GID
+                      range for default domain mapping
+                    type: integer
+                  defaultDomainMappingToId:
+                    description: DefaultDomainMappingToId is the end of the UID/GID
+                      range for default domain mapping
+                    type: integer
+                  domainJoinSecret:
+                    description: |-
+                      DomainJoinSecret is the name of a Kubernetes Secret holding the domain-join password.
+                      The Secret must live in the same namespace as this WekaCluster resource. The password
+                      is read from one of the keys "password", "Password", or "PASSWORD".
+                      The domain join is only performed when both UserName and DomainJoinSecret are set;
+                      if either is empty the join is silently skipped.
+                    type: string
+                  domainName:
+                    description: DomainName is the domain name for SMB-W, required
+                      for SMB-W cluster creation
+                    type: string
+                  domainNetbiosName:
+                    description: DomainNetbiosName is the NetBIOS name for the domain
+                    type: string
+                  encryption:
+                    description: Encryption specifies the encryption level for SMB
+                      connections
+                    enum:
+                    - enabled
+                    - disabled
+                    - desired
+                    - required
+                    type: string
+                  idmapBackend:
+                    description: IdmapBackend specifies the identity mapping backend
+                      (e.g., "ad", "rfc2307")
+                    type: string
+                  ipPools:
+                    description: IpPools specifies IP pools for SMB-W service assignment
+                    items:
+                      type: string
+                    type: array
+                  ipRanges:
+                    description: IpRanges specifies floating IP ranges for SMB-W high
+                      availability
+                    items:
+                      type: string
+                    type: array
+                  joinedDomainMappingFromId:
+                    description: JoinedDomainMappingFromId is the start of the UID/GID
+                      range for joined domain mapping
+                    type: integer
+                  joinedDomainMappingToId:
+                    description: JoinedDomainMappingToId is the end of the UID/GID
+                      range for joined domain mapping
+                    type: integer
+                  scaleOutMode:
+                    description: ScaleOutMode specifies the scale-out mode for SMB-W
+                      clustering
+                    enum:
+                    - none
+                    - full
+                    - partial
+                    type: string
+                  smbConfExtra:
+                    description: SmbConfExtra contains additional smb.conf configuration
+                    type: string
+                  symlink:
+                    description: |-
+                      Creation-time configuration flags
+                      Symlink enables symlink support for SMB-W shares
+                    type: boolean
+                  userName:
+                    description: |-
+                      UserName is the domain user used to join the domain (e.g. "domain-admin").
+                      Required (together with DomainJoinSecret) to trigger the domain join.
+                    type: string
+                required:
+                - domainJoinSecret
+                - domainName
+                type: object
+              startIoConditions:
+                description: conditions that must be met before starting IO
+                properties:
+                  minNumDrives:
+                    description: minimum number of drives that should be added to
+                      the cluster before starting IO
+                    type: integer
+                type: object
+              stripeWidth:
+                description: stripe width is the number of blocks within a common
+                  protection set, ranging from 3 to 16 https://docs.weka.io/weka-system-overview/ssd-capacity-management#stripe-width
+                type: integer
+              telemetry:
+                description: Telemetry configuration for exporting audit logs and
+                  other telemetry data
+                properties:
+                  exports:
+                    description: List of telemetry exports to configure
+                    items:
+                      description: TelemetryExport defines a single telemetry export
+                        destination
+                      properties:
+                        name:
+                          description: Name is the unique identifier for this export
+                          type: string
+                        sources:
+                          description: Sources specifies which telemetry sources to
+                            export (e.g., "audit")
+                          items:
+                            type: string
+                          type: array
+                        splunk:
+                          description: Splunk configuration for Splunk HEC export
+                          properties:
+                            allowUnverifiedCertificate:
+                              description: |-
+                                AllowUnverifiedCertificate allows accessing without verifying the target certificate.
+                                Maps to --allow-unverified-certificate in weka CLI.
+                              type: boolean
+                            authTokenSecretRef:
+                              description: |-
+                                AuthTokenSecretRef references a secret containing the Splunk HEC authentication token.
+                                Format: "secretName.keyName" where secretName is the name of the secret in the same namespace
+                                and keyName is the key within the secret's data that contains the token.
+                              type: string
+                            caCertSecretRef:
+                              description: |-
+                                CACertSecretRef optionally references a secret containing a user-provided CA certificate PEM file.
+                                Format: "secretName.keyName" where secretName is the name of the secret in the same namespace
+                                and keyName is the key within the secret's data that contains the certificate.
+                                Maps to --ca-cert in weka CLI. Empty string is treated same as nil (de-configures if was configured).
+                                Mutually exclusive with VerifyWithClusterCACert.
+                              type: string
+                            endpoint:
+                              description: Endpoint is the Splunk HEC endpoint URL
+                                (maps to --target in weka CLI)
+                              type: string
+                            verifyWithClusterCACert:
+                              description: |-
+                                VerifyWithClusterCACert uses the Weka cluster's internal CA certificate to verify.
+                                Maps to --verify-with-cluster-cacert in weka CLI.
+                                Mutually exclusive with CACertSecretRef.
+                              type: boolean
+                          required:
+                          - authTokenSecretRef
+                          - endpoint
+                          type: object
+                      required:
+                      - name
+                      - sources
+                      type: object
+                    type: array
+                type: object
+              template:
+                default: dynamic
+                description: A template/strategy of how to build a cluster, right
+                  now only "dynamic" supported, explicitly specifying config of a
+                  cluster
+                type: string
+              tolerations:
+                description: simplified tolerations, checked only by key existence,
+                  expanding to NoExecute|NoSchedule tolerations
+                items:
+                  type: string
+                type: array
+              tracesConfiguration:
+                description: traces capacities configuration for weka containers
+                properties:
+                  dumperConfigMode:
+                    default: auto
+                    enum:
+                    - override
+                    - partial-override
+                    - auto
+                    - cluster
+                    type: string
+                  ensureFreeSpace:
+                    default: 20
+                    type: integer
+                  maxCapacityPerIoNode:
+                    default: 10
+                    type: integer
+                type: object
+              wekaHome:
+                description: weka home configuration
+                properties:
+                  allowInsecure:
+                    description: When true, disables TLS certificate verification
+                      for the WekaHome endpoint.
+                    type: boolean
+                  cacertSecret:
+                    description: Name of a Kubernetes secret containing a PEM CA certificate
+                      for the WekaHome TLS connection.
+                    type: string
+                  enableStats:
+                    description: When true, performance statistics are sent to WekaHome
+                      in addition to connectivity and event data. Defaults to true.
+                    type: boolean
+                  endpoint:
+                    description: URL of the WekaHome telemetry endpoint. Defaults
+                      to the Weka-managed cloud endpoint if empty.
+                    type: string
+                type: object
+            required:
+            - image
+            type: object
+            x-kubernetes-validations:
+            - message: adminCredentialsSecretRef is immutable
+              rule: has(self.adminCredentialsSecretRef) == has(oldSelf.adminCredentialsSecretRef)
+                && (!has(self.adminCredentialsSecretRef) || self.adminCredentialsSecretRef
+                == oldSelf.adminCredentialsSecretRef)
+          status:
+            description: WekaClusterStatus defines the observed state of WekaCluster
+            properties:
+              clusterID:
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastAppliedImage:
+                type: string
+              lastAppliedSpec:
+                type: string
+              ports:
+                description: |-
+                  ClusterPorts defines the port allocation for the Weka cluster.
+                  We should not be updating Spec, as it's a user interface and we should not break ability to update spec file.
+                  Therefore, when BasePort is 0, and PortRange is 0, we have application level defaults that will be written in here.
+                properties:
+                  basePort:
+                    description: Starting port number used for allocating Weka cluster
+                      ports. Can be overridden by the user; defaults to 35000 for
+                      the first cluster.
+                    type: integer
+                  dataServicesPort:
+                    type: integer
+                  lbAdminPort:
+                    description: Administration port for the S3 software load balancer.
+                      If unset, auto-allocated within the cluster port range, immediately
+                      after lbPort.
+                    type: integer
+                  lbPort:
+                    description: Data port for the S3 software load balancer. If unset,
+                      auto-allocated within the cluster port range relative to basePort
+                      (basePort+300 in the legacy 500-port layout, basePort+240 with
+                      the default 260-port range).
+                    type: integer
+                  managementProxyPort:
+                    description: Enables Kubernetes-level access to Weka management
+                      for port-forwarding, REST API usage, and UI access. If unset,
+                      auto-allocated within the cluster port range relative to basePort
+                      when the management proxy is first enabled.
+                    type: integer
+                  portRange:
+                    description: Number of ports to allocate for the cluster. Defaults
+                      to 260 with operator version 1.10 / WEKA 5.1.0 onwards (500
+                      for earlier versions).
+                    type: integer
+                  s3Port:
+                    description: Data port for S3 API traffic. If unset, auto-allocated
+                      within the cluster port range, after the load balancer ports.
+                    type: integer
+                type: object
+              printer:
+                properties:
+                  capacity:
+                    description: Aggregated raw provisioned drive-sharing capacity
+                      per type, e.g. "TLC 100TiB / QLC 200TiB"
+                    type: string
+                  computeContainers:
+                    type: string
+                  driveContainers:
+                    type: string
+                  drives:
+                    type: string
+                  filesystemCapacity:
+                    description: 'Information about filesystem capacity: Available/Used'
+                    type: string
+                  iops:
+                    type: string
+                  throughput:
+                    type: string
+                type: object
+              spanId:
+                type: string
+              stats:
+                properties:
+                  alertsCount:
+                    format: int64
+                    type: integer
+                  capacity:
+                    properties:
+                      hotSpareBytes:
+                        format: int64
+                        type: integer
+                      totalBytes:
+                        format: int64
+                        type: integer
+                      unavailableBytes:
+                        format: int64
+                        type: integer
+                      unprovisionedBytes:
+                        format: int64
+                        type: integer
+                    type: object
+                  clusterStatus:
+                    type: string
+                  containers:
+                    properties:
+                      compute:
+                        properties:
+                          cpuUtilization:
+                            type: string
+                          numContainers:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                          processes:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                        type: object
+                      drive:
+                        properties:
+                          cpuUtilization:
+                            type: string
+                          numContainers:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                          processes:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                        type: object
+                      nfs:
+                        properties:
+                          cpuUtilization:
+                            type: string
+                          numContainers:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                          processes:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                        type: object
+                      s3:
+                        properties:
+                          cpuUtilization:
+                            type: string
+                          numContainers:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                          processes:
+                            properties:
+                              active:
+                                format: int64
+                                type: integer
+                              created:
+                                format: int64
+                                type: integer
+                              desired:
+                                format: int64
+                                type: integer
+                            type: object
+                        type: object
+                    type: object
+                  drives:
+                    properties:
+                      counters:
+                        properties:
+                          active:
+                            format: int64
+                            type: integer
+                          created:
+                            format: int64
+                            type: integer
+                          desired:
+                            format: int64
+                            type: integer
+                        type: object
+                      failures:
+                        items:
+                          properties:
+                            serialId:
+                              type: string
+                            wekaDriveId:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                  filesystem:
+                    description: FilesystemMetrics contains metrics about filesystem
+                      usage
+                    properties:
+                      activeObsBucketCount:
+                        format: int64
+                        type: integer
+                      hasTieredFilesystems:
+                        description: Object Store metrics
+                        type: boolean
+                      obsBucketCount:
+                        format: int64
+                        type: integer
+                      totalAvailableCapacity:
+                        description: TotalAvailableCapacity is the difference between
+                          TotalProvisionedCapacity and TotalUsedCapacity
+                        format: int64
+                        type: integer
+                      totalAvailableSSDCapacity:
+                        format: int64
+                        type: integer
+                      totalObsCapacity:
+                        format: int64
+                        type: integer
+                      totalProvisionedCapacity:
+                        description: TotalProvisionedCapacity is the sum of total_budget
+                          for all filesystems
+                        format: int64
+                        type: integer
+                      totalProvisionedSSDCapacity:
+                        description: SSD-specific metrics
+                        format: int64
+                        type: integer
+                      totalUsedCapacity:
+                        description: TotalUsedCapacity is the sum of used_total for
+                          all filesystems
+                        format: int64
+                        type: integer
+                      totalUsedSSDCapacity:
+                        format: int64
+                        type: integer
+                    type: object
+                  ioStats:
+                    properties:
+                      iops:
+                        properties:
+                          metadata:
+                            format: int64
+                            type: integer
+                          read:
+                            format: int64
+                            type: integer
+                          total:
+                            format: int64
+                            type: integer
+                          write:
+                            format: int64
+                            type: integer
+                        required:
+                        - metadata
+                        - read
+                        - total
+                        - write
+                        type: object
+                      throughput:
+                        properties:
+                          read:
+                            format: int64
+                            type: integer
+                          write:
+                            format: int64
+                            type: integer
+                        required:
+                        - read
+                        - write
+                        type: object
+                    type: object
+                  lastUpdate:
+                    format: date-time
+                    type: string
+                  numFailures:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
+              status:
+                type: string
+              timestamps:
+                additionalProperties:
+                  format: date-time
+                  type: string
+                type: object
+              traceId:
+                type: string
+            required:
+            - status
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,185 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: dash0samplingrules.operator.dash0.com
+spec:
+  group: operator.dash0.com
+  names:
+    kind: Dash0SamplingRule
+    listKind: Dash0SamplingRuleList
+    plural: dash0samplingrules
+    singular: dash0samplingrule
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Dash0SamplingRule is the Schema for the dash0samplingrules API.
+
+          The resource is namespaced: the namespace only selects which dataset and token the rule is synchronized to (the
+          dataset and token of the Dash0 export of the Dash0 monitoring resource in the same namespace, falling back to the
+          operator configuration resource). It does NOT restrict enforcement to that namespace's traces. Tail sampling is
+          applied cluster-wide and per whole trace by the Signal Control collector; the Decision Maker coordinates keep/drop
+          decisions per trace-id in a dataset-blind manner. Placing a sampling rule in a namespace therefore does not mean
+          "sample only this namespace's traces".
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Dash0SamplingRuleSpec defines the desired state of Dash0SamplingRule
+            properties:
+              conditions:
+                description: Dash0SamplingRuleCondition defines a sampling condition.
+                  This is a discriminated union on the kind field.
+                properties:
+                  kind:
+                    enum:
+                    - probabilistic
+                    - ottl
+                    - error
+                    - and
+                    type: string
+                  spec:
+                    description: Dash0SamplingRuleConditionSpec defines the specification
+                      for a sampling condition
+                    properties:
+                      conditions:
+                        description: |-
+                          For 'and' conditions: a list of sub-conditions that must all be satisfied.
+                          Each element must be a valid condition object with kind and optional spec fields.
+                        items:
+                          x-kubernetes-preserve-unknown-fields: true
+                        minItems: 1
+                        type: array
+                        x-kubernetes-preserve-unknown-fields: true
+                      ottl:
+                        description: 'For OTTL conditions: an OpenTelemetry Transformation
+                          Language expression'
+                        type: string
+                      rate:
+                        description: 'For probabilistic conditions: sampling rate
+                          between 0 and 1 (e.g. "0.5" for 50%)'
+                        pattern: ^(0(\.\d+)?|1(\.0+)?)$
+                        type: string
+                    type: object
+                required:
+                - kind
+                type: object
+                x-kubernetes-validations:
+                - message: condition spec must match the condition kind
+                  rule: (self.kind == 'probabilistic' && has(self.spec) && has(self.spec.rate))
+                    || (self.kind == 'ottl' && has(self.spec) && has(self.spec.ottl))
+                    || (self.kind == 'error') || (self.kind == 'and' && has(self.spec))
+              display:
+                description: Dash0SamplingRuleDisplay defines the display configuration
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              enabled:
+                type: boolean
+              rateLimit:
+                description: Dash0SamplingRuleRateLimit defines the rate limit configuration
+                  (maximum traces per minute)
+                properties:
+                  rate:
+                    minimum: 1
+                    type: integer
+                required:
+                - rate
+                type: object
+            required:
+            - conditions
+            - enabled
+            type: object
+          status:
+            description: Dash0SamplingRuleStatus defines the observed state of Dash0SamplingRule
+            properties:
+              synchronizationResults:
+                items:
+                  description: Dash0SamplingRuleSynchronizationResultPerEndpointAndDataset
+                    defines the synchronization result per endpoint and dataset
+                  properties:
+                    dash0ApiEndpoint:
+                      type: string
+                    dash0Dataset:
+                      type: string
+                    dash0Id:
+                      type: string
+                    dash0Origin:
+                      type: string
+                    httpStatusCode:
+                      description: |-
+                        HttpStatusCode is the HTTP status code that the Dash0 API returned for the failed synchronization attempt, if the
+                        failure was caused by an unexpected HTTP response. It is 0 (absent) for successful synchronizations and for
+                        transport-level errors (network errors, timeouts) where no HTTP response was received. It is used to decide
+                        whether a failed synchronization should be retried.
+                      type: integer
+                    synchronizationError:
+                      type: string
+                    synchronizationStatus:
+                      description: |-
+                        Dash0ApiResourceSynchronizationStatus describes the result of synchronizing a (non-third-party) Kubernetes resource
+                        (e.g. synthetic checks) to the Dash0 API.
+                      enum:
+                      - successful
+                      - partially-successful
+                      - failed
+                      type: string
+                  required:
+                  - synchronizationStatus
+                  type: object
+                type: array
+              synchronizationStatus:
+                description: |-
+                  Dash0ApiResourceSynchronizationStatus describes the result of synchronizing a (non-third-party) Kubernetes resource
+                  (e.g. synthetic checks) to the Dash0 API.
+                enum:
+                - successful
+                - partially-successful
+                - failed
+                type: string
+              synchronizedAt:
+                format: date-time
+                type: string
+              validationIssues:
+                items:
+                  type: string
+                type: array
+            required:
+            - synchronizationResults
+            - synchronizationStatus
+            - synchronizedAt
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -1,0 +1,322 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  creationTimestamp: null
+  name: dash0generativeaievaluations.dash0.com
+spec:
+  group: dash0.com
+  names:
+    kind: Dash0GenerativeAiEvaluation
+    listKind: Dash0GenerativeAiEvaluationList
+    plural: dash0generativeaievaluations
+    shortNames:
+    - dash0eval
+    - dash0evals
+    singular: dash0generativeaievaluation
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Dash0GenerativeAiEvaluation is the Schema for the dash0generativeaievaluations API. It defines an eval: an LLM judge
+          that scores a sample of the generative AI spans that match its filters. The name of the resource is the name of the
+          eval in Dash0; it must be unique within the Dash0 dataset the eval is synchronized to.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Dash0GenerativeAiEvaluationSpec defines the desired state
+              of an eval.
+            properties:
+              display:
+                description: Display configuration for the eval.
+                properties:
+                  description:
+                    description: Optional free-text note on what this eval judges
+                      and why. The judge does not see it.
+                    type: string
+                  name:
+                    description: Human-readable name of the eval, shown in the Dash0
+                      UI.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              enabled:
+                description: Whether the eval judges spans.
+                type: boolean
+              judge:
+                description: Judge configures the model and the prompts that score
+                  a span.
+                properties:
+                  allowPartialPrompt:
+                    description: Judge spans that carry only some of the attributes
+                      the user prompt references. Defaults to false.
+                    type: boolean
+                  model:
+                    description: 'The model class of the judge: light (fast, low-cost)
+                      or standard (balanced quality and cost).'
+                    enum:
+                    - light
+                    - standard
+                    type: string
+                  output:
+                    description: The kind of result the judge produces. The kind cannot
+                      change after the eval has been created.
+                    properties:
+                      kind:
+                        description: |-
+                          numeric: a score between 0 and 1, 1 is the best result. boolean: true means the eval passed. categorical: one of
+                          the labels in spec.options.
+                        enum:
+                        - numeric
+                        - boolean
+                        - categorical
+                        type: string
+                      spec:
+                        description: The configuration of the output kind. Not allowed
+                          for boolean, required for categorical.
+                        properties:
+                          options:
+                            description: 'For categorical outputs: the labels the
+                              judge can choose from.'
+                            items:
+                              description: Dash0GenerativeAiEvaluationJudgeOutputCategoricalOption
+                                is one label of a categorical output.
+                              properties:
+                                intent:
+                                  description: |-
+                                    Whether the label is a desirable (positive), neutral or undesirable (negative) outcome. Without an intent, the
+                                    label has no polarity.
+                                  enum:
+                                  - positive
+                                  - neutral
+                                  - negative
+                                  type: string
+                                label:
+                                  description: The label. Labels must be unique within
+                                    an eval.
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - label
+                              type: object
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - label
+                            x-kubernetes-list-type: map
+                          threshold:
+                            description: 'For numeric outputs: the threshold of the
+                              score, between 0 and 1. Leave it out to declare no threshold.'
+                            maximum: 1
+                            minimum: 0
+                            type: number
+                        type: object
+                    required:
+                    - kind
+                    type: object
+                    x-kubernetes-validations:
+                    - message: kind cannot change after the eval has been created;
+                        to use a different kind, create a new resource with a different
+                        name
+                      rule: self.kind == oldSelf.kind
+                    - message: spec must not be set when kind is 'boolean'
+                      rule: self.kind != 'boolean' || !has(self.spec)
+                    - message: spec.options must not be set when kind is 'numeric'
+                      rule: self.kind != 'numeric' || !has(self.spec) || !has(self.spec.options)
+                    - message: spec.options must be set and spec.threshold must not
+                        be set when kind is 'categorical'
+                      rule: self.kind != 'categorical' || (has(self.spec) && has(self.spec.options)
+                        && !has(self.spec.threshold))
+                  systemPrompt:
+                    description: The system prompt of the judge.
+                    minLength: 1
+                    type: string
+                  userPrompt:
+                    description: |-
+                      The prompt sent to the judge for each evaluated span. An attribute key in double curly braces is replaced with
+                      the value of that span or resource attribute. A span is skipped when a referenced attribute is missing or empty,
+                      unless allowPartialPrompt is set.
+                    minLength: 1
+                    type: string
+                required:
+                - model
+                - output
+                - systemPrompt
+                - userPrompt
+                type: object
+              match:
+                description: Match selects the spans the eval judges.
+                properties:
+                  filters:
+                    description: |-
+                      All filters must match. The Dash0 API requires an is_set filter for the key gen_ai.operation.name without a
+                      value.
+                    items:
+                      description: Dash0GenerativeAiEvaluationAttributeFilter is a
+                        single filter against an attribute key.
+                      properties:
+                        key:
+                          description: The attribute key to match against.
+                          minLength: 1
+                          type: string
+                        operator:
+                          description: The match operator.
+                          enum:
+                          - is
+                          - is_not
+                          - is_set
+                          - is_not_set
+                          - is_one_of
+                          - is_not_one_of
+                          - gt
+                          - lt
+                          - gte
+                          - lte
+                          - matches
+                          - does_not_match
+                          - contains
+                          - does_not_contain
+                          - starts_with
+                          - does_not_start_with
+                          - ends_with
+                          - does_not_end_with
+                          - is_any
+                          type: string
+                        value:
+                          description: Single value for operators that accept one
+                            value (is, is_not, contains, matches, ...).
+                          type: string
+                        values:
+                          description: List of values for the is_one_of / is_not_one_of
+                            operators.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - filters
+                type: object
+                x-kubernetes-validations:
+                - message: filters must contain an is_set filter for the key gen_ai.operation.name
+                    without a value
+                  rule: self.filters.exists(f, f.key == 'gen_ai.operation.name' &&
+                    f.operator == 'is_set' && !has(f.value) && (!has(f.values) ||
+                    size(f.values) == 0))
+              sample:
+                description: Sample controls which share of the matching traces is
+                  judged.
+                properties:
+                  rate:
+                    description: The share of matching traces to judge, between 0
+                      and 1. The decision is made deterministically from the trace
+                      ID.
+                    maximum: 1
+                    minimum: 0
+                    type: number
+                required:
+                - rate
+                type: object
+            required:
+            - display
+            - enabled
+            - judge
+            - match
+            - sample
+            type: object
+          status:
+            description: Dash0GenerativeAiEvaluationStatus defines the observed state
+              of a Dash0GenerativeAiEvaluation resource.
+            properties:
+              synchronizationResults:
+                items:
+                  description: Dash0GenerativeAiEvaluationSynchronizationResultPerEndpointAndDataset
+                    captures the result of a single sync attempt.
+                  properties:
+                    dash0ApiEndpoint:
+                      type: string
+                    dash0Dataset:
+                      type: string
+                    dash0Id:
+                      type: string
+                    dash0Origin:
+                      type: string
+                    httpStatusCode:
+                      description: |-
+                        HttpStatusCode is the HTTP status code that the Dash0 API returned for the failed synchronization attempt, if the
+                        failure was caused by an unexpected HTTP response. It is 0 (absent) for successful synchronizations and for
+                        transport-level errors (network errors, timeouts) where no HTTP response was received. It is used to decide
+                        whether a failed synchronization should be retried.
+                      type: integer
+                    synchronizationError:
+                      type: string
+                    synchronizationStatus:
+                      description: |-
+                        Dash0ApiResourceSynchronizationStatus describes the result of synchronizing a (non-third-party) Kubernetes resource
+                        (e.g. synthetic checks) to the Dash0 API.
+                      enum:
+                      - successful
+                      - partially-successful
+                      - failed
+                      type: string
+                  required:
+                  - synchronizationStatus
+                  type: object
+                type: array
+              synchronizationStatus:
+                description: |-
+                  Dash0ApiResourceSynchronizationStatus describes the result of synchronizing a (non-third-party) Kubernetes resource
+                  (e.g. synthetic checks) to the Dash0 API.
+                enum:
+                - successful
+                - partially-successful
+                - failed
+                type: string
+              synchronizedAt:
+                format: date-time
+                type: string
+              validationIssues:
+                items:
+                  type: string
+                type: array
+            required:
+            - synchronizationResults
+            - synchronizationStatus
+            - synchronizedAt
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null
